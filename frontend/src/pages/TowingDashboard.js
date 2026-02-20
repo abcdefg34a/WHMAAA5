@@ -3,7 +3,8 @@ import { useAuth } from '../contexts/AuthContext';
 import axios from 'axios';
 import { 
   Car, MapPin, Camera, LogOut, FileText, Copy, CheckCircle,
-  Clock, Truck, Phone, Building2, Download, X, Settings, Euro
+  Clock, Truck, Phone, Building2, Download, X, Settings, Euro,
+  Filter, CheckSquare, Square, ChevronDown, Calendar
 } from 'lucide-react';
 import { Button } from '../components/ui/button';
 import { Input } from '../components/ui/input';
@@ -13,6 +14,7 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '../co
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '../components/ui/dialog';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '../components/ui/tabs';
 import { RadioGroup, RadioGroupItem } from '../components/ui/radio-group';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../components/ui/select';
 import { MapContainer, TileLayer, Marker, Popup } from 'react-leaflet';
 import { toast } from 'sonner';
 import 'leaflet/dist/leaflet.css';
@@ -39,6 +41,16 @@ export const TowingDashboard = () => {
   const [settingsDialogOpen, setSettingsDialogOpen] = useState(false);
   const [codeCopied, setCodeCopied] = useState(false);
 
+  // Bulk selection state
+  const [selectedJobIds, setSelectedJobIds] = useState([]);
+  const [bulkUpdating, setBulkUpdating] = useState(false);
+
+  // Filter state
+  const [filterOpen, setFilterOpen] = useState(false);
+  const [filterStatus, setFilterStatus] = useState('all');
+  const [filterDateFrom, setFilterDateFrom] = useState('');
+  const [filterDateTo, setFilterDateTo] = useState('');
+
   // Release form state
   const [ownerFirstName, setOwnerFirstName] = useState('');
   const [ownerLastName, setOwnerLastName] = useState('');
@@ -56,7 +68,7 @@ export const TowingDashboard = () => {
 
   useEffect(() => {
     fetchJobs();
-  }, []);
+  }, [filterStatus, filterDateFrom, filterDateTo]);
 
   useEffect(() => {
     setTowCost(user?.tow_cost || 0);
