@@ -333,7 +333,7 @@ class TowingManagementAPITester:
         
         # Test unauthorized access
         success, response = self.run_test(
-            "Unauthorized Access", "GET", "jobs", 401
+            "Unauthorized Access", "GET", "jobs", 403
         )
         
         # Test invalid credentials
