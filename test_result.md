@@ -102,75 +102,69 @@
 # Testing Data - Main Agent and testing sub agent both should log testing data below this section
 #====================================================================================================
 
-user_problem_statement: "Vehicle towing management web app in German - bulk job management feature for towing services"
+user_problem_statement: "Vehicle towing management web app in German - employee management for authorities"
 
 backend:
-  - task: "Bulk status update endpoint"
+  - task: "Employee management endpoints"
     implemented: true
-    working: true
+    working: "NA"
     file: "/app/backend/server.py"
     stuck_count: 0
     priority: "high"
-    needs_retesting: false
+    needs_retesting: true
     status_history:
       - working: "NA"
         agent: "main"
-        comment: "Implemented POST /api/jobs/bulk-update-status endpoint for mass status changes"
-      - working: true
-        agent: "testing"
-        comment: "✅ PASSED - Bulk status update endpoint working correctly. Tested: bulk updates to on_site/towed/in_yard statuses, proper timestamp setting (on_site_at, towed_at, in_yard_at), role-based access control (only towing_service role), error handling for empty job_ids/invalid status/wrong role, and security (only updates jobs assigned to requesting towing service). All 54 comprehensive tests passed including bulk operations with 3 test jobs."
+        comment: "Implemented POST/GET/DELETE/PATCH /api/authority/employees endpoints for creating, listing, blocking, and managing employee accounts"
 
-  - task: "Date filter parameters for GET /api/jobs"
+  - task: "Dienstnummer generation and tracking"
     implemented: true
-    working: true
+    working: "NA"
     file: "/app/backend/server.py"
     stuck_count: 0
     priority: "high"
-    needs_retesting: false
+    needs_retesting: true
     status_history:
       - working: "NA"
         agent: "main"
-        comment: "Added date_from and date_to query parameters to filter jobs by date range"
-      - working: true
-        agent: "testing"
-        comment: "✅ PASSED - Date filtering working correctly. Tested: date_from parameter (YYYY-MM-DD format), date_to parameter with time extension to include full day, date range filtering (date_from + date_to), works for both authority and towing_service roles, graceful handling of invalid date formats. All date filter tests passed successfully."
+        comment: "Added dienstnummer field to users and jobs, auto-generated for authority users (format DN-XXXX-NNN)"
+
+  - task: "Authority hierarchy (main vs employee)"
+    implemented: true
+    working: "NA"
+    file: "/app/backend/server.py"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: true
+    status_history:
+      - working: "NA"
+        agent: "main"
+        comment: "Main authority sees all jobs, employees see only their own. Jobs track authority_id for grouping."
 
 frontend:
-  - task: "Bulk selection checkboxes on Towing Dashboard"
+  - task: "Employee management tab in Authority Dashboard"
     implemented: true
     working: "NA"
-    file: "/app/frontend/src/pages/TowingDashboard.js"
+    file: "/app/frontend/src/pages/AuthorityDashboard.js"
     stuck_count: 0
     priority: "high"
     needs_retesting: true
     status_history:
       - working: "NA"
         agent: "main"
-        comment: "Added checkboxes to each job card for multi-select, select all button per tab"
+        comment: "Added Mitarbeiter tab with create/block/delete/password change functionality, shows Dienstnummer"
 
-  - task: "Bulk action toolbar"
+  - task: "Dienstnummer display in job listings"
     implemented: true
     working: "NA"
-    file: "/app/frontend/src/pages/TowingDashboard.js"
+    file: "/app/frontend/src/pages/AuthorityDashboard.js"
     stuck_count: 0
     priority: "high"
     needs_retesting: true
     status_history:
       - working: "NA"
         agent: "main"
-        comment: "Added blue toolbar that appears when jobs are selected with buttons for on_site, towed, in_yard status changes"
-
-  - task: "Filter section for jobs"
-    implemented: true
-    working: "NA"
-    file: "/app/frontend/src/pages/TowingDashboard.js"
-    stuck_count: 0
-    priority: "high"
-    needs_retesting: true
-    status_history:
-      - working: "NA"
-        agent: "main"
-        comment: "Added filter card with status dropdown and date range inputs"
+        comment: "Jobs now show created_by_dienstnummer badge, visible in Authority and Admin dashboards"
 
 metadata:
   created_by: "main_agent"
@@ -180,15 +174,13 @@ metadata:
 
 test_plan:
   current_focus:
-    - "Bulk selection checkboxes on Towing Dashboard"
-    - "Bulk action toolbar"
-    - "Filter section for jobs"
+    - "Employee management endpoints"
+    - "Dienstnummer generation and tracking"
+    - "Authority hierarchy"
   stuck_tasks: []
   test_all: false
   test_priority: "high_first"
 
 agent_communication:
   - agent: "main"
-    message: "Implemented bulk job management features: 1) Backend: POST /api/jobs/bulk-update-status endpoint + date filter params for GET /api/jobs. 2) Frontend: Checkboxes on job cards, select-all buttons, bulk action toolbar (blue bar with status change buttons), and filter section (status dropdown + date range). Please test the towing service dashboard bulk features - need to login as towing service user to test."
-  - agent: "testing"
-    message: "✅ BACKEND TESTING COMPLETE - All bulk job management backend features working perfectly! Comprehensive testing completed with 54/54 tests passed (100% success rate). Key findings: 1) POST /api/jobs/bulk-update-status endpoint fully functional with proper role-based access, timestamp management, and error handling. 2) GET /api/jobs date filtering (date_from/date_to) working correctly for all user roles. 3) Full authentication workflow tested including admin approval process. 4) All error cases handled properly. Backend is production-ready. Frontend testing can now proceed."
+    message: "Implemented employee management system for authorities: 1) Main authority account can create employee accounts with auto-generated Dienstnummer. 2) Employees can login and create jobs. 3) Main account sees ALL jobs from their authority, employees see only their own. 4) Each job stores created_by_dienstnummer for traceability. 5) Admin dashboard shows Dienstnummer column. Please test the authority employee workflow."
