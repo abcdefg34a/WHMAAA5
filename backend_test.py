@@ -169,9 +169,9 @@ class TowingManagementAPITester:
         login_data = {"email": self.test_authority["email"], "password": self.test_authority["password"]}
         success, response = self.run_test("Authority Login", "POST", "auth/login", 200, login_data)
         
-        # Test towing service login
+        # Test towing service login (should fail with pending approval message)
         login_data = {"email": self.test_towing["email"], "password": self.test_towing["password"]}
-        success, response = self.run_test("Towing Service Login", "POST", "auth/login", 200, login_data)
+        success, response = self.run_test("Towing Service Login (Pending)", "POST", "auth/login", 403, login_data)
         
         return True
 
