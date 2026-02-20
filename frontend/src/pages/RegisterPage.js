@@ -1,12 +1,13 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate, Link, useSearchParams } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
-import { Car, Eye, EyeOff, ArrowLeft, Shield, Truck, MapPin } from 'lucide-react';
+import { Car, Eye, EyeOff, ArrowLeft, Shield, Truck, Upload, Euro } from 'lucide-react';
 import { Button } from '../components/ui/button';
 import { Input } from '../components/ui/input';
 import { Label } from '../components/ui/label';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../components/ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '../components/ui/tabs';
+import { toast } from 'sonner';
 
 export const RegisterPage = () => {
   const navigate = useNavigate();
@@ -31,9 +32,13 @@ export const RegisterPage = () => {
   const [phone, setPhone] = useState('');
   const [address, setAddress] = useState('');
   const [yardAddress, setYardAddress] = useState('');
-  const [yardLat, setYardLat] = useState('');
-  const [yardLng, setYardLng] = useState('');
   const [openingHours, setOpeningHours] = useState('');
+  // NEW: Cost fields
+  const [towCost, setTowCost] = useState('');
+  const [dailyCost, setDailyCost] = useState('');
+  // NEW: Business license
+  const [businessLicense, setBusinessLicense] = useState('');
+  const [businessLicenseFileName, setBusinessLicenseFileName] = useState('');
 
   useEffect(() => {
     const role = searchParams.get('role');
@@ -41,6 +46,24 @@ export const RegisterPage = () => {
       setActiveTab(role);
     }
   }, [searchParams]);
+
+  const handleBusinessLicenseUpload = (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    // Check file size (max 5MB)
+    if (file.size > 5 * 1024 * 1024) {
+      toast.error('Datei zu groß. Maximal 5MB erlaubt.');
+      return;
+    }
+
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      setBusinessLicense(event.target.result);
+      setBusinessLicenseFileName(file.name);
+    };
+    reader.readAsDataURL(file);
+  };
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -59,40 +82,34 @@ export const RegisterPage = () => {
         data.authority_name = authorityName;
         data.department = department;
       } else if (activeTab === 'towing_service') {
+        if (!businessLicense) {
+          setError('Bitte laden Sie einen Gewerbenachweis hoch');
+          setLoading(false);
+          return;
+        }
         data.company_name = companyName;
         data.phone = phone;
         data.address = address;
         data.yard_address = yardAddress;
-        data.yard_lat = yardLat ? parseFloat(yardLat) : null;
-        data.yard_lng = yardLng ? parseFloat(yardLng) : null;
         data.opening_hours = openingHours;
+        data.tow_cost = towCost ? parseFloat(towCost) : 0;
+        data.daily_cost = dailyCost ? parseFloat(dailyCost) : 0;
+        data.business_license = businessLicense;
       }
 
-      const user = await register(data);
+      await register(data);
       
-      if (user.role === 'authority') {
+      if (activeTab === 'authority') {
         navigate('/authority');
-      } else if (user.role === 'towing_service') {
-        navigate('/towing');
+      } else if (activeTab === 'towing_service') {
+        // Towing service needs approval
+        toast.info('Ihre Registrierung wird von einem Administrator geprüft. Sie werden per E-Mail benachrichtigt.');
+        navigate('/login');
       }
     } catch (err) {
       setError(err.response?.data?.detail || 'Registrierung fehlgeschlagen');
     } finally {
       setLoading(false);
-    }
-  };
-
-  const getCurrentLocation = () => {
-    if (navigator.geolocation) {
-      navigator.geolocation.getCurrentPosition(
-        (position) => {
-          setYardLat(position.coords.latitude.toString());
-          setYardLng(position.coords.longitude.toString());
-        },
-        (err) => {
-          console.error('Location error:', err);
-        }
-      );
     }
   };
 
@@ -282,41 +299,6 @@ export const RegisterPage = () => {
                       required
                     />
                   </div>
-                  <div className="grid grid-cols-2 gap-3">
-                    <div className="space-y-2">
-                      <Label htmlFor="yardLat">Breitengrad</Label>
-                      <Input
-                        data-testid="register-yard-lat-input"
-                        id="yardLat"
-                        type="number"
-                        step="any"
-                        value={yardLat}
-                        onChange={(e) => setYardLat(e.target.value)}
-                        placeholder="52.520008"
-                      />
-                    </div>
-                    <div className="space-y-2">
-                      <Label htmlFor="yardLng">Längengrad</Label>
-                      <Input
-                        data-testid="register-yard-lng-input"
-                        id="yardLng"
-                        type="number"
-                        step="any"
-                        value={yardLng}
-                        onChange={(e) => setYardLng(e.target.value)}
-                        placeholder="13.404954"
-                      />
-                    </div>
-                  </div>
-                  <Button
-                    type="button"
-                    variant="outline"
-                    onClick={getCurrentLocation}
-                    className="w-full"
-                  >
-                    <MapPin className="h-4 w-4 mr-2" />
-                    Aktuellen Standort verwenden
-                  </Button>
                   <div className="space-y-2">
                     <Label htmlFor="openingHours">Öffnungszeiten *</Label>
                     <Input
@@ -327,6 +309,84 @@ export const RegisterPage = () => {
                       placeholder="Mo-Fr 8:00-18:00, Sa 9:00-14:00"
                       required
                     />
+                  </div>
+
+                  {/* NEW: Cost fields */}
+                  <div className="border-t pt-4 mt-4">
+                    <h3 className="font-medium text-slate-900 mb-3 flex items-center gap-2">
+                      <Euro className="h-4 w-4" />
+                      Kosten (können später angepasst werden)
+                    </h3>
+                    <div className="grid grid-cols-2 gap-3">
+                      <div className="space-y-2">
+                        <Label htmlFor="towCost">Anfahrtskosten (€)</Label>
+                        <Input
+                          data-testid="register-tow-cost-input"
+                          id="towCost"
+                          type="number"
+                          step="0.01"
+                          min="0"
+                          value={towCost}
+                          onChange={(e) => setTowCost(e.target.value)}
+                          placeholder="150.00"
+                        />
+                      </div>
+                      <div className="space-y-2">
+                        <Label htmlFor="dailyCost">Standkosten/Tag (€)</Label>
+                        <Input
+                          data-testid="register-daily-cost-input"
+                          id="dailyCost"
+                          type="number"
+                          step="0.01"
+                          min="0"
+                          value={dailyCost}
+                          onChange={(e) => setDailyCost(e.target.value)}
+                          placeholder="20.00"
+                        />
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* NEW: Business License Upload */}
+                  <div className="border-t pt-4 mt-4">
+                    <h3 className="font-medium text-slate-900 mb-3 flex items-center gap-2">
+                      <Upload className="h-4 w-4" />
+                      Gewerbenachweis *
+                    </h3>
+                    <div className="space-y-2">
+                      <div 
+                        className={`border-2 border-dashed rounded-lg p-6 text-center cursor-pointer transition-colors ${
+                          businessLicense ? 'border-green-500 bg-green-50' : 'border-slate-300 hover:border-slate-400'
+                        }`}
+                        onClick={() => document.getElementById('businessLicenseInput').click()}
+                      >
+                        {businessLicense ? (
+                          <div className="text-green-700">
+                            <Upload className="h-8 w-8 mx-auto mb-2" />
+                            <p className="font-medium">{businessLicenseFileName}</p>
+                            <p className="text-sm">Klicken zum Ändern</p>
+                          </div>
+                        ) : (
+                          <div className="text-slate-500">
+                            <Upload className="h-8 w-8 mx-auto mb-2" />
+                            <p className="font-medium">Gewerbenachweis hochladen</p>
+                            <p className="text-sm">PDF, JPG oder PNG (max. 5MB)</p>
+                          </div>
+                        )}
+                      </div>
+                      <input
+                        id="businessLicenseInput"
+                        type="file"
+                        accept=".pdf,.jpg,.jpeg,.png"
+                        onChange={handleBusinessLicenseUpload}
+                        className="hidden"
+                      />
+                    </div>
+                  </div>
+
+                  <div className="bg-amber-50 border border-amber-200 rounded-lg p-3 text-sm text-amber-800">
+                    <p className="font-medium">Hinweis zur Freischaltung</p>
+                    <p>Nach der Registrierung wird Ihr Konto von einem Administrator geprüft und freigeschaltet.</p>
                   </div>
                 </>
               )}

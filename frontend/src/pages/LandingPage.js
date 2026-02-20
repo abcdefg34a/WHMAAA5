@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import axios from 'axios';
-import { Search, Car, MapPin, Clock, Phone, Building2, ChevronRight, Shield, Truck, Users } from 'lucide-react';
+import { Search, Car, MapPin, Clock, Phone, Building2, ChevronRight, Shield, Truck, Users, Euro, Calendar } from 'lucide-react';
 import { Button } from '../components/ui/button';
 import { Card, CardContent } from '../components/ui/card';
 import { MapContainer, TileLayer, Marker, Popup } from 'react-leaflet';
@@ -177,6 +177,18 @@ export const LandingPage = () => {
                           </div>
                         </div>
                       )}
+
+                      {searchResult.days_in_yard > 0 && (
+                        <div className="flex items-center gap-3">
+                          <div className="bg-slate-100 p-2 rounded">
+                            <Calendar className="h-5 w-5 text-slate-600" />
+                          </div>
+                          <div>
+                            <p className="text-sm text-slate-500">Standzeit</p>
+                            <p className="font-medium">{searchResult.days_in_yard} Tag(e)</p>
+                          </div>
+                        </div>
+                      )}
                     </div>
 
                     <div className="space-y-4">
@@ -218,6 +230,33 @@ export const LandingPage = () => {
                     </div>
                   </div>
 
+                  {/* Cost Calculation */}
+                  {searchResult.total_cost !== null && searchResult.total_cost > 0 && (
+                    <div className="bg-orange-50 border border-orange-200 rounded-lg p-4 mb-6">
+                      <div className="flex items-center gap-2 mb-3">
+                        <Euro className="h-5 w-5 text-orange-600" />
+                        <h3 className="font-bold text-lg text-orange-900">Geschätzte Kosten (Stand heute)</h3>
+                      </div>
+                      <div className="grid sm:grid-cols-3 gap-4 text-sm">
+                        <div>
+                          <p className="text-orange-700">Anfahrtskosten</p>
+                          <p className="font-bold text-lg text-orange-900">{searchResult.tow_cost?.toFixed(2)} €</p>
+                        </div>
+                        <div>
+                          <p className="text-orange-700">Standkosten ({searchResult.days_in_yard} Tag(e) × {searchResult.daily_cost?.toFixed(2)} €)</p>
+                          <p className="font-bold text-lg text-orange-900">{(searchResult.daily_cost * searchResult.days_in_yard).toFixed(2)} €</p>
+                        </div>
+                        <div className="bg-orange-100 rounded-lg p-3">
+                          <p className="text-orange-700">Gesamt</p>
+                          <p className="font-black text-2xl text-orange-900">{searchResult.total_cost?.toFixed(2)} €</p>
+                        </div>
+                      </div>
+                      <p className="text-xs text-orange-600 mt-3">
+                        * Die Kosten erhöhen sich täglich um {searchResult.daily_cost?.toFixed(2)} € Standgebühr
+                      </p>
+                    </div>
+                  )}
+
                   {searchResult.yard_address && (
                     <div className="border-t pt-6">
                       <div className="flex items-center gap-3 mb-4">
@@ -228,34 +267,15 @@ export const LandingPage = () => {
                         </div>
                       </div>
 
-                      {searchResult.yard_lat && searchResult.yard_lng && (
-                        <>
-                          <div className="map-container h-64 mb-4">
-                            <MapContainer
-                              center={[searchResult.yard_lat, searchResult.yard_lng]}
-                              zoom={15}
-                              scrollWheelZoom={false}
-                            >
-                              <TileLayer
-                                attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
-                                url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
-                              />
-                              <Marker position={[searchResult.yard_lat, searchResult.yard_lng]}>
-                                <Popup>{searchResult.yard_address}</Popup>
-                              </Marker>
-                            </MapContainer>
-                          </div>
-                          <a
-                            href={`https://www.google.com/maps/dir/?api=1&destination=${searchResult.yard_lat},${searchResult.yard_lng}`}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="inline-flex items-center gap-2 bg-slate-900 text-white px-6 py-3 rounded-md hover:bg-slate-800 transition-colors font-medium"
-                          >
-                            <MapPin className="h-5 w-5" />
-                            Route in Google Maps öffnen
-                          </a>
-                        </>
-                      )}
+                      <a
+                        href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(searchResult.yard_address)}`}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="inline-flex items-center gap-2 bg-slate-900 text-white px-6 py-3 rounded-md hover:bg-slate-800 transition-colors font-medium"
+                      >
+                        <MapPin className="h-5 w-5" />
+                        Route in Google Maps öffnen
+                      </a>
                     </div>
                   )}
                 </CardContent>
@@ -296,11 +316,11 @@ export const LandingPage = () => {
             </div>
             <div className="text-center">
               <div className="bg-slate-100 w-16 h-16 rounded-full flex items-center justify-center mx-auto mb-4">
-                <MapPin className="h-8 w-8 text-slate-700" />
+                <Euro className="h-8 w-8 text-slate-700" />
               </div>
-              <h3 className="font-bold text-lg mb-2">2. Finden</h3>
+              <h3 className="font-bold text-lg mb-2">2. Kosten einsehen</h3>
               <p className="text-slate-600">
-                Erhalten Sie sofort Informationen zum Standort Ihres Fahrzeugs.
+                Sehen Sie sofort die aktuellen Abschleppkosten inkl. Standgebühren.
               </p>
             </div>
             <div className="text-center">

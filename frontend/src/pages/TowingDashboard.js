@@ -3,7 +3,7 @@ import { useAuth } from '../contexts/AuthContext';
 import axios from 'axios';
 import { 
   Car, MapPin, Camera, LogOut, FileText, Copy, CheckCircle,
-  Clock, Truck, Phone, Building2, Download, X
+  Clock, Truck, Phone, Building2, Download, X, Settings, Euro
 } from 'lucide-react';
 import { Button } from '../components/ui/button';
 import { Input } from '../components/ui/input';
@@ -29,13 +29,14 @@ L.Icon.Default.mergeOptions({
 const API = `${process.env.REACT_APP_BACKEND_URL}/api`;
 
 export const TowingDashboard = () => {
-  const { user, logout } = useAuth();
+  const { user, logout, updateUser } = useAuth();
   const [activeTab, setActiveTab] = useState('incoming');
   const [jobs, setJobs] = useState([]);
   const [loading, setLoading] = useState(true);
   const [selectedJob, setSelectedJob] = useState(null);
   const [jobDetailOpen, setJobDetailOpen] = useState(false);
   const [releaseDialogOpen, setReleaseDialogOpen] = useState(false);
+  const [settingsDialogOpen, setSettingsDialogOpen] = useState(false);
   const [codeCopied, setCodeCopied] = useState(false);
 
   // Release form state
@@ -48,9 +49,19 @@ export const TowingDashboard = () => {
   const [servicePhotos, setServicePhotos] = useState([]);
   const fileInputRef = useRef(null);
 
+  // Settings state (costs)
+  const [towCost, setTowCost] = useState(user?.tow_cost || 0);
+  const [dailyCost, setDailyCost] = useState(user?.daily_cost || 0);
+  const [savingCosts, setSavingCosts] = useState(false);
+
   useEffect(() => {
     fetchJobs();
   }, []);
+
+  useEffect(() => {
+    setTowCost(user?.tow_cost || 0);
+    setDailyCost(user?.daily_cost || 0);
+  }, [user]);
 
   const fetchJobs = async () => {
     try {
@@ -69,6 +80,23 @@ export const TowingDashboard = () => {
       setCodeCopied(true);
       toast.success('Code kopiert!');
       setTimeout(() => setCodeCopied(false), 2000);
+    }
+  };
+
+  const handleSaveCosts = async () => {
+    setSavingCosts(true);
+    try {
+      const response = await axios.patch(`${API}/services/costs`, {
+        tow_cost: parseFloat(towCost) || 0,
+        daily_cost: parseFloat(dailyCost) || 0
+      });
+      updateUser(response.data);
+      toast.success('Kosten gespeichert!');
+      setSettingsDialogOpen(false);
+    } catch (error) {
+      toast.error('Fehler beim Speichern');
+    } finally {
+      setSavingCosts(false);
     }
   };
 
@@ -210,6 +238,16 @@ export const TowingDashboard = () => {
                   <Copy className="h-4 w-4 text-slate-400" />
                 )}
               </div>
+
+              {/* Settings Button */}
+              <Button
+                data-testid="settings-btn"
+                variant="outline"
+                size="sm"
+                onClick={() => setSettingsDialogOpen(true)}
+              >
+                <Settings className="h-4 w-4" />
+              </Button>
               
               <Button
                 data-testid="logout-btn"
@@ -243,6 +281,26 @@ export const TowingDashboard = () => {
             <p className="text-xs text-slate-500 mt-2">
               Geben Sie diesen Code an Behörden weiter, um Aufträge zu erhalten
             </p>
+          </CardContent>
+        </Card>
+
+        {/* Cost Info Card */}
+        <Card className="mb-6 border-orange-200 bg-orange-50">
+          <CardContent className="py-4">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-4">
+                <Euro className="h-6 w-6 text-orange-600" />
+                <div>
+                  <p className="text-sm text-orange-700">Ihre Preise</p>
+                  <p className="font-bold text-orange-900">
+                    Anfahrt: {(user?.tow_cost || 0).toFixed(2)} € | Standkosten: {(user?.daily_cost || 0).toFixed(2)} €/Tag
+                  </p>
+                </div>
+              </div>
+              <Button variant="outline" size="sm" onClick={() => setSettingsDialogOpen(true)}>
+                Anpassen
+              </Button>
+            </div>
           </CardContent>
         </Card>
 
@@ -383,6 +441,70 @@ export const TowingDashboard = () => {
           </TabsContent>
         </Tabs>
       </main>
+
+      {/* Settings Dialog (Costs) */}
+      <Dialog open={settingsDialogOpen} onOpenChange={setSettingsDialogOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Euro className="h-5 w-5" />
+              Preise anpassen
+            </DialogTitle>
+            <DialogDescription>
+              Legen Sie Ihre Anfahrtskosten und täglichen Standgebühren fest
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-4 py-4">
+            <div className="space-y-2">
+              <Label htmlFor="towCost">Anfahrtskosten (€)</Label>
+              <Input
+                data-testid="settings-tow-cost-input"
+                id="towCost"
+                type="number"
+                step="0.01"
+                min="0"
+                value={towCost}
+                onChange={(e) => setTowCost(e.target.value)}
+                placeholder="150.00"
+              />
+              <p className="text-xs text-slate-500">Einmalige Kosten für den Abschleppvorgang</p>
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="dailyCost">Standkosten pro Tag (€)</Label>
+              <Input
+                data-testid="settings-daily-cost-input"
+                id="dailyCost"
+                type="number"
+                step="0.01"
+                min="0"
+                value={dailyCost}
+                onChange={(e) => setDailyCost(e.target.value)}
+                placeholder="20.00"
+              />
+              <p className="text-xs text-slate-500">Tägliche Gebühr für die Verwahrung</p>
+            </div>
+
+            <div className="bg-slate-50 rounded-lg p-4">
+              <p className="text-sm font-medium text-slate-700">Beispielrechnung</p>
+              <p className="text-sm text-slate-600 mt-1">
+                Fahrzeug 3 Tage im Hof: {parseFloat(towCost || 0).toFixed(2)} € + (3 × {parseFloat(dailyCost || 0).toFixed(2)} €) = <span className="font-bold">{(parseFloat(towCost || 0) + 3 * parseFloat(dailyCost || 0)).toFixed(2)} €</span>
+              </p>
+            </div>
+
+            <Button
+              data-testid="save-costs-btn"
+              onClick={handleSaveCosts}
+              disabled={savingCosts}
+              className="w-full bg-slate-900 hover:bg-slate-800"
+            >
+              {savingCosts ? <div className="loading-spinner mr-2"></div> : null}
+              Speichern
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
 
       {/* Job Detail Dialog */}
       <Dialog open={jobDetailOpen} onOpenChange={setJobDetailOpen}>
