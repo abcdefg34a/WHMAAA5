@@ -1274,7 +1274,7 @@ async def generate_pdf(job_id: str):
     ]
     timeline_table = Table(timeline_data, colWidths=[6*cm, 8*cm, 3*cm])
     timeline_table.setStyle(TableStyle([
-        ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#1e293b')),
+        ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#f97316')),  # Orange header
         ('TEXTCOLOR', (0, 0), (-1, 0), colors.white),
         ('BACKGROUND', (0, 1), (-1, -1), colors.white),
         ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
