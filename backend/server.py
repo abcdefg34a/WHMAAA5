@@ -488,14 +488,9 @@ async def update_costs(data: UpdateCostsRequest, user: dict = Depends(get_curren
 
 def get_authority_id(user: dict) -> str:
     """Get the main authority ID for a user (either main authority or employee)"""
-    logger.info(f"get_authority_id called with user: is_main_authority={user.get('is_main_authority')}, parent_authority_id={user.get('parent_authority_id')}, user_id={user.get('id')}")
     if user.get("is_main_authority"):
-        result = user["id"]
-        logger.info(f"Returning main authority ID: {result}")
-        return result
-    result = user.get("parent_authority_id", user["id"])
-    logger.info(f"Returning parent/fallback authority ID: {result}")
-    return result
+        return user["id"]
+    return user.get("parent_authority_id", user["id"])
 
 @api_router.post("/authority/employees", response_model=EmployeeResponse)
 async def create_employee(data: CreateEmployeeRequest, user: dict = Depends(get_current_user)):
