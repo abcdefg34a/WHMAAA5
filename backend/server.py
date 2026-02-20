@@ -163,6 +163,10 @@ class JobUpdate(BaseModel):
     payment_method: Optional[str] = None
     payment_amount: Optional[float] = None
 
+class BulkStatusUpdate(BaseModel):
+    job_ids: List[str]
+    status: str
+
 class JobResponse(BaseModel):
     id: str
     job_number: str
