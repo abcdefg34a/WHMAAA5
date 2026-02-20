@@ -348,6 +348,10 @@ async def register(data: UserRegister):
         user_doc["authority_name"] = data.authority_name
         user_doc["department"] = data.department
         user_doc["linked_services"] = []
+        user_doc["is_main_authority"] = True
+        user_doc["parent_authority_id"] = None
+        # Generate Dienstnummer for main authority
+        user_doc["dienstnummer"] = await generate_dienstnummer(user_id)
     elif data.role == UserRole.TOWING_SERVICE:
         # Check if business license is provided
         if not data.business_license:
