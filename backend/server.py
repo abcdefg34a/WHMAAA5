@@ -201,6 +201,7 @@ class JobResponse(BaseModel):
     created_by_name: str
     created_by_authority: Optional[str] = None
     created_by_dienstnummer: Optional[str] = None  # NEW: Track who created the job
+    authority_id: Optional[str] = None  # NEW: Authority ID for grouping
     assigned_service_id: Optional[str] = None
     assigned_service_name: Optional[str] = None
     service_notes: Optional[str] = None
