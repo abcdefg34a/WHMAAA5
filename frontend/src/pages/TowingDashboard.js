@@ -74,12 +74,17 @@ export const TowingDashboard = () => {
     }
   };
 
-  const copyServiceCode = () => {
+  const copyServiceCode = async () => {
     if (user?.service_code) {
-      navigator.clipboard.writeText(user.service_code);
-      setCodeCopied(true);
-      toast.success('Code kopiert!');
-      setTimeout(() => setCodeCopied(false), 2000);
+      try {
+        await navigator.clipboard.writeText(user.service_code);
+        setCodeCopied(true);
+        toast.success('Code kopiert!');
+        setTimeout(() => setCodeCopied(false), 2000);
+      } catch (err) {
+        // Fallback for browsers that don't support clipboard
+        toast.info(`Ihr Code: ${user.service_code}`);
+      }
     }
   };
 
