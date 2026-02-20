@@ -342,6 +342,220 @@ class TowingManagementAPITester:
         
         return True
 
+    def test_bulk_job_management(self):
+        """Test bulk job management features"""
+        print("\n🔄 Testing Bulk Job Management...")
+        
+        # Create multiple test jobs for bulk operations
+        job_ids = []
+        for i in range(3):
+            job_data = {
+                "license_plate": f"B-BULK{i:03d}",
+                "vin": f"WVWZZZ3CZWE12345{i}",
+                "tow_reason": f"Test bulk job {i+1}",
+                "location_address": f"Teststraße {i+1}, 12345 Berlin",
+                "location_lat": 52.520008 + i * 0.001,
+                "location_lng": 13.404954 + i * 0.001,
+                "notes": f"Bulk test job {i+1}",
+                "assigned_service_id": self.towing_service_id
+            }
+            
+            success, response = self.run_test(
+                f"Create Bulk Job {i+1}", "POST", "jobs", 200, 
+                job_data, self.authority_token
+            )
+            
+            if success and 'id' in response:
+                job_ids.append(response['id'])
+                print(f"   Created job {i+1} with ID: {response['id']}")
+        
+        if len(job_ids) < 3:
+            print("❌ Failed to create enough test jobs for bulk operations")
+            return False
+        
+        self.bulk_job_ids = job_ids
+        
+        # Test bulk status update to "on_site"
+        bulk_data = {"job_ids": job_ids, "status": "on_site"}
+        success, response = self.run_test(
+            "Bulk Update to On Site", "POST", "jobs/bulk-update-status", 200,
+            bulk_data, self.towing_token
+        )
+        
+        if success and response:
+            updated_count = response.get('updated_count', 0)
+            print(f"   Updated {updated_count} jobs to on_site status")
+            
+            # Verify timestamps were set correctly
+            for job_id in job_ids:
+                success, job_response = self.run_test(
+                    f"Verify On Site Timestamp", "GET", f"jobs/{job_id}", 200,
+                    token=self.towing_token
+                )
+                if success and job_response:
+                    on_site_at = job_response.get('on_site_at')
+                    if on_site_at:
+                        print(f"   ✅ Job {job_id[:8]}... has on_site_at timestamp: {on_site_at}")
+                    else:
+                        print(f"   ❌ Job {job_id[:8]}... missing on_site_at timestamp")
+        
+        # Test bulk status update to "towed"
+        bulk_data = {"job_ids": job_ids[:2], "status": "towed"}  # Only update first 2 jobs
+        success, response = self.run_test(
+            "Bulk Update to Towed", "POST", "jobs/bulk-update-status", 200,
+            bulk_data, self.towing_token
+        )
+        
+        if success and response:
+            updated_count = response.get('updated_count', 0)
+            print(f"   Updated {updated_count} jobs to towed status")
+        
+        # Test bulk status update to "in_yard"
+        bulk_data = {"job_ids": [job_ids[0]], "status": "in_yard"}  # Only update first job
+        success, response = self.run_test(
+            "Bulk Update to In Yard", "POST", "jobs/bulk-update-status", 200,
+            bulk_data, self.towing_token
+        )
+        
+        if success and response:
+            updated_count = response.get('updated_count', 0)
+            print(f"   Updated {updated_count} jobs to in_yard status")
+            
+            # Verify in_yard_at timestamp
+            success, job_response = self.run_test(
+                f"Verify In Yard Timestamp", "GET", f"jobs/{job_ids[0]}", 200,
+                token=self.towing_token
+            )
+            if success and job_response:
+                in_yard_at = job_response.get('in_yard_at')
+                if in_yard_at:
+                    print(f"   ✅ Job has in_yard_at timestamp: {in_yard_at}")
+                else:
+                    print(f"   ❌ Job missing in_yard_at timestamp")
+        
+        return True
+
+    def test_bulk_job_error_cases(self):
+        """Test bulk job management error cases"""
+        print("\n⚠️ Testing Bulk Job Error Cases...")
+        
+        if not hasattr(self, 'bulk_job_ids') or not self.bulk_job_ids:
+            print("❌ No bulk job IDs available for error testing")
+            return False
+        
+        # Test empty job_ids array
+        bulk_data = {"job_ids": [], "status": "on_site"}
+        success, response = self.run_test(
+            "Bulk Update - Empty Job IDs", "POST", "jobs/bulk-update-status", 400,
+            bulk_data, self.towing_token
+        )
+        
+        # Test invalid status
+        bulk_data = {"job_ids": self.bulk_job_ids[:1], "status": "invalid_status"}
+        success, response = self.run_test(
+            "Bulk Update - Invalid Status", "POST", "jobs/bulk-update-status", 400,
+            bulk_data, self.towing_token
+        )
+        
+        # Test unauthorized role (authority trying to bulk update)
+        bulk_data = {"job_ids": self.bulk_job_ids[:1], "status": "on_site"}
+        success, response = self.run_test(
+            "Bulk Update - Wrong Role", "POST", "jobs/bulk-update-status", 403,
+            bulk_data, self.authority_token
+        )
+        
+        # Test updating jobs not assigned to this towing service
+        # First create a job without assignment
+        job_data = {
+            "license_plate": "B-UNASSIGNED",
+            "vin": "WVWZZZ3CZWE999999",
+            "tow_reason": "Unassigned test job",
+            "location_address": "Teststraße 999, 12345 Berlin",
+            "location_lat": 52.520008,
+            "location_lng": 13.404954,
+            "notes": "Unassigned job for testing"
+            # No assigned_service_id
+        }
+        
+        success, response = self.run_test(
+            "Create Unassigned Job", "POST", "jobs", 200, 
+            job_data, self.authority_token
+        )
+        
+        if success and 'id' in response:
+            unassigned_job_id = response['id']
+            
+            # Try to bulk update unassigned job (should update 0 jobs)
+            bulk_data = {"job_ids": [unassigned_job_id], "status": "on_site"}
+            success, response = self.run_test(
+                "Bulk Update - Unassigned Job", "POST", "jobs/bulk-update-status", 200,
+                bulk_data, self.towing_token
+            )
+            
+            if success and response:
+                updated_count = response.get('updated_count', 0)
+                if updated_count == 0:
+                    print(f"   ✅ Correctly updated 0 unassigned jobs")
+                else:
+                    print(f"   ❌ Incorrectly updated {updated_count} unassigned jobs")
+        
+        return True
+
+    def test_date_filtering(self):
+        """Test date filtering on GET /api/jobs"""
+        print("\n📅 Testing Date Filtering...")
+        
+        from datetime import datetime, timedelta
+        
+        # Get current date and calculate date ranges
+        today = datetime.now().strftime('%Y-%m-%d')
+        yesterday = (datetime.now() - timedelta(days=1)).strftime('%Y-%m-%d')
+        tomorrow = (datetime.now() + timedelta(days=1)).strftime('%Y-%m-%d')
+        
+        # Test date_from parameter
+        success, response = self.run_test(
+            "Get Jobs - Date From Today", "GET", f"jobs?date_from={today}", 200,
+            token=self.authority_token
+        )
+        
+        if success and response:
+            print(f"   Found {len(response)} jobs from today onwards")
+        
+        # Test date_to parameter
+        success, response = self.run_test(
+            "Get Jobs - Date To Today", "GET", f"jobs?date_to={today}", 200,
+            token=self.authority_token
+        )
+        
+        if success and response:
+            print(f"   Found {len(response)} jobs up to today")
+        
+        # Test date range (yesterday to tomorrow)
+        success, response = self.run_test(
+            "Get Jobs - Date Range", "GET", f"jobs?date_from={yesterday}&date_to={tomorrow}", 200,
+            token=self.authority_token
+        )
+        
+        if success and response:
+            print(f"   Found {len(response)} jobs in date range {yesterday} to {tomorrow}")
+        
+        # Test with towing service token
+        success, response = self.run_test(
+            "Get Jobs - Towing Service Date Filter", "GET", f"jobs?date_from={today}", 200,
+            token=self.towing_token
+        )
+        
+        if success and response:
+            print(f"   Towing service found {len(response)} jobs from today onwards")
+        
+        # Test invalid date format (should still work, just no filtering)
+        success, response = self.run_test(
+            "Get Jobs - Invalid Date Format", "GET", "jobs?date_from=invalid-date", 200,
+            token=self.authority_token
+        )
+        
+        return True
+
     def test_vehicle_search(self):
         """Test public vehicle search with cost calculation"""
         print("\n🔍 Testing Vehicle Search with Cost Calculation...")
