@@ -140,16 +140,20 @@ class TowingManagementAPITester:
             self.authority_token = response['access_token']
             print(f"   Authority token obtained: {self.authority_token[:20]}...")
         
-        # Test towing service registration
+        # Test towing service registration (should succeed but be pending approval)
         success, response = self.run_test(
             "Towing Service Registration", "POST", "auth/register", 200, self.test_towing
         )
         if success and 'access_token' in response:
             self.towing_token = response['access_token']
             service_code = response.get('user', {}).get('service_code')
+            approval_status = response.get('user', {}).get('approval_status')
+            self.towing_service_id = response.get('user', {}).get('id')
             if service_code:
                 self.towing_service_code = service_code
                 print(f"   Towing service code: {service_code}")
+            if approval_status:
+                print(f"   Approval status: {approval_status}")
         
         return all([self.admin_token, self.authority_token, self.towing_token])
 
