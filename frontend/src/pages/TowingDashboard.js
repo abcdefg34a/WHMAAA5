@@ -384,6 +384,123 @@ export const TowingDashboard = () => {
           </CardContent>
         </Card>
 
+        {/* Filter Section */}
+        <Card className="mb-6">
+          <CardContent className="py-4">
+            <div className="flex flex-wrap items-center gap-4">
+              <Button
+                variant={filterOpen ? "default" : "outline"}
+                size="sm"
+                onClick={() => setFilterOpen(!filterOpen)}
+                className="flex items-center gap-2"
+              >
+                <Filter className="h-4 w-4" />
+                Filter
+                {hasActiveFilters && (
+                  <span className="bg-orange-500 text-white text-xs px-1.5 py-0.5 rounded-full">!</span>
+                )}
+              </Button>
+              
+              {hasActiveFilters && (
+                <Button variant="ghost" size="sm" onClick={clearFilters}>
+                  Filter zurücksetzen
+                </Button>
+              )}
+            </div>
+
+            {filterOpen && (
+              <div className="mt-4 pt-4 border-t grid sm:grid-cols-3 gap-4">
+                <div className="space-y-2">
+                  <Label className="text-sm text-slate-500">Status</Label>
+                  <Select value={filterStatus} onValueChange={setFilterStatus}>
+                    <SelectTrigger>
+                      <SelectValue placeholder="Alle Status" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">Alle Status</SelectItem>
+                      <SelectItem value="assigned">Zugewiesen</SelectItem>
+                      <SelectItem value="on_site">Vor Ort</SelectItem>
+                      <SelectItem value="towed">Abgeschleppt</SelectItem>
+                      <SelectItem value="in_yard">Im Hof</SelectItem>
+                      <SelectItem value="released">Abgeholt</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-2">
+                  <Label className="text-sm text-slate-500">Datum von</Label>
+                  <Input
+                    type="date"
+                    value={filterDateFrom}
+                    onChange={(e) => setFilterDateFrom(e.target.value)}
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label className="text-sm text-slate-500">Datum bis</Label>
+                  <Input
+                    type="date"
+                    value={filterDateTo}
+                    onChange={(e) => setFilterDateTo(e.target.value)}
+                  />
+                </div>
+              </div>
+            )}
+          </CardContent>
+        </Card>
+
+        {/* Bulk Action Bar - appears when items selected */}
+        {selectedJobIds.length > 0 && (
+          <Card className="mb-6 border-blue-200 bg-blue-50">
+            <CardContent className="py-3">
+              <div className="flex flex-wrap items-center justify-between gap-4">
+                <div className="flex items-center gap-2">
+                  <CheckSquare className="h-5 w-5 text-blue-600" />
+                  <span className="font-medium text-blue-800">
+                    {selectedJobIds.length} Auftrag{selectedJobIds.length > 1 ? 'e' : ''} ausgewählt
+                  </span>
+                </div>
+                <div className="flex flex-wrap items-center gap-2">
+                  <span className="text-sm text-blue-700 mr-2">Status ändern:</span>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    disabled={bulkUpdating}
+                    onClick={() => handleBulkStatusUpdate('on_site')}
+                    className="bg-orange-100 border-orange-300 text-orange-700 hover:bg-orange-200"
+                  >
+                    Vor Ort
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    disabled={bulkUpdating}
+                    onClick={() => handleBulkStatusUpdate('towed')}
+                    className="bg-red-100 border-red-300 text-red-700 hover:bg-red-200"
+                  >
+                    Abgeschleppt
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    disabled={bulkUpdating}
+                    onClick={() => handleBulkStatusUpdate('in_yard')}
+                    className="bg-yellow-100 border-yellow-300 text-yellow-700 hover:bg-yellow-200"
+                  >
+                    Im Hof
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    onClick={() => setSelectedJobIds([])}
+                    className="text-slate-500"
+                  >
+                    <X className="h-4 w-4" />
+                  </Button>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+        )}
+
         <Tabs value={activeTab} onValueChange={setActiveTab}>
           <TabsList className="mb-6">
             <TabsTrigger data-testid="tab-incoming" value="incoming" className="flex items-center gap-2">
@@ -412,12 +529,30 @@ export const TowingDashboard = () => {
                 <p>Keine eingehenden Aufträge</p>
               </div>
             ) : (
-              <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-4">
-                {filterJobs('incoming').map(job => (
-                  <Card 
-                    key={job.id} 
-                    className="cursor-pointer hover:shadow-lg transition-shadow"
-                    onClick={() => openJobDetail(job)}
+              <>
+                {/* Select All for Incoming */}
+                <div className="mb-4 flex items-center gap-2">
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => selectAllInTab(filterJobs('incoming'))}
+                    className="text-slate-600"
+                  >
+                    {filterJobs('incoming').every(j => selectedJobIds.includes(j.id)) ? (
+                      <><CheckSquare className="h-4 w-4 mr-2" /> Alle abwählen</>
+                    ) : (
+                      <><Square className="h-4 w-4 mr-2" /> Alle auswählen</>
+                    )}
+                  </Button>
+                </div>
+                <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-4">
+                  {filterJobs('incoming').map(job => (
+                    <Card 
+                      key={job.id} 
+                      className={`cursor-pointer hover:shadow-lg transition-shadow relative ${
+                        selectedJobIds.includes(job.id) ? 'ring-2 ring-blue-500 bg-blue-50' : ''
+                      }`}
+                      onClick={() => openJobDetail(job)}
                   >
                     <CardContent className="p-4">
                       <div className="flex justify-between items-start mb-3">
