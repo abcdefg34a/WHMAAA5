@@ -665,6 +665,7 @@ async def create_job(data: JobCreate, user: dict = Depends(get_current_user)):
     
     # Get the authority ID (either main or from parent)
     authority_id = get_authority_id(user)
+    logger.info(f"Job creation: authority_id from get_authority_id = {authority_id}")
     
     job_doc = {
         "id": job_id,
