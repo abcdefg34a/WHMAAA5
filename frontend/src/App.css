@@ -1,34 +1,274 @@
-.App-logo {
-    height: 40vmin;
-    pointer-events: none;
-}
-
-@media (prefers-reduced-motion: no-preference) {
-    .App-logo {
-        animation: App-logo-spin infinite 20s linear;
-    }
-}
-
-.App-header {
-    background-color: #0f0f10;
+/* Main App Styles */
+.app-container {
     min-height: 100vh;
     display: flex;
     flex-direction: column;
+}
+
+/* Hero Section */
+.hero-section {
+    background-size: cover;
+    background-position: center;
+    position: relative;
+}
+
+.hero-overlay {
+    background: linear-gradient(180deg, rgba(15, 23, 42, 0.85) 0%, rgba(15, 23, 42, 0.7) 100%);
+}
+
+/* Dashboard Layout */
+.dashboard-layout {
+    display: flex;
+    min-height: 100vh;
+}
+
+.dashboard-sidebar {
+    width: 280px;
+    background: white;
+    border-right: 1px solid hsl(214 32% 80%);
+    padding: 1.5rem;
+    position: fixed;
+    height: 100vh;
+    overflow-y: auto;
+}
+
+.dashboard-content {
+    flex: 1;
+    margin-left: 280px;
+    padding: 2rem;
+    background: hsl(210 40% 98%);
+}
+
+@media (max-width: 1024px) {
+    .dashboard-sidebar {
+        display: none;
+    }
+    
+    .dashboard-content {
+        margin-left: 0;
+        padding-bottom: 5rem;
+    }
+}
+
+/* Form Styles */
+.form-section {
+    background: white;
+    border-radius: 0.5rem;
+    padding: 1.5rem;
+    border: 1px solid hsl(214 32% 80%);
+    margin-bottom: 1.5rem;
+}
+
+.form-section-title {
+    font-family: 'Chivo', sans-serif;
+    font-weight: 700;
+    font-size: 1.125rem;
+    margin-bottom: 1rem;
+    color: hsl(222 84% 10%);
+}
+
+/* Photo Upload */
+.photo-upload-grid {
+    display: grid;
+    grid-template-columns: repeat(5, 1fr);
+    gap: 0.75rem;
+}
+
+.photo-upload-slot {
+    aspect-ratio: 1;
+    border: 2px dashed hsl(214 32% 80%);
+    border-radius: 0.5rem;
+    display: flex;
     align-items: center;
     justify-content: center;
-    font-size: calc(10px + 2vmin);
-    color: white;
+    cursor: pointer;
+    transition: all 0.2s;
+    background: hsl(210 40% 98%);
+    overflow: hidden;
 }
 
-.App-link {
-    color: #61dafb;
+.photo-upload-slot:hover {
+    border-color: hsl(222 84% 10%);
+    background: white;
 }
 
-@keyframes App-logo-spin {
-    from {
-        transform: rotate(0deg);
+.photo-upload-slot img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+}
+
+@media (max-width: 640px) {
+    .photo-upload-grid {
+        grid-template-columns: repeat(3, 1fr);
     }
+}
+
+/* Job Cards */
+.job-card {
+    background: white;
+    border: 1px solid hsl(214 32% 80%);
+    border-radius: 0.5rem;
+    padding: 1.25rem;
+    transition: all 0.2s;
+}
+
+.job-card:hover {
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
+    transform: translateY(-1px);
+}
+
+.job-card-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    margin-bottom: 0.75rem;
+}
+
+.job-license-plate {
+    font-family: 'Chivo', sans-serif;
+    font-weight: 900;
+    font-size: 1.25rem;
+    letter-spacing: 0.05em;
+    color: hsl(222 84% 10%);
+}
+
+/* Status Action Buttons */
+.status-action-bar {
+    position: fixed;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    background: white;
+    border-top: 1px solid hsl(214 32% 80%);
+    padding: 1rem;
+    display: flex;
+    gap: 0.75rem;
+    z-index: 40;
+}
+
+.status-action-btn {
+    flex: 1;
+    padding: 1rem;
+    font-weight: 600;
+    border-radius: 0.5rem;
+    text-align: center;
+    transition: all 0.2s;
+}
+
+/* Stats Cards */
+.stats-grid {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 1rem;
+}
+
+@media (max-width: 1024px) {
+    .stats-grid {
+        grid-template-columns: repeat(2, 1fr);
+    }
+}
+
+@media (max-width: 640px) {
+    .stats-grid {
+        grid-template-columns: 1fr;
+    }
+}
+
+.stat-card {
+    background: white;
+    border: 1px solid hsl(214 32% 80%);
+    border-radius: 0.5rem;
+    padding: 1.5rem;
+}
+
+.stat-value {
+    font-family: 'Chivo', sans-serif;
+    font-weight: 900;
+    font-size: 2.5rem;
+    line-height: 1;
+    color: hsl(222 84% 10%);
+}
+
+.stat-label {
+    font-size: 0.875rem;
+    color: hsl(215 16% 47%);
+    margin-top: 0.5rem;
+}
+
+/* Table Styles */
+.data-table {
+    width: 100%;
+    border-collapse: collapse;
+}
+
+.data-table th {
+    text-align: left;
+    padding: 0.75rem 1rem;
+    background: hsl(210 40% 96%);
+    font-weight: 600;
+    font-size: 0.75rem;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: hsl(215 16% 47%);
+    border-bottom: 1px solid hsl(214 32% 80%);
+}
+
+.data-table td {
+    padding: 1rem;
+    border-bottom: 1px solid hsl(214 32% 91%);
+}
+
+.data-table tr:hover td {
+    background: hsl(210 40% 98%);
+}
+
+/* Map Container */
+.map-container {
+    height: 300px;
+    border-radius: 0.5rem;
+    overflow: hidden;
+    border: 1px solid hsl(214 32% 80%);
+}
+
+/* Loading States */
+.loading-spinner {
+    display: inline-block;
+    width: 20px;
+    height: 20px;
+    border: 2px solid hsl(214 32% 80%);
+    border-radius: 50%;
+    border-top-color: hsl(222 84% 10%);
+    animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
     to {
         transform: rotate(360deg);
     }
+}
+
+/* Toast Notifications */
+.toast-success {
+    background: hsl(142 71% 45%);
+    color: white;
+}
+
+.toast-error {
+    background: hsl(0 84% 60%);
+    color: white;
+}
+
+/* Empty States */
+.empty-state {
+    text-align: center;
+    padding: 3rem 1.5rem;
+    color: hsl(215 16% 47%);
+}
+
+.empty-state-icon {
+    width: 64px;
+    height: 64px;
+    margin: 0 auto 1rem;
+    opacity: 0.5;
 }
