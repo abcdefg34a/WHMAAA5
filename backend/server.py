@@ -702,7 +702,9 @@ async def create_job(data: JobCreate, user: dict = Depends(get_current_user)):
     }
     
     await db.jobs.insert_one(job_doc)
+    logger.info(f"Job inserted into DB with authority_id: {job_doc.get('authority_id')}")
     job_doc.pop("_id", None)
+    logger.info(f"Job doc before response: authority_id = {job_doc.get('authority_id')}")
     
     return JobResponse(**job_doc)
 
