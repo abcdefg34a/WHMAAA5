@@ -272,6 +272,20 @@ def generate_job_number() -> str:
     random_part = ''.join(random.choices(string.ascii_uppercase + string.digits, k=6))
     return f"TOW-{timestamp}-{random_part}"
 
+async def generate_dienstnummer(authority_id: str) -> str:
+    """Generate unique Dienstnummer for authority employees"""
+    # Count existing employees for this authority
+    count = await db.users.count_documents({
+        "$or": [
+            {"id": authority_id},
+            {"parent_authority_id": authority_id}
+        ],
+        "dienstnummer": {"$exists": True}
+    })
+    # Format: DN-XXXX-NNN (DN = Dienstnummer, XXXX = first 4 chars of authority_id, NNN = sequential number)
+    prefix = authority_id[:4].upper()
+    return f"DN-{prefix}-{str(count + 1).zfill(3)}"
+
 def calculate_days_in_yard(in_yard_at: str) -> int:
     """Calculate number of days a vehicle has been in the yard"""
     if not in_yard_at:
