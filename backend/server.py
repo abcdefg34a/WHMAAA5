@@ -416,8 +416,14 @@ async def get_me(user: dict = Depends(get_current_user)):
 @api_router.get("/services", response_model=List[UserResponse])
 async def get_towing_services(user: dict = Depends(get_current_user)):
     if user["role"] == UserRole.AUTHORITY:
-        # Get only linked AND approved services
-        linked_ids = user.get("linked_services", [])
+        # For employees, get linked services from the main authority account
+        if user.get("is_main_authority"):
+            linked_ids = user.get("linked_services", [])
+        else:
+            # Employee - get linked services from parent authority
+            parent = await db.users.find_one({"id": user.get("parent_authority_id")})
+            linked_ids = parent.get("linked_services", []) if parent else []
+        
         if not linked_ids:
             return []
         services = await db.users.find(
@@ -436,6 +442,10 @@ async def get_towing_services(user: dict = Depends(get_current_user)):
 async def link_service(data: LinkServiceRequest, user: dict = Depends(get_current_user)):
     if user["role"] != UserRole.AUTHORITY:
         raise HTTPException(status_code=403, detail="Only authorities can link services")
+    
+    # Only main authority can link services
+    if not user.get("is_main_authority"):
+        raise HTTPException(status_code=403, detail="Nur der Haupt-Account kann Abschleppdienste verknüpfen")
     
     # Only allow linking approved services
     service = await db.users.find_one({
