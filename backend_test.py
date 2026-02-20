@@ -276,6 +276,376 @@ class TowingManagementAPITester:
         
         return True
 
+    def test_employee_management(self):
+        """Test employee management system"""
+        print("\n👥 Testing Employee Management System...")
+        
+        if not self.authority_token or not self.main_authority_id:
+            print("❌ No authority token or ID available for employee tests")
+            return False
+        
+        # Test 1: Create first employee - should get unique dienstnummer
+        success, response = self.run_test(
+            "Create Employee 1", "POST", "authority/employees", 200,
+            self.employee_data, self.authority_token
+        )
+        
+        if success and response:
+            self.employee_id = response.get('id')
+            self.employee_dienstnummer = response.get('dienstnummer')
+            print(f"   Employee 1 created - ID: {self.employee_id}")
+            print(f"   Employee 1 Dienstnummer: {self.employee_dienstnummer}")
+            
+            # Verify dienstnummer format (DN-XXXX-NNN)
+            if self.employee_dienstnummer and self.employee_dienstnummer.startswith('DN-'):
+                print("   ✅ Employee dienstnummer has correct format")
+            else:
+                print("   ❌ Employee dienstnummer has incorrect format")
+        
+        # Test 2: Create second employee - should get different dienstnummer
+        success, response = self.run_test(
+            "Create Employee 2", "POST", "authority/employees", 200,
+            self.employee2_data, self.authority_token
+        )
+        
+        if success and response:
+            self.employee2_id = response.get('id')
+            self.employee2_dienstnummer = response.get('dienstnummer')
+            print(f"   Employee 2 created - ID: {self.employee2_id}")
+            print(f"   Employee 2 Dienstnummer: {self.employee2_dienstnummer}")
+            
+            # Verify dienstnummers are unique
+            if (self.employee_dienstnummer and self.employee2_dienstnummer and 
+                self.employee_dienstnummer != self.employee2_dienstnummer):
+                print("   ✅ Employee dienstnummers are unique")
+            else:
+                print("   ❌ Employee dienstnummers are not unique")
+        
+        # Test 3: Get all employees
+        success, response = self.run_test(
+            "Get All Employees", "GET", "authority/employees", 200,
+            token=self.authority_token
+        )
+        
+        if success and response:
+            print(f"   Found {len(response)} employees")
+            for emp in response:
+                print(f"   - {emp.get('name')}: {emp.get('dienstnummer')} (Blocked: {emp.get('is_blocked', False)})")
+        
+        # Test 4: Employee login and token acquisition
+        employee_login = {"email": self.employee_data["email"], "password": self.employee_data["password"]}
+        success, response = self.run_test(
+            "Employee 1 Login", "POST", "auth/login", 200, employee_login
+        )
+        
+        if success and 'access_token' in response:
+            self.employee_token = response['access_token']
+            user_data = response.get('user', {})
+            is_main_authority = user_data.get('is_main_authority')
+            parent_authority_id = user_data.get('parent_authority_id')
+            
+            print(f"   Employee 1 token obtained: {self.employee_token[:20]}...")
+            print(f"   Is main authority: {is_main_authority}")
+            print(f"   Parent authority ID: {parent_authority_id}")
+            
+            # Verify employee properties
+            if (not is_main_authority and parent_authority_id == self.main_authority_id):
+                print("   ✅ Employee has correct hierarchy properties")
+            else:
+                print("   ❌ Employee has incorrect hierarchy properties")
+        
+        # Test 5: Employee 2 login
+        employee2_login = {"email": self.employee2_data["email"], "password": self.employee2_data["password"]}
+        success, response = self.run_test(
+            "Employee 2 Login", "POST", "auth/login", 200, employee2_login
+        )
+        
+        if success and 'access_token' in response:
+            self.employee2_token = response['access_token']
+            print(f"   Employee 2 token obtained: {self.employee2_token[:20]}...")
+        
+        return True
+
+    def test_employee_job_creation_and_hierarchy(self):
+        """Test job creation by employees and authority hierarchy"""
+        print("\n📋 Testing Employee Job Creation and Authority Hierarchy...")
+        
+        if not self.employee_token or not self.employee2_token:
+            print("❌ Employee tokens not available for hierarchy tests")
+            return False
+        
+        # Test 1: Employee creates job - should include created_by_dienstnummer
+        employee_job_data = {
+            "license_plate": "B-EMP001",
+            "vin": "WVWZZZ3CZWE111111",
+            "tow_reason": "Parken im Halteverbot - Employee Job",
+            "location_address": "Mitarbeiterstraße 1, 12345 Berlin",
+            "location_lat": 52.520008,
+            "location_lng": 13.404954,
+            "notes": "Job created by employee for hierarchy test"
+        }
+        
+        success, response = self.run_test(
+            "Employee 1 Creates Job", "POST", "jobs", 200,
+            employee_job_data, self.employee_token
+        )
+        
+        if success and response:
+            self.employee_job_id = response.get('id')
+            created_by_dienstnummer = response.get('created_by_dienstnummer')
+            authority_id = response.get('authority_id')  # This should be set in the backend
+            
+            print(f"   Employee job created - ID: {self.employee_job_id}")
+            print(f"   Created by Dienstnummer: {created_by_dienstnummer}")
+            print(f"   Authority ID: {authority_id}")
+            
+            # Verify job has correct dienstnummer
+            if created_by_dienstnummer == self.employee_dienstnummer:
+                print("   ✅ Job correctly tracks employee dienstnummer")
+            else:
+                print("   ❌ Job missing or incorrect employee dienstnummer")
+        
+        # Test 2: Employee 2 creates job
+        employee2_job_data = {
+            "license_plate": "B-EMP002",
+            "vin": "WVWZZZ3CZWE222222",
+            "tow_reason": "Falschparker - Employee 2 Job",
+            "location_address": "Mitarbeiterstraße 2, 12345 Berlin",
+            "location_lat": 52.521008,
+            "location_lng": 13.405954,
+            "notes": "Job created by employee 2 for hierarchy test"
+        }
+        
+        success, response = self.run_test(
+            "Employee 2 Creates Job", "POST", "jobs", 200,
+            employee2_job_data, self.employee2_token
+        )
+        
+        if success and response:
+            self.employee2_job_id = response.get('id')
+            created_by_dienstnummer = response.get('created_by_dienstnummer')
+            
+            print(f"   Employee 2 job created - ID: {self.employee2_job_id}")
+            print(f"   Created by Dienstnummer: {created_by_dienstnummer}")
+            
+            # Verify job has correct dienstnummer
+            if created_by_dienstnummer == self.employee2_dienstnummer:
+                print("   ✅ Job correctly tracks employee 2 dienstnummer")
+            else:
+                print("   ❌ Job missing or incorrect employee 2 dienstnummer")
+        
+        # Test 3: Main authority sees ALL jobs from their authority
+        success, response = self.run_test(
+            "Main Authority Gets All Jobs", "GET", "jobs", 200,
+            token=self.authority_token
+        )
+        
+        if success and response:
+            job_count = len(response)
+            employee_jobs = [j for j in response if j.get('created_by_dienstnummer') in [self.employee_dienstnummer, self.employee2_dienstnummer]]
+            main_authority_jobs = [j for j in response if j.get('created_by_dienstnummer') == self.main_authority_dienstnummer]
+            
+            print(f"   Main authority sees {job_count} total jobs")
+            print(f"   - Employee jobs: {len(employee_jobs)}")
+            print(f"   - Main authority jobs: {len(main_authority_jobs)}")
+            
+            # Verify main authority can see employee jobs
+            if len(employee_jobs) >= 2:  # Should see both employee jobs
+                print("   ✅ Main authority can see employee jobs")
+            else:
+                print("   ❌ Main authority cannot see all employee jobs")
+        
+        # Test 4: Employee 1 sees only their own jobs
+        success, response = self.run_test(
+            "Employee 1 Gets Own Jobs", "GET", "jobs", 200,
+            token=self.employee_token
+        )
+        
+        if success and response:
+            job_count = len(response)
+            own_jobs = [j for j in response if j.get('created_by_dienstnummer') == self.employee_dienstnummer]
+            other_jobs = [j for j in response if j.get('created_by_dienstnummer') != self.employee_dienstnummer]
+            
+            print(f"   Employee 1 sees {job_count} total jobs")
+            print(f"   - Own jobs: {len(own_jobs)}")
+            print(f"   - Other jobs: {len(other_jobs)}")
+            
+            # Verify employee only sees their own jobs
+            if len(other_jobs) == 0 and len(own_jobs) >= 1:
+                print("   ✅ Employee 1 correctly sees only own jobs")
+            else:
+                print("   ❌ Employee 1 sees jobs they shouldn't see")
+        
+        # Test 5: Employee 2 sees only their own jobs
+        success, response = self.run_test(
+            "Employee 2 Gets Own Jobs", "GET", "jobs", 200,
+            token=self.employee2_token
+        )
+        
+        if success and response:
+            job_count = len(response)
+            own_jobs = [j for j in response if j.get('created_by_dienstnummer') == self.employee2_dienstnummer]
+            other_jobs = [j for j in response if j.get('created_by_dienstnummer') != self.employee2_dienstnummer]
+            
+            print(f"   Employee 2 sees {job_count} total jobs")
+            print(f"   - Own jobs: {len(own_jobs)}")
+            print(f"   - Other jobs: {len(other_jobs)}")
+            
+            # Verify employee only sees their own jobs
+            if len(other_jobs) == 0 and len(own_jobs) >= 1:
+                print("   ✅ Employee 2 correctly sees only own jobs")
+            else:
+                print("   ❌ Employee 2 sees jobs they shouldn't see")
+        
+        return True
+
+    def test_employee_blocking_and_management(self):
+        """Test employee blocking, password changes, and deletion"""
+        print("\n🔒 Testing Employee Blocking and Management...")
+        
+        if not self.employee_id or not self.employee2_id:
+            print("❌ Employee IDs not available for management tests")
+            return False
+        
+        # Test 1: Block employee 1
+        block_data = {"blocked": True}
+        success, response = self.run_test(
+            "Block Employee 1", "PATCH", f"authority/employees/{self.employee_id}/block", 200,
+            block_data, self.authority_token
+        )
+        
+        if success:
+            print("   ✅ Employee 1 blocked successfully")
+        
+        # Test 2: Verify blocked employee cannot login
+        employee_login = {"email": self.employee_data["email"], "password": self.employee_data["password"]}
+        success, response = self.run_test(
+            "Blocked Employee Login Attempt", "POST", "auth/login", 403, employee_login
+        )
+        
+        if success:  # Success means we got the expected 403 status
+            print("   ✅ Blocked employee correctly denied login")
+        
+        # Test 3: Unblock employee 1
+        unblock_data = {"blocked": False}
+        success, response = self.run_test(
+            "Unblock Employee 1", "PATCH", f"authority/employees/{self.employee_id}/block", 200,
+            unblock_data, self.authority_token
+        )
+        
+        if success:
+            print("   ✅ Employee 1 unblocked successfully")
+        
+        # Test 4: Verify unblocked employee can login again
+        success, response = self.run_test(
+            "Unblocked Employee Login", "POST", "auth/login", 200, employee_login
+        )
+        
+        if success and 'access_token' in response:
+            self.employee_token = response['access_token']  # Update token
+            print("   ✅ Unblocked employee can login again")
+        
+        # Test 5: Change employee password
+        new_password_data = {"new_password": "NewEmployeePass123!"}
+        success, response = self.run_test(
+            "Change Employee Password", "PATCH", f"authority/employees/{self.employee_id}/password", 200,
+            new_password_data, self.authority_token
+        )
+        
+        if success:
+            print("   ✅ Employee password changed successfully")
+            
+            # Test login with new password
+            new_login_data = {"email": self.employee_data["email"], "password": "NewEmployeePass123!"}
+            success, response = self.run_test(
+                "Login with New Password", "POST", "auth/login", 200, new_login_data
+            )
+            
+            if success and 'access_token' in response:
+                print("   ✅ Login with new password successful")
+            else:
+                print("   ❌ Login with new password failed")
+        
+        # Test 6: Delete employee 2
+        success, response = self.run_test(
+            "Delete Employee 2", "DELETE", f"authority/employees/{self.employee2_id}", 200,
+            token=self.authority_token
+        )
+        
+        if success:
+            print("   ✅ Employee 2 deleted successfully")
+            
+            # Test that deleted employee cannot login
+            employee2_login = {"email": self.employee2_data["email"], "password": self.employee2_data["password"]}
+            success, response = self.run_test(
+                "Deleted Employee Login Attempt", "POST", "auth/login", 401, employee2_login
+            )
+            
+            if success:  # Success means we got the expected 401 status
+                print("   ✅ Deleted employee correctly denied login")
+        
+        # Test 7: Verify employee list is updated
+        success, response = self.run_test(
+            "Get Updated Employee List", "GET", "authority/employees", 200,
+            token=self.authority_token
+        )
+        
+        if success and response:
+            remaining_employees = len(response)
+            print(f"   Remaining employees: {remaining_employees}")
+            
+            # Should have 1 employee left (employee 1, employee 2 was deleted)
+            if remaining_employees == 1:
+                print("   ✅ Employee list correctly updated after deletion")
+            else:
+                print("   ❌ Employee list not correctly updated")
+        
+        return True
+
+    def test_employee_error_cases(self):
+        """Test employee management error cases"""
+        print("\n⚠️ Testing Employee Management Error Cases...")
+        
+        # Test 1: Non-authority user trying to create employee
+        if self.admin_token:
+            success, response = self.run_test(
+                "Admin Create Employee (Should Fail)", "POST", "authority/employees", 403,
+                self.employee_data, self.admin_token
+            )
+        
+        # Test 2: Employee trying to create another employee (not main authority)
+        if self.employee_token:
+            success, response = self.run_test(
+                "Employee Create Employee (Should Fail)", "POST", "authority/employees", 403,
+                {"email": "test@test.de", "password": "test", "name": "test"}, self.employee_token
+            )
+        
+        # Test 3: Duplicate email registration
+        success, response = self.run_test(
+            "Duplicate Employee Email", "POST", "authority/employees", 400,
+            self.employee_data, self.authority_token
+        )
+        
+        # Test 4: Invalid employee ID operations
+        fake_employee_id = "00000000-0000-0000-0000-000000000000"
+        
+        success, response = self.run_test(
+            "Block Non-existent Employee", "PATCH", f"authority/employees/{fake_employee_id}/block", 404,
+            {"blocked": True}, self.authority_token
+        )
+        
+        success, response = self.run_test(
+            "Delete Non-existent Employee", "DELETE", f"authority/employees/{fake_employee_id}", 404,
+            token=self.authority_token
+        )
+        
+        success, response = self.run_test(
+            "Change Password Non-existent Employee", "PATCH", f"authority/employees/{fake_employee_id}/password", 404,
+            {"new_password": "test"}, self.authority_token
+        )
+        
+        return True
+
     def test_cost_management(self):
         """Test cost management for towing services"""
         print("\n💰 Testing Cost Management...")
