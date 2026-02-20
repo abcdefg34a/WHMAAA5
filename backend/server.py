@@ -712,7 +712,11 @@ async def get_jobs(
     
     # Filter by role
     if user["role"] == UserRole.AUTHORITY:
-        query["created_by_id"] = user["id"]
+        # Main authority sees all jobs from their authority, employees see only their own
+        if user.get("is_main_authority"):
+            query["authority_id"] = user["id"]
+        else:
+            query["created_by_id"] = user["id"]
     elif user["role"] == UserRole.TOWING_SERVICE:
         query["assigned_service_id"] = user["id"]
     
@@ -748,9 +752,11 @@ async def get_job(job_id: str, user: dict = Depends(get_current_user)):
     if not job:
         raise HTTPException(status_code=404, detail="Job not found")
     
-    # Check access
-    if user["role"] == UserRole.AUTHORITY and job["created_by_id"] != user["id"]:
-        raise HTTPException(status_code=403, detail="Access denied")
+    # Check access for authority users
+    if user["role"] == UserRole.AUTHORITY:
+        authority_id = get_authority_id(user)
+        if job.get("authority_id") != authority_id and job["created_by_id"] != user["id"]:
+            raise HTTPException(status_code=403, detail="Access denied")
     if user["role"] == UserRole.TOWING_SERVICE and job["assigned_service_id"] != user["id"]:
         raise HTTPException(status_code=403, detail="Access denied")
     
@@ -762,9 +768,11 @@ async def update_job(job_id: str, data: JobUpdate, user: dict = Depends(get_curr
     if not job:
         raise HTTPException(status_code=404, detail="Job not found")
     
-    # Check access
-    if user["role"] == UserRole.AUTHORITY and job["created_by_id"] != user["id"]:
-        raise HTTPException(status_code=403, detail="Access denied")
+    # Check access for authority users
+    if user["role"] == UserRole.AUTHORITY:
+        authority_id = get_authority_id(user)
+        if job.get("authority_id") != authority_id and job["created_by_id"] != user["id"]:
+            raise HTTPException(status_code=403, detail="Access denied")
     if user["role"] == UserRole.TOWING_SERVICE and job["assigned_service_id"] != user["id"]:
         raise HTTPException(status_code=403, detail="Access denied")
     
