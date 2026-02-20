@@ -107,39 +107,48 @@ user_problem_statement: "Vehicle towing management web app in German - employee 
 backend:
   - task: "Employee management endpoints"
     implemented: true
-    working: "NA"
+    working: true
     file: "/app/backend/server.py"
     stuck_count: 0
     priority: "high"
-    needs_retesting: true
+    needs_retesting: false
     status_history:
       - working: "NA"
         agent: "main"
         comment: "Implemented POST/GET/DELETE/PATCH /api/authority/employees endpoints for creating, listing, blocking, and managing employee accounts"
+      - working: true
+        agent: "testing"
+        comment: "✅ PASSED - All employee management endpoints working correctly. Tested: Create employees (unique dienstnummer generation), list employees, block/unblock employees, delete employees, password changes. All error cases handled properly (403 for non-main authority, 404 for non-existent employees, 400 for duplicate emails)."
 
   - task: "Dienstnummer generation and tracking"
     implemented: true
-    working: "NA"
+    working: true
     file: "/app/backend/server.py"
     stuck_count: 0
     priority: "high"
-    needs_retesting: true
+    needs_retesting: false
     status_history:
       - working: "NA"
         agent: "main"
         comment: "Added dienstnummer field to users and jobs, auto-generated for authority users (format DN-XXXX-NNN)"
+      - working: true
+        agent: "testing"
+        comment: "✅ PASSED - Dienstnummer system working perfectly. Main authority gets DN-XXXX-001, employees get sequential numbers (DN-XXXX-002, DN-XXXX-003, etc.). Jobs correctly track created_by_dienstnummer. Format DN-XXXX-NNN verified where XXXX is first 4 chars of authority ID."
 
   - task: "Authority hierarchy (main vs employee)"
     implemented: true
-    working: "NA"
+    working: true
     file: "/app/backend/server.py"
     stuck_count: 0
     priority: "high"
-    needs_retesting: true
+    needs_retesting: false
     status_history:
       - working: "NA"
         agent: "main"
         comment: "Main authority sees all jobs, employees see only their own. Jobs track authority_id for grouping."
+      - working: true
+        agent: "testing"
+        comment: "✅ PASSED - Authority hierarchy working correctly. Main authority (is_main_authority=true) sees ALL jobs from their authority. Employees (is_main_authority=false, parent_authority_id set) see only their own jobs. Jobs correctly store authority_id for proper grouping. Fixed missing authority_id field in JobResponse model."
 
 frontend:
   - task: "Employee management tab in Authority Dashboard"
