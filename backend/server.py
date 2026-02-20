@@ -535,6 +535,8 @@ async def create_job(data: JobCreate, user: dict = Depends(get_current_user)):
 async def get_jobs(
     status: Optional[str] = None,
     search: Optional[str] = None,
+    date_from: Optional[str] = None,
+    date_to: Optional[str] = None,
     user: dict = Depends(get_current_user)
 ):
     query = {}
@@ -548,6 +550,16 @@ async def get_jobs(
     # Filter by status
     if status:
         query["status"] = status
+    
+    # Filter by date range
+    if date_from or date_to:
+        date_query = {}
+        if date_from:
+            date_query["$gte"] = date_from
+        if date_to:
+            # Add time to include the entire day
+            date_query["$lte"] = date_to + "T23:59:59"
+        query["created_at"] = date_query
     
     # Search
     if search:
