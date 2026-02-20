@@ -117,6 +117,7 @@ class UserResponse(BaseModel):
     business_license: Optional[str] = None
     approval_status: Optional[str] = None
     rejection_reason: Optional[str] = None
+    is_blocked: Optional[bool] = None
 
 class TokenResponse(BaseModel):
     access_token: str
@@ -130,6 +131,13 @@ class UpdateCostsRequest(BaseModel):
 class ApproveServiceRequest(BaseModel):
     approved: bool
     rejection_reason: Optional[str] = None
+
+# Admin User Management Models
+class AdminUpdatePasswordRequest(BaseModel):
+    new_password: str
+
+class AdminBlockUserRequest(BaseModel):
+    blocked: bool
 
 # Job Models
 class JobCreate(BaseModel):
