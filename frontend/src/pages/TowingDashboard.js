@@ -554,7 +554,18 @@ export const TowingDashboard = () => {
                       }`}
                       onClick={() => openJobDetail(job)}
                   >
-                    <CardContent className="p-4">
+                    {/* Checkbox */}
+                    <button
+                      className="absolute top-2 right-2 z-10 p-1 rounded hover:bg-slate-100"
+                      onClick={(e) => toggleJobSelection(job.id, e)}
+                    >
+                      {selectedJobIds.includes(job.id) ? (
+                        <CheckSquare className="h-5 w-5 text-blue-600" />
+                      ) : (
+                        <Square className="h-5 w-5 text-slate-400" />
+                      )}
+                    </button>
+                    <CardContent className="p-4 pr-10">
                       <div className="flex justify-between items-start mb-3">
                         <div>
                           <p className="job-license-plate">{job.license_plate}</p>
@@ -579,6 +590,7 @@ export const TowingDashboard = () => {
                   </Card>
                 ))}
               </div>
+              </>
             )}
           </TabsContent>
 
@@ -590,29 +602,59 @@ export const TowingDashboard = () => {
                 <p>Keine Fahrzeuge im Hof</p>
               </div>
             ) : (
-              <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-4">
-                {filterJobs('in_yard').map(job => (
-                  <Card 
-                    key={job.id} 
-                    className="cursor-pointer hover:shadow-lg transition-shadow"
-                    onClick={() => openJobDetail(job)}
+              <>
+                {/* Select All for In Yard */}
+                <div className="mb-4 flex items-center gap-2">
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => selectAllInTab(filterJobs('in_yard'))}
+                    className="text-slate-600"
                   >
-                    <CardContent className="p-4">
-                      <div className="flex justify-between items-start mb-3">
-                        <div>
-                          <p className="job-license-plate">{job.license_plate}</p>
-                          <p className="text-xs text-slate-500">{job.job_number}</p>
+                    {filterJobs('in_yard').every(j => selectedJobIds.includes(j.id)) ? (
+                      <><CheckSquare className="h-4 w-4 mr-2" /> Alle abwählen</>
+                    ) : (
+                      <><Square className="h-4 w-4 mr-2" /> Alle auswählen</>
+                    )}
+                  </Button>
+                </div>
+                <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-4">
+                  {filterJobs('in_yard').map(job => (
+                    <Card 
+                      key={job.id} 
+                      className={`cursor-pointer hover:shadow-lg transition-shadow relative ${
+                        selectedJobIds.includes(job.id) ? 'ring-2 ring-blue-500 bg-blue-50' : ''
+                      }`}
+                      onClick={() => openJobDetail(job)}
+                    >
+                      {/* Checkbox */}
+                      <button
+                        className="absolute top-2 right-2 z-10 p-1 rounded hover:bg-slate-100"
+                        onClick={(e) => toggleJobSelection(job.id, e)}
+                      >
+                        {selectedJobIds.includes(job.id) ? (
+                          <CheckSquare className="h-5 w-5 text-blue-600" />
+                        ) : (
+                          <Square className="h-5 w-5 text-slate-400" />
+                        )}
+                      </button>
+                      <CardContent className="p-4 pr-10">
+                        <div className="flex justify-between items-start mb-3">
+                          <div>
+                            <p className="job-license-plate">{job.license_plate}</p>
+                            <p className="text-xs text-slate-500">{job.job_number}</p>
+                          </div>
+                          {getStatusBadge(job.status)}
                         </div>
-                        {getStatusBadge(job.status)}
-                      </div>
-                      <div className="space-y-2 text-sm text-slate-600">
-                        <p>Im Hof seit: {job.in_yard_at ? new Date(job.in_yard_at).toLocaleString('de-DE') : '-'}</p>
-                        {job.vin && <p>FIN: {job.vin}</p>}
-                      </div>
-                    </CardContent>
-                  </Card>
-                ))}
-              </div>
+                        <div className="space-y-2 text-sm text-slate-600">
+                          <p>Im Hof seit: {job.in_yard_at ? new Date(job.in_yard_at).toLocaleString('de-DE') : '-'}</p>
+                          {job.vin && <p>FIN: {job.vin}</p>}
+                        </div>
+                      </CardContent>
+                    </Card>
+                  ))}
+                </div>
+              </>
             )}
           </TabsContent>
 
