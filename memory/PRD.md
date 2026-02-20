@@ -49,6 +49,15 @@ Erstelle eine Web-App für Abschlepp-Management:
 - Abschleppdienst-Dashboard: Aufträge verwalten, Status aktualisieren, Freigabe
 - Admin-Dashboard: Statistiken, alle Aufträge, Benutzerliste
 
+## Update Feb 2026 - Kostenmanagement & Freischaltung
+### Neue Features
+- **Kostenmanagement**: Abschleppdienste können Anfahrtskosten + Standkosten/Tag festlegen
+- **Automatische Preisberechnung**: Bei Fahrzeugsuche wird der aktuelle Preis angezeigt (Anfahrt + Tage × Tagessatz)
+- **Gewerbenachweis-Pflicht**: Abschleppdienste müssen bei Registrierung einen Gewerbenachweis hochladen
+- **Admin-Freischaltung**: Admin muss neue Abschleppdienste prüfen und freischalten
+- **Ablehnungsgrund**: Bei Ablehnung wird Grund gespeichert, Benutzer kann sich erneut registrieren
+- **Breitengrad/Längengrad entfernt**: Vereinfachte Registrierung ohne Koordinaten-Eingabe
+
 ## Prioritized Backlog
 
 ### P0 - Completed ✓
