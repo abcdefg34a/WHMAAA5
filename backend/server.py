@@ -658,6 +658,9 @@ async def create_job(data: JobCreate, user: dict = Depends(get_current_user)):
         if service:
             assigned_service_name = service.get("company_name")
     
+    # Get the authority ID (either main or from parent)
+    authority_id = get_authority_id(user)
+    
     job_doc = {
         "id": job_id,
         "job_number": generate_job_number(),
@@ -673,6 +676,8 @@ async def create_job(data: JobCreate, user: dict = Depends(get_current_user)):
         "created_by_id": user["id"],
         "created_by_name": user["name"],
         "created_by_authority": user.get("authority_name"),
+        "created_by_dienstnummer": user.get("dienstnummer"),  # Track Dienstnummer
+        "authority_id": authority_id,  # Main authority ID for grouping
         "assigned_service_id": data.assigned_service_id,
         "assigned_service_name": assigned_service_name,
         "service_notes": None,
