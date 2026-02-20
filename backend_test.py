@@ -462,10 +462,17 @@ class TowingManagementAPITester:
                 print("❌ User registration failed - stopping tests")
                 return False
             
+            # Test login with pending approval
             self.test_user_login()
             self.test_auth_me()
             
-            # Service management
+            # Test admin approval workflow
+            self.test_admin_approval_workflow()
+            
+            # Test cost management
+            self.test_cost_management()
+            
+            # Service management (after approval)
             self.test_service_linking()
             
             # Job management
@@ -473,7 +480,7 @@ class TowingManagementAPITester:
                 self.test_job_management()
                 self.test_pdf_generation()
             
-            # Public endpoints
+            # Public endpoints with cost calculation
             self.test_vehicle_search()
             
             # Admin endpoints
