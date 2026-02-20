@@ -534,6 +534,33 @@ export const AuthorityDashboard = () => {
                             Zugewiesen an: <span className="font-medium">{job.assigned_service_name}</span>
                           </p>
                         )}
+                        
+                        {/* Timeline / Zeiterfassung */}
+                        <div className="mt-4 pt-4 border-t">
+                          <p className="text-xs font-semibold text-slate-500 mb-2">ZEITERFASSUNG</p>
+                          <div className="grid grid-cols-2 sm:grid-cols-5 gap-2 text-xs">
+                            <div className={`p-2 rounded ${job.created_at ? 'bg-green-50 border border-green-200' : 'bg-slate-50'}`}>
+                              <p className="font-medium text-slate-700">Meldung</p>
+                              <p className="text-slate-500">{job.created_at ? new Date(job.created_at).toLocaleString('de-DE') : '-'}</p>
+                            </div>
+                            <div className={`p-2 rounded ${job.on_site_at ? 'bg-green-50 border border-green-200' : 'bg-slate-50'}`}>
+                              <p className="font-medium text-slate-700">Vor Ort</p>
+                              <p className="text-slate-500">{job.on_site_at ? new Date(job.on_site_at).toLocaleString('de-DE') : '-'}</p>
+                            </div>
+                            <div className={`p-2 rounded ${job.towed_at ? 'bg-green-50 border border-green-200' : 'bg-slate-50'}`}>
+                              <p className="font-medium text-slate-700">Abgeschleppt</p>
+                              <p className="text-slate-500">{job.towed_at ? new Date(job.towed_at).toLocaleString('de-DE') : '-'}</p>
+                            </div>
+                            <div className={`p-2 rounded ${job.in_yard_at ? 'bg-green-50 border border-green-200' : 'bg-slate-50'}`}>
+                              <p className="font-medium text-slate-700">Im Hof</p>
+                              <p className="text-slate-500">{job.in_yard_at ? new Date(job.in_yard_at).toLocaleString('de-DE') : '-'}</p>
+                            </div>
+                            <div className={`p-2 rounded ${job.released_at ? 'bg-green-50 border border-green-200' : 'bg-slate-50'}`}>
+                              <p className="font-medium text-slate-700">Abgeholt</p>
+                              <p className="text-slate-500">{job.released_at ? new Date(job.released_at).toLocaleString('de-DE') : '-'}</p>
+                            </div>
+                          </div>
+                        </div>
                       </div>
                     ))}
                   </div>
