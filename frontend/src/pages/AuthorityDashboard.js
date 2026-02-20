@@ -691,6 +691,21 @@ export const AuthorityDashboard = () => {
                             </div>
                           </div>
                         </div>
+                        
+                        {/* PDF Download Button - shows when job is released */}
+                        {job.status === 'released' && (
+                          <div className="mt-4 pt-4 border-t flex justify-end">
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={() => window.open(`${API}/jobs/${job.id}/pdf`, '_blank')}
+                              className="flex items-center gap-2"
+                            >
+                              <Download className="h-4 w-4" />
+                              PDF herunterladen
+                            </Button>
+                          </div>
+                        )}
                       </div>
                     ))}
                   </div>
