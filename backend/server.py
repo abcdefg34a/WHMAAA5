@@ -118,6 +118,10 @@ class UserResponse(BaseModel):
     approval_status: Optional[str] = None
     rejection_reason: Optional[str] = None
     is_blocked: Optional[bool] = None
+    # Employee/Dienstnummer fields
+    dienstnummer: Optional[str] = None
+    parent_authority_id: Optional[str] = None
+    is_main_authority: Optional[bool] = None
 
 class TokenResponse(BaseModel):
     access_token: str
@@ -131,6 +135,20 @@ class UpdateCostsRequest(BaseModel):
 class ApproveServiceRequest(BaseModel):
     approved: bool
     rejection_reason: Optional[str] = None
+
+# Authority Employee Models
+class CreateEmployeeRequest(BaseModel):
+    email: EmailStr
+    password: str
+    name: str
+
+class EmployeeResponse(BaseModel):
+    id: str
+    email: str
+    name: str
+    dienstnummer: str
+    is_blocked: Optional[bool] = None
+    created_at: str
 
 # Admin User Management Models
 class AdminUpdatePasswordRequest(BaseModel):
