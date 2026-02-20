@@ -185,7 +185,75 @@ class TowingManagementAPITester:
         
         return True
 
-    def test_service_linking(self):
+    def test_admin_approval_workflow(self):
+        """Test admin approval workflow for towing services"""
+        print("\n👑 Testing Admin Approval Workflow...")
+        
+        # Get pending services
+        success, response = self.run_test(
+            "Get Pending Services", "GET", "admin/pending-services", 200, 
+            token=self.admin_token
+        )
+        
+        if success and response and len(response) > 0:
+            print(f"   Found {len(response)} pending service(s)")
+            # Check if our test service is in the list
+            test_service = next((s for s in response if s.get('id') == self.towing_service_id), None)
+            if test_service:
+                print(f"   Test service found in pending list with business license: {'Yes' if test_service.get('business_license') else 'No'}")
+        
+        # Test rejection first
+        rejection_data = {"approved": False, "rejection_reason": "Test rejection reason"}
+        success, response = self.run_test(
+            "Reject Towing Service", "POST", f"admin/approve-service/{self.towing_service_id}", 200,
+            rejection_data, self.admin_token
+        )
+        
+        # Try to login after rejection (should fail and delete account)
+        login_data = {"email": self.test_towing["email"], "password": self.test_towing["password"]}
+        success, response = self.run_test("Login After Rejection", "POST", "auth/login", 403, login_data)
+        
+        # Re-register after rejection (should work)
+        success, response = self.run_test(
+            "Re-register After Rejection", "POST", "auth/register", 200, self.test_towing
+        )
+        if success and 'access_token' in response:
+            self.towing_token = response['access_token']
+            self.towing_service_id = response.get('user', {}).get('id')
+            print(f"   Re-registered successfully with new ID: {self.towing_service_id}")
+        
+        # Now approve the service
+        approval_data = {"approved": True}
+        success, response = self.run_test(
+            "Approve Towing Service", "POST", f"admin/approve-service/{self.towing_service_id}", 200,
+            approval_data, self.admin_token
+        )
+        
+        # Test login after approval (should succeed)
+        success, response = self.run_test("Login After Approval", "POST", "auth/login", 200, login_data)
+        if success and 'access_token' in response:
+            self.towing_token = response['access_token']
+            print(f"   Login successful after approval")
+        
+        return True
+
+    def test_cost_management(self):
+        """Test cost management for towing services"""
+        print("\n💰 Testing Cost Management...")
+        
+        # Test updating costs
+        new_costs = {"tow_cost": 175.0, "daily_cost": 30.0}
+        success, response = self.run_test(
+            "Update Towing Costs", "PATCH", "services/costs", 200,
+            new_costs, self.towing_token
+        )
+        
+        if success and response:
+            updated_tow_cost = response.get('tow_cost')
+            updated_daily_cost = response.get('daily_cost')
+            print(f"   Updated costs - Tow: {updated_tow_cost}€, Daily: {updated_daily_cost}€")
+        
+        return success
         """Test service linking functionality"""
         print("\n🔗 Testing Service Linking...")
         
