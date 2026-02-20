@@ -556,9 +556,60 @@ export const TowingDashboard = () => {
                     <p>{selectedJob.created_by_name}</p>
                     <p className="text-sm text-slate-500">{selectedJob.created_by_authority}</p>
                   </div>
-                  <div>
-                    <Label className="text-slate-500">Erfasst am</Label>
-                    <p>{new Date(selectedJob.created_at).toLocaleString('de-DE')}</p>
+                </div>
+
+                {/* Timeline / Zeiterfassung */}
+                <div className="bg-slate-50 rounded-lg p-4">
+                  <Label className="text-slate-700 font-semibold mb-3 block flex items-center gap-2">
+                    <Clock className="h-4 w-4" />
+                    Zeiterfassung
+                  </Label>
+                  <div className="space-y-3">
+                    <div className="flex items-center gap-3">
+                      <div className={`w-3 h-3 rounded-full ${selectedJob.created_at ? 'bg-green-500' : 'bg-slate-300'}`}></div>
+                      <div className="flex-1">
+                        <p className="text-sm font-medium">1. Meldung erfasst</p>
+                        <p className="text-sm text-slate-500">
+                          {selectedJob.created_at ? new Date(selectedJob.created_at).toLocaleString('de-DE') : '-'}
+                        </p>
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-3">
+                      <div className={`w-3 h-3 rounded-full ${selectedJob.on_site_at ? 'bg-green-500' : 'bg-slate-300'}`}></div>
+                      <div className="flex-1">
+                        <p className="text-sm font-medium">2. Vor Ort angekommen</p>
+                        <p className="text-sm text-slate-500">
+                          {selectedJob.on_site_at ? new Date(selectedJob.on_site_at).toLocaleString('de-DE') : '-'}
+                        </p>
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-3">
+                      <div className={`w-3 h-3 rounded-full ${selectedJob.towed_at ? 'bg-green-500' : 'bg-slate-300'}`}></div>
+                      <div className="flex-1">
+                        <p className="text-sm font-medium">3. Abgeschleppt</p>
+                        <p className="text-sm text-slate-500">
+                          {selectedJob.towed_at ? new Date(selectedJob.towed_at).toLocaleString('de-DE') : '-'}
+                        </p>
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-3">
+                      <div className={`w-3 h-3 rounded-full ${selectedJob.in_yard_at ? 'bg-green-500' : 'bg-slate-300'}`}></div>
+                      <div className="flex-1">
+                        <p className="text-sm font-medium">4. Im Hof eingetroffen</p>
+                        <p className="text-sm text-slate-500">
+                          {selectedJob.in_yard_at ? new Date(selectedJob.in_yard_at).toLocaleString('de-DE') : '-'}
+                        </p>
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-3">
+                      <div className={`w-3 h-3 rounded-full ${selectedJob.released_at ? 'bg-green-500' : 'bg-slate-300'}`}></div>
+                      <div className="flex-1">
+                        <p className="text-sm font-medium">5. Fahrzeug abgeholt</p>
+                        <p className="text-sm text-slate-500">
+                          {selectedJob.released_at ? new Date(selectedJob.released_at).toLocaleString('de-DE') : '-'}
+                        </p>
+                      </div>
+                    </div>
                   </div>
                 </div>
 
