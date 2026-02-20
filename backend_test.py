@@ -695,6 +695,14 @@ class TowingManagementAPITester:
             # Job management
             if self.test_job_creation():
                 self.test_job_management()
+                
+                # Test bulk job management features
+                self.test_bulk_job_management()
+                self.test_bulk_job_error_cases()
+                
+                # Test date filtering
+                self.test_date_filtering()
+                
                 self.test_pdf_generation()
             
             # Public endpoints with cost calculation
