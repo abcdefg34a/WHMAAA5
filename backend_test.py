@@ -220,7 +220,10 @@ class TowingManagementAPITester:
         if success and 'access_token' in response:
             self.towing_token = response['access_token']
             self.towing_service_id = response.get('user', {}).get('id')
+            # Update service code after re-registration
+            self.towing_service_code = response.get('user', {}).get('service_code')
             print(f"   Re-registered successfully with new ID: {self.towing_service_id}")
+            print(f"   New service code: {self.towing_service_code}")
         
         # Now approve the service
         approval_data = {"approved": True}
