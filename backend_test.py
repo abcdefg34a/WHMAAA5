@@ -154,13 +154,27 @@ class TowingManagementAPITester:
             self.admin_token = response['access_token']
             print(f"   Admin token obtained: {self.admin_token[:20]}...")
         
-        # Test authority registration
+        # Test authority registration - should get is_main_authority=true and dienstnummer
         success, response = self.run_test(
             "Authority Registration", "POST", "auth/register", 200, self.test_authority
         )
         if success and 'access_token' in response:
             self.authority_token = response['access_token']
+            user_data = response.get('user', {})
+            self.main_authority_id = user_data.get('id')
+            self.main_authority_dienstnummer = user_data.get('dienstnummer')
+            is_main_authority = user_data.get('is_main_authority')
+            
             print(f"   Authority token obtained: {self.authority_token[:20]}...")
+            print(f"   Authority ID: {self.main_authority_id}")
+            print(f"   Dienstnummer: {self.main_authority_dienstnummer}")
+            print(f"   Is main authority: {is_main_authority}")
+            
+            # Verify main authority properties
+            if is_main_authority and self.main_authority_dienstnummer:
+                print("   ✅ Main authority correctly registered with dienstnummer")
+            else:
+                print("   ❌ Main authority missing required properties")
         
         # Test towing service registration (should succeed but be pending approval)
         success, response = self.run_test(
