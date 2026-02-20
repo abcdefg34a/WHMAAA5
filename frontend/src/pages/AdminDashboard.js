@@ -539,6 +539,7 @@ export const AdminDashboard = () => {
                           <th>Kennzeichen</th>
                           <th>Status</th>
                           <th>Behörde</th>
+                          <th>Dienstnr.</th>
                           <th>Abschleppdienst</th>
                           <th>Erstellt</th>
                           <th>Aktionen</th>
@@ -551,6 +552,13 @@ export const AdminDashboard = () => {
                             <td className="font-bold">{job.license_plate}</td>
                             <td>{getStatusBadge(job.status)}</td>
                             <td>{job.created_by_authority || job.created_by_name}</td>
+                            <td>
+                              {job.created_by_dienstnummer ? (
+                                <span className="font-mono text-xs px-2 py-1 bg-blue-100 text-blue-700 rounded">
+                                  {job.created_by_dienstnummer}
+                                </span>
+                              ) : '-'}
+                            </td>
                             <td>{job.assigned_service_name || '-'}</td>
                             <td>{new Date(job.created_at).toLocaleDateString('de-DE')}</td>
                             <td>
