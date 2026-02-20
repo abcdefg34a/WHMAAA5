@@ -3,13 +3,14 @@ import { useAuth } from '../contexts/AuthContext';
 import axios from 'axios';
 import { 
   Car, MapPin, Camera, Plus, LogOut, FileText, Menu, X, 
-  Search, Clock, ChevronRight, Trash2, Link as LinkIcon, CheckCircle
+  Search, Clock, ChevronRight, Trash2, Link as LinkIcon, CheckCircle,
+  Users, UserPlus, Lock, Unlock, Key, Badge
 } from 'lucide-react';
 import { Button } from '../components/ui/button';
 import { Input } from '../components/ui/input';
 import { Label } from '../components/ui/label';
 import { Textarea } from '../components/ui/textarea';
-import { Card, CardContent, CardHeader, CardTitle } from '../components/ui/card';
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '../components/ui/card';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../components/ui/select';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from '../components/ui/dialog';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '../components/ui/tabs';
@@ -49,6 +50,17 @@ export const AuthorityDashboard = () => {
   const [serviceCodeInput, setServiceCodeInput] = useState('');
   const [linkDialogOpen, setLinkDialogOpen] = useState(false);
 
+  // Employee management state
+  const [employees, setEmployees] = useState([]);
+  const [employeeDialogOpen, setEmployeeDialogOpen] = useState(false);
+  const [newEmployeeName, setNewEmployeeName] = useState('');
+  const [newEmployeeEmail, setNewEmployeeEmail] = useState('');
+  const [newEmployeePassword, setNewEmployeePassword] = useState('');
+  const [creatingEmployee, setCreatingEmployee] = useState(false);
+  const [passwordDialogOpen, setPasswordDialogOpen] = useState(false);
+  const [selectedEmployee, setSelectedEmployee] = useState(null);
+  const [newPassword, setNewPassword] = useState('');
+
   // New job form state
   const [licensePlate, setLicensePlate] = useState('');
   const [vin, setVin] = useState('');
@@ -64,7 +76,10 @@ export const AuthorityDashboard = () => {
   useEffect(() => {
     fetchJobs();
     fetchLinkedServices();
-  }, []);
+    if (user?.is_main_authority) {
+      fetchEmployees();
+    }
+  }, [user]);
 
   const fetchJobs = async () => {
     try {
@@ -74,6 +89,15 @@ export const AuthorityDashboard = () => {
       console.error('Error fetching jobs:', error);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const fetchEmployees = async () => {
+    try {
+      const response = await axios.get(`${API}/authority/employees`);
+      setEmployees(response.data);
+    } catch (error) {
+      console.error('Error fetching employees:', error);
     }
   };
 
