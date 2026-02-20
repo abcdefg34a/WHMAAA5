@@ -4,7 +4,7 @@ import axios from 'axios';
 import { 
   Car, Search, LogOut, Users, Truck, Shield, Building2, 
   CheckCircle, Clock, Download, Filter, BarChart3, AlertCircle,
-  FileText, X, Eye
+  FileText, X, Eye, Lock, Unlock, Trash2, Key, MoreVertical
 } from 'lucide-react';
 import { Button } from '../components/ui/button';
 import { Input } from '../components/ui/input';
@@ -15,6 +15,8 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '.
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '../components/ui/tabs';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '../components/ui/dialog';
 import { Badge } from '../components/ui/badge';
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger, DropdownMenuSeparator } from '../components/ui/dropdown-menu';
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '../components/ui/alert-dialog';
 import { toast } from 'sonner';
 
 const API = `${process.env.REACT_APP_BACKEND_URL}/api`;
@@ -35,6 +37,13 @@ export const AdminDashboard = () => {
   const [approvalDialogOpen, setApprovalDialogOpen] = useState(false);
   const [rejectionReason, setRejectionReason] = useState('');
   const [approving, setApproving] = useState(false);
+
+  // User management state
+  const [selectedUser, setSelectedUser] = useState(null);
+  const [passwordDialogOpen, setPasswordDialogOpen] = useState(false);
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
+  const [newPassword, setNewPassword] = useState('');
+  const [actionLoading, setActionLoading] = useState(false);
 
   useEffect(() => {
     fetchData();
@@ -101,6 +110,73 @@ export const AdminDashboard = () => {
     setApprovalDialogOpen(true);
   };
 
+  // User Management Functions
+  const handleUpdatePassword = async () => {
+    if (!selectedUser || !newPassword) return;
+    if (newPassword.length < 6) {
+      toast.error('Passwort muss mindestens 6 Zeichen haben');
+      return;
+    }
+    
+    setActionLoading(true);
+    try {
+      await axios.patch(`${API}/admin/users/${selectedUser.id}/password`, {
+        new_password: newPassword
+      });
+      toast.success(`Passwort für ${selectedUser.name} wurde aktualisiert`);
+      setPasswordDialogOpen(false);
+      setSelectedUser(null);
+      setNewPassword('');
+    } catch (error) {
+      toast.error(error.response?.data?.detail || 'Fehler beim Aktualisieren des Passworts');
+    } finally {
+      setActionLoading(false);
+    }
+  };
+
+  const handleBlockUser = async (targetUser, block) => {
+    setActionLoading(true);
+    try {
+      await axios.patch(`${API}/admin/users/${targetUser.id}/block`, {
+        blocked: block
+      });
+      toast.success(`${targetUser.name} wurde ${block ? 'gesperrt' : 'entsperrt'}`);
+      fetchData();
+    } catch (error) {
+      toast.error(error.response?.data?.detail || 'Fehler bei der Aktion');
+    } finally {
+      setActionLoading(false);
+    }
+  };
+
+  const handleDeleteUser = async () => {
+    if (!selectedUser) return;
+    
+    setActionLoading(true);
+    try {
+      await axios.delete(`${API}/admin/users/${selectedUser.id}`);
+      toast.success(`${selectedUser.name} wurde permanent gelöscht`);
+      setDeleteDialogOpen(false);
+      setSelectedUser(null);
+      fetchData();
+    } catch (error) {
+      toast.error(error.response?.data?.detail || 'Fehler beim Löschen');
+    } finally {
+      setActionLoading(false);
+    }
+  };
+
+  const openPasswordDialog = (u) => {
+    setSelectedUser(u);
+    setNewPassword('');
+    setPasswordDialogOpen(true);
+  };
+
+  const openDeleteDialog = (u) => {
+    setSelectedUser(u);
+    setDeleteDialogOpen(true);
+  };
+
   const getStatusBadge = (status) => {
     const statusConfig = {
       pending: { label: 'Ausstehend', class: 'status-pending' },
@@ -120,9 +196,9 @@ export const AdminDashboard = () => {
 
   const getRoleBadge = (role) => {
     const roleConfig = {
-      admin: { label: 'Admin', icon: Shield, class: 'bg-purple-100 text-purple-700' },
-      authority: { label: 'Behörde', icon: Shield, class: 'bg-blue-100 text-blue-700' },
-      towing_service: { label: 'Abschleppdienst', icon: Truck, class: 'bg-orange-100 text-orange-700' }
+      admin: { label: 'Admin', class: 'bg-purple-100 text-purple-700' },
+      authority: { label: 'Behörde', class: 'bg-blue-100 text-blue-700' },
+      towing_service: { label: 'Abschleppdienst', class: 'bg-orange-100 text-orange-700' }
     };
     const config = roleConfig[role] || { label: role, class: 'bg-gray-100 text-gray-700' };
     return (
@@ -139,6 +215,13 @@ export const AdminDashboard = () => {
       return <Badge className="bg-red-100 text-red-700">Abgelehnt</Badge>;
     } else if (status === 'pending') {
       return <Badge className="bg-yellow-100 text-yellow-700">Ausstehend</Badge>;
+    }
+    return null;
+  };
+
+  const getBlockedBadge = (isBlocked) => {
+    if (isBlocked) {
+      return <Badge className="bg-red-100 text-red-700">Gesperrt</Badge>;
     }
     return null;
   };
@@ -166,7 +249,6 @@ export const AdminDashboard = () => {
             </div>
             
             <div className="flex items-center gap-3">
-              {/* Pending Approvals Badge */}
               {stats?.pending_approvals > 0 && (
                 <div 
                   className="bg-red-100 text-red-700 px-3 py-1 rounded-full text-sm font-medium cursor-pointer flex items-center gap-2"
@@ -227,7 +309,6 @@ export const AdminDashboard = () => {
               </div>
             ) : stats && (
               <>
-                {/* Alert for pending approvals */}
                 {stats.pending_approvals > 0 && (
                   <div className="bg-amber-50 border border-amber-200 rounded-lg p-4 mb-6 flex items-center justify-between">
                     <div className="flex items-center gap-3">
@@ -243,7 +324,6 @@ export const AdminDashboard = () => {
                   </div>
                 )}
 
-                {/* Stats Grid */}
                 <div className="stats-grid mb-8">
                   <Card>
                     <CardContent className="pt-6">
@@ -302,7 +382,6 @@ export const AdminDashboard = () => {
                   </Card>
                 </div>
 
-                {/* User Stats */}
                 <div className="grid md:grid-cols-2 gap-6">
                   <Card>
                     <CardHeader>
@@ -386,18 +465,6 @@ export const AdminDashboard = () => {
                                 <p className="text-slate-500">Öffnungszeiten</p>
                                 <p className="font-medium">{service.opening_hours}</p>
                               </div>
-                              <div>
-                                <p className="text-slate-500">Anfahrtskosten</p>
-                                <p className="font-medium">{service.tow_cost?.toFixed(2) || '0.00'} €</p>
-                              </div>
-                              <div>
-                                <p className="text-slate-500">Standkosten/Tag</p>
-                                <p className="font-medium">{service.daily_cost?.toFixed(2) || '0.00'} €</p>
-                              </div>
-                            </div>
-                            <div>
-                              <p className="text-slate-500 text-sm">Registriert am</p>
-                              <p className="font-medium text-sm">{new Date(service.created_at).toLocaleString('de-DE')}</p>
                             </div>
                           </div>
                           <Button 
@@ -509,7 +576,7 @@ export const AdminDashboard = () => {
           <TabsContent value="users">
             <Card>
               <CardHeader>
-                <CardTitle>Registrierte Benutzer</CardTitle>
+                <CardTitle>Benutzerverwaltung</CardTitle>
               </CardHeader>
               <CardContent>
                 {loading ? (
@@ -532,21 +599,63 @@ export const AdminDashboard = () => {
                           <th>Organisation</th>
                           <th>Status</th>
                           <th>Registriert</th>
+                          <th>Aktionen</th>
                         </tr>
                       </thead>
                       <tbody>
                         {users.map(u => (
-                          <tr key={u.id}>
+                          <tr key={u.id} className={u.is_blocked ? 'opacity-60 bg-red-50' : ''}>
                             <td className="font-medium">{u.name}</td>
                             <td>{u.email}</td>
                             <td>{getRoleBadge(u.role)}</td>
+                            <td>{u.authority_name || u.company_name || '-'}</td>
                             <td>
-                              {u.authority_name || u.company_name || '-'}
-                            </td>
-                            <td>
-                              {u.role === 'towing_service' ? getApprovalBadge(u.approval_status) : '-'}
+                              <div className="flex gap-1 flex-wrap">
+                                {u.role === 'towing_service' && getApprovalBadge(u.approval_status)}
+                                {getBlockedBadge(u.is_blocked)}
+                              </div>
                             </td>
                             <td>{new Date(u.created_at).toLocaleDateString('de-DE')}</td>
+                            <td>
+                              {u.role !== 'admin' && (
+                                <DropdownMenu>
+                                  <DropdownMenuTrigger asChild>
+                                    <Button variant="ghost" size="sm">
+                                      <MoreVertical className="h-4 w-4" />
+                                    </Button>
+                                  </DropdownMenuTrigger>
+                                  <DropdownMenuContent align="end">
+                                    <DropdownMenuItem onClick={() => openPasswordDialog(u)}>
+                                      <Key className="h-4 w-4 mr-2" />
+                                      Passwort ändern
+                                    </DropdownMenuItem>
+                                    <DropdownMenuSeparator />
+                                    {u.is_blocked ? (
+                                      <DropdownMenuItem onClick={() => handleBlockUser(u, false)}>
+                                        <Unlock className="h-4 w-4 mr-2" />
+                                        Entsperren
+                                      </DropdownMenuItem>
+                                    ) : (
+                                      <DropdownMenuItem 
+                                        onClick={() => handleBlockUser(u, true)}
+                                        className="text-orange-600"
+                                      >
+                                        <Lock className="h-4 w-4 mr-2" />
+                                        Sperren
+                                      </DropdownMenuItem>
+                                    )}
+                                    <DropdownMenuSeparator />
+                                    <DropdownMenuItem 
+                                      onClick={() => openDeleteDialog(u)}
+                                      className="text-red-600"
+                                    >
+                                      <Trash2 className="h-4 w-4 mr-2" />
+                                      Löschen
+                                    </DropdownMenuItem>
+                                  </DropdownMenuContent>
+                                </DropdownMenu>
+                              )}
+                            </td>
                           </tr>
                         ))}
                       </tbody>
@@ -571,7 +680,6 @@ export const AdminDashboard = () => {
 
           {selectedService && (
             <div className="space-y-6 py-4">
-              {/* Company Info */}
               <div className="grid sm:grid-cols-2 gap-4">
                 <div>
                   <Label className="text-slate-500">Unternehmensname</Label>
@@ -610,7 +718,6 @@ export const AdminDashboard = () => {
                 </div>
               </div>
 
-              {/* Business License */}
               <div>
                 <Label className="text-slate-500 mb-2 block">Gewerbenachweis</Label>
                 {selectedService.business_license ? (
@@ -642,7 +749,6 @@ export const AdminDashboard = () => {
                 )}
               </div>
 
-              {/* Rejection Reason */}
               <div>
                 <Label htmlFor="rejectionReason">Ablehnungsgrund (optional)</Label>
                 <Textarea
@@ -655,7 +761,6 @@ export const AdminDashboard = () => {
                 />
               </div>
 
-              {/* Action Buttons */}
               <div className="flex gap-3">
                 <Button
                   data-testid="reject-service-btn"
@@ -681,6 +786,73 @@ export const AdminDashboard = () => {
           )}
         </DialogContent>
       </Dialog>
+
+      {/* Password Change Dialog */}
+      <Dialog open={passwordDialogOpen} onOpenChange={setPasswordDialogOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Key className="h-5 w-5" />
+              Passwort ändern
+            </DialogTitle>
+            <DialogDescription>
+              Neues Passwort für {selectedUser?.name} setzen
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-4 py-4">
+            <div className="space-y-2">
+              <Label htmlFor="newPassword">Neues Passwort</Label>
+              <Input
+                data-testid="new-password-input"
+                id="newPassword"
+                type="password"
+                value={newPassword}
+                onChange={(e) => setNewPassword(e.target.value)}
+                placeholder="Mindestens 6 Zeichen"
+                minLength={6}
+              />
+            </div>
+
+            <Button
+              data-testid="save-password-btn"
+              onClick={handleUpdatePassword}
+              disabled={actionLoading || newPassword.length < 6}
+              className="w-full bg-slate-900 hover:bg-slate-800"
+            >
+              {actionLoading ? <div className="loading-spinner mr-2"></div> : <Key className="h-4 w-4 mr-2" />}
+              Passwort speichern
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Delete Confirmation Dialog */}
+      <AlertDialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle className="flex items-center gap-2 text-red-600">
+              <Trash2 className="h-5 w-5" />
+              Benutzer löschen
+            </AlertDialogTitle>
+            <AlertDialogDescription>
+              Sind Sie sicher, dass Sie <strong>{selectedUser?.name}</strong> ({selectedUser?.email}) 
+              permanent löschen möchten? Diese Aktion kann nicht rückgängig gemacht werden.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Abbrechen</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={handleDeleteUser}
+              className="bg-red-600 hover:bg-red-700"
+              disabled={actionLoading}
+            >
+              {actionLoading ? <div className="loading-spinner mr-2"></div> : <Trash2 className="h-4 w-4 mr-2" />}
+              Endgültig löschen
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 };
