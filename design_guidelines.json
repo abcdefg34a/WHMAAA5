@@ -1,0 +1,131 @@
+{
+  "design_system": {
+    "identity": {
+      "name": "Ordnungsamt & Abschlepp Management",
+      "tone": "Authoritative, Efficient, Transparent, Swiss-Precision",
+      "archetype": "Archetype 4: Swiss & High-Contrast (Modified for Public Service)",
+      "theme_mode": "light"
+    },
+    "typography": {
+      "font_family_headings": "Chivo, sans-serif",
+      "font_family_body": "Public Sans, sans-serif",
+      "scale": {
+        "h1": "text-4xl md:text-5xl font-black tracking-tight",
+        "h2": "text-3xl font-bold tracking-tight",
+        "h3": "text-2xl font-bold tracking-tight",
+        "body": "text-base leading-relaxed",
+        "label": "text-xs font-bold uppercase tracking-widest text-slate-500"
+      },
+      "import_url": "https://fonts.googleapis.com/css2?family=Chivo:wght@400;700;900&family=Public+Sans:wght@400;500;600&display=swap"
+    },
+    "colors": {
+      "palette": {
+        "background": "#F8FAFC",
+        "surface": "#FFFFFF",
+        "primary": "#0F172A",
+        "primary_foreground": "#F8FAFC",
+        "secondary": "#F97316",
+        "secondary_foreground": "#FFFFFF",
+        "accent": "#E2E8F0",
+        "border": "#CBD5E1",
+        "muted": "#64748B"
+      },
+      "status": {
+        "towed": "#EF4444",
+        "in_yard": "#EAB308",
+        "released": "#22C55E",
+        "pending": "#3B82F6"
+      },
+      "gradients": {
+        "hero_overlay": "linear-gradient(180deg, rgba(15, 23, 42, 0.8) 0%, rgba(15, 23, 42, 0.4) 100%)"
+      }
+    },
+    "layout": {
+      "spacing_scale": "Generous (p-6, p-8, p-12)",
+      "container_width": "max-w-7xl mx-auto",
+      "border_radius": {
+        "card": "rounded-md",
+        "button": "rounded-md",
+        "input": "rounded-md"
+      },
+      "grid_system": "Bento Grid (Mode B: High Density for Dashboards)",
+      "mobile_nav": "Bottom Sheet / Action Bar"
+    },
+    "components": {
+      "buttons": {
+        "primary": "bg-slate-900 text-white hover:bg-slate-800 shadow-sm font-medium px-6 py-3",
+        "secondary": "border-2 border-slate-200 text-slate-900 hover:border-slate-900 hover:bg-slate-50 font-medium px-6 py-3",
+        "destructive": "bg-red-600 text-white hover:bg-red-700 shadow-sm"
+      },
+      "cards": {
+        "style": "bg-white border border-slate-200 shadow-sm hover:shadow-md transition-all duration-200",
+        "dashboard_widget": "p-6 flex flex-col justify-between h-full"
+      },
+      "inputs": {
+        "style": "h-12 border-2 border-slate-200 focus:border-slate-900 focus:ring-0 bg-slate-50 focus:bg-white transition-colors font-medium text-lg"
+      }
+    },
+    "visual_enhancers": {
+      "textures": "Subtle noise overlay on dashboard backgrounds to reduce sterility.",
+      "shadows": "Crisp, low-blur shadows (shadow-sm) to mimic physical paper/cards.",
+      "animations": {
+        "hover": "transform -translate-y-0.5 transition-transform duration-200",
+        "scan": "A scanning line animation for the license plate search input."
+      }
+    }
+  },
+  "assets": {
+    "images": {
+      "landing_hero": {
+        "url": "https://images.unsplash.com/photo-1758714542281-746d179a2b81?crop=entropy&cs=srgb&fm=jpg&q=85",
+        "alt": "Tow Zone Sign",
+        "usage": "Blurred background for the Citizen Search Hero section. Overlay with dark gradient."
+      },
+      "authority_dashboard_bg": {
+        "url": "https://images.unsplash.com/photo-1768637757717-3e47abf07422?crop=entropy&cs=srgb&fm=jpg&q=85",
+        "alt": "Police Officers working digitally",
+        "usage": "Login page for Authorities or Header background."
+      },
+      "towing_dashboard_bg": {
+        "url": "https://images.unsplash.com/photo-1721662407088-6e59859dd74e?crop=entropy&cs=srgb&fm=jpg&q=85",
+        "alt": "City Street Towing Context",
+        "usage": "Login page for Towing Services."
+      }
+    },
+    "icons": {
+      "library": "lucide-react",
+      "preferred_set": ["Car", "MapPin", "FileText", "Shield", "AlertTriangle", "CheckCircle", "Search", "Menu", "X"]
+    }
+  },
+  "pages": {
+    "landing": {
+      "structure": "Hero (Search Bar Centered) -> How it Works -> Map Preview -> Footer",
+      "key_feature": "License Plate Search Input - Make it look like a physical license plate (FE-font)."
+    },
+    "dashboard_authority": {
+      "structure": "Sidebar (Desktop) / Bottom Nav (Mobile) -> Job Creation Form -> Active Map -> List of Towed Cars",
+      "key_feature": "Quick Photo Upload Grid (5 slots)."
+    },
+    "dashboard_towing": {
+      "structure": "Job Feed (Cards) -> Job Detail View -> Status Action Bar (Sticky Bottom)",
+      "key_feature": "Big, thumb-friendly status buttons (On Site, Towed)."
+    },
+    "dashboard_admin": {
+      "structure": "Data Grid (TanStack Table) -> Analytics Widgets -> User Management",
+      "key_feature": "Dense data view."
+    }
+  },
+  "technical_instructions": {
+    "map_library": "react-leaflet",
+    "map_provider": "OpenStreetMap",
+    "pdf_generation": "Use a server-side generation approach (mocked for now) or client-side 'react-pdf' if needed.",
+    "styling_engine": "Tailwind CSS + Shadcn UI (customized)",
+    "universal_rules": [
+      "Use 'Public Sans' for all body text.",
+      "Use 'Chivo' for all headings.",
+      "Ensure high contrast (WCAG AA) for outdoor usage.",
+      "Do not use gradients for backgrounds, use solid colors or subtle textures.",
+      "All interactive elements must have data-testid."
+    ]
+  }
+}
