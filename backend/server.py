@@ -639,6 +639,43 @@ async def update_job(job_id: str, data: JobUpdate, user: dict = Depends(get_curr
     updated_job = await db.jobs.find_one({"id": job_id}, {"_id": 0})
     return JobResponse(**updated_job)
 
+# ==================== BULK STATUS UPDATE ====================
+
+@api_router.post("/jobs/bulk-update-status")
+async def bulk_update_status(data: BulkStatusUpdate, user: dict = Depends(get_current_user)):
+    """Bulk update status for multiple jobs at once"""
+    if user["role"] != UserRole.TOWING_SERVICE:
+        raise HTTPException(status_code=403, detail="Only towing services can bulk update jobs")
+    
+    if not data.job_ids:
+        raise HTTPException(status_code=400, detail="Keine Aufträge ausgewählt")
+    
+    valid_statuses = [JobStatus.ON_SITE, JobStatus.TOWED, JobStatus.IN_YARD]
+    if data.status not in valid_statuses:
+        raise HTTPException(status_code=400, detail="Ungültiger Status für Massenänderung")
+    
+    now = datetime.now(timezone.utc).isoformat()
+    
+    # Build update data based on status
+    update_data = {"status": data.status, "updated_at": now}
+    if data.status == JobStatus.ON_SITE:
+        update_data["on_site_at"] = now
+    elif data.status == JobStatus.TOWED:
+        update_data["towed_at"] = now
+    elif data.status == JobStatus.IN_YARD:
+        update_data["in_yard_at"] = now
+    
+    # Only update jobs that belong to this towing service
+    result = await db.jobs.update_many(
+        {"id": {"$in": data.job_ids}, "assigned_service_id": user["id"]},
+        {"$set": update_data}
+    )
+    
+    return {
+        "message": f"{result.modified_count} Aufträge aktualisiert",
+        "updated_count": result.modified_count
+    }
+
 @api_router.post("/jobs/{job_id}/assign/{service_id}", response_model=JobResponse)
 async def assign_job(job_id: str, service_id: str, user: dict = Depends(get_current_user)):
     if user["role"] not in [UserRole.AUTHORITY, UserRole.ADMIN]:
