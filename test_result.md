@@ -107,27 +107,33 @@ user_problem_statement: "Vehicle towing management web app in German - bulk job 
 backend:
   - task: "Bulk status update endpoint"
     implemented: true
-    working: "NA"
+    working: true
     file: "/app/backend/server.py"
     stuck_count: 0
     priority: "high"
-    needs_retesting: true
+    needs_retesting: false
     status_history:
       - working: "NA"
         agent: "main"
         comment: "Implemented POST /api/jobs/bulk-update-status endpoint for mass status changes"
+      - working: true
+        agent: "testing"
+        comment: "✅ PASSED - Bulk status update endpoint working correctly. Tested: bulk updates to on_site/towed/in_yard statuses, proper timestamp setting (on_site_at, towed_at, in_yard_at), role-based access control (only towing_service role), error handling for empty job_ids/invalid status/wrong role, and security (only updates jobs assigned to requesting towing service). All 54 comprehensive tests passed including bulk operations with 3 test jobs."
 
   - task: "Date filter parameters for GET /api/jobs"
     implemented: true
-    working: "NA"
+    working: true
     file: "/app/backend/server.py"
     stuck_count: 0
     priority: "high"
-    needs_retesting: true
+    needs_retesting: false
     status_history:
       - working: "NA"
         agent: "main"
         comment: "Added date_from and date_to query parameters to filter jobs by date range"
+      - working: true
+        agent: "testing"
+        comment: "✅ PASSED - Date filtering working correctly. Tested: date_from parameter (YYYY-MM-DD format), date_to parameter with time extension to include full day, date range filtering (date_from + date_to), works for both authority and towing_service roles, graceful handling of invalid date formats. All date filter tests passed successfully."
 
 frontend:
   - task: "Bulk selection checkboxes on Towing Dashboard"
