@@ -346,6 +346,24 @@ export const AuthorityDashboard = () => {
 
       {/* Main Content */}
       <main className="max-w-7xl mx-auto px-4 py-6">
+        {/* Dienstnummer Badge */}
+        {user?.dienstnummer && (
+          <Card className="mb-6 border-blue-200 bg-blue-50">
+            <CardContent className="py-3">
+              <div className="flex items-center gap-3">
+                <Badge className="h-5 w-5 text-blue-600" />
+                <div>
+                  <span className="text-sm text-blue-700">Ihre Dienstnummer: </span>
+                  <span className="font-mono font-bold text-blue-900">{user.dienstnummer}</span>
+                </div>
+                {!user?.is_main_authority && (
+                  <span className="text-xs text-blue-600 ml-2">(Mitarbeiter-Account)</span>
+                )}
+              </div>
+            </CardContent>
+          </Card>
+        )}
+
         <Tabs value={activeTab} onValueChange={setActiveTab}>
           <TabsList className="mb-6">
             <TabsTrigger data-testid="tab-new-job" value="new" className="flex items-center gap-2">
@@ -354,12 +372,18 @@ export const AuthorityDashboard = () => {
             </TabsTrigger>
             <TabsTrigger data-testid="tab-my-jobs" value="jobs" className="flex items-center gap-2">
               <FileText className="h-4 w-4" />
-              Meine Aufträge
+              {user?.is_main_authority ? 'Alle Aufträge' : 'Meine Aufträge'}
             </TabsTrigger>
             <TabsTrigger data-testid="tab-services" value="services" className="flex items-center gap-2">
               <LinkIcon className="h-4 w-4" />
               Abschleppdienste
             </TabsTrigger>
+            {user?.is_main_authority && (
+              <TabsTrigger data-testid="tab-employees" value="employees" className="flex items-center gap-2">
+                <Users className="h-4 w-4" />
+                Mitarbeiter ({employees.length})
+              </TabsTrigger>
+            )}
           </TabsList>
 
           {/* New Job Tab */}
