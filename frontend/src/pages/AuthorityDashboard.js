@@ -110,6 +110,75 @@ export const AuthorityDashboard = () => {
     }
   };
 
+  // Employee Management Functions
+  const handleCreateEmployee = async (e) => {
+    e.preventDefault();
+    if (!newEmployeeName || !newEmployeeEmail || !newEmployeePassword) {
+      toast.error('Bitte füllen Sie alle Felder aus');
+      return;
+    }
+
+    setCreatingEmployee(true);
+    try {
+      await axios.post(`${API}/authority/employees`, {
+        name: newEmployeeName,
+        email: newEmployeeEmail,
+        password: newEmployeePassword
+      });
+      toast.success('Mitarbeiter erfolgreich angelegt');
+      setEmployeeDialogOpen(false);
+      setNewEmployeeName('');
+      setNewEmployeeEmail('');
+      setNewEmployeePassword('');
+      fetchEmployees();
+    } catch (error) {
+      toast.error(error.response?.data?.detail || 'Fehler beim Anlegen');
+    } finally {
+      setCreatingEmployee(false);
+    }
+  };
+
+  const handleBlockEmployee = async (employeeId, block) => {
+    try {
+      await axios.patch(`${API}/authority/employees/${employeeId}/block`, { blocked: block });
+      toast.success(block ? 'Mitarbeiter gesperrt' : 'Mitarbeiter entsperrt');
+      fetchEmployees();
+    } catch (error) {
+      toast.error('Fehler beim Aktualisieren');
+    }
+  };
+
+  const handleDeleteEmployee = async (employeeId) => {
+    if (!window.confirm('Mitarbeiter wirklich löschen? Diese Aktion kann nicht rückgängig gemacht werden.')) {
+      return;
+    }
+    try {
+      await axios.delete(`${API}/authority/employees/${employeeId}`);
+      toast.success('Mitarbeiter gelöscht');
+      fetchEmployees();
+    } catch (error) {
+      toast.error('Fehler beim Löschen');
+    }
+  };
+
+  const handleChangeEmployeePassword = async () => {
+    if (!newPassword || newPassword.length < 6) {
+      toast.error('Passwort muss mindestens 6 Zeichen haben');
+      return;
+    }
+    try {
+      await axios.patch(`${API}/authority/employees/${selectedEmployee.id}/password`, {
+        new_password: newPassword
+      });
+      toast.success('Passwort geändert');
+      setPasswordDialogOpen(false);
+      setNewPassword('');
+      setSelectedEmployee(null);
+    } catch (error) {
+      toast.error('Fehler beim Ändern des Passworts');
+    }
+  };
+
   const handleGetLocation = () => {
     if (navigator.geolocation) {
       navigator.geolocation.getCurrentPosition(
