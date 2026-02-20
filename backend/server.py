@@ -778,6 +778,75 @@ async def get_all_users(user: dict = Depends(get_current_user)):
     users = await db.users.find({}, {"_id": 0, "password": 0}).to_list(1000)
     return [UserResponse(**u) for u in users]
 
+# ==================== ADMIN USER MANAGEMENT ====================
+
+@api_router.patch("/admin/users/{user_id}/password")
+async def admin_update_password(user_id: str, data: AdminUpdatePasswordRequest, user: dict = Depends(get_current_user)):
+    """Admin can update any user's password"""
+    if user["role"] != UserRole.ADMIN:
+        raise HTTPException(status_code=403, detail="Admin only")
+    
+    target_user = await db.users.find_one({"id": user_id})
+    if not target_user:
+        raise HTTPException(status_code=404, detail="Benutzer nicht gefunden")
+    
+    # Don't allow changing own password through this endpoint
+    if user_id == user["id"]:
+        raise HTTPException(status_code=400, detail="Eigenes Passwort bitte über Profil ändern")
+    
+    new_hashed = hash_password(data.new_password)
+    await db.users.update_one({"id": user_id}, {"$set": {"password": new_hashed}})
+    
+    return {"message": f"Passwort für {target_user.get('name', target_user['email'])} wurde aktualisiert"}
+
+@api_router.patch("/admin/users/{user_id}/block")
+async def admin_block_user(user_id: str, data: AdminBlockUserRequest, user: dict = Depends(get_current_user)):
+    """Admin can block/unblock users"""
+    if user["role"] != UserRole.ADMIN:
+        raise HTTPException(status_code=403, detail="Admin only")
+    
+    target_user = await db.users.find_one({"id": user_id})
+    if not target_user:
+        raise HTTPException(status_code=404, detail="Benutzer nicht gefunden")
+    
+    # Don't allow blocking yourself
+    if user_id == user["id"]:
+        raise HTTPException(status_code=400, detail="Sie können sich nicht selbst sperren")
+    
+    # Don't allow blocking other admins
+    if target_user["role"] == UserRole.ADMIN:
+        raise HTTPException(status_code=400, detail="Administratoren können nicht gesperrt werden")
+    
+    await db.users.update_one({"id": user_id}, {"$set": {"is_blocked": data.blocked}})
+    
+    action = "gesperrt" if data.blocked else "entsperrt"
+    return {"message": f"{target_user.get('name', target_user['email'])} wurde {action}"}
+
+@api_router.delete("/admin/users/{user_id}")
+async def admin_delete_user(user_id: str, user: dict = Depends(get_current_user)):
+    """Admin can permanently delete users"""
+    if user["role"] != UserRole.ADMIN:
+        raise HTTPException(status_code=403, detail="Admin only")
+    
+    target_user = await db.users.find_one({"id": user_id})
+    if not target_user:
+        raise HTTPException(status_code=404, detail="Benutzer nicht gefunden")
+    
+    # Don't allow deleting yourself
+    if user_id == user["id"]:
+        raise HTTPException(status_code=400, detail="Sie können sich nicht selbst löschen")
+    
+    # Don't allow deleting other admins
+    if target_user["role"] == UserRole.ADMIN:
+        raise HTTPException(status_code=400, detail="Administratoren können nicht gelöscht werden")
+    
+    user_name = target_user.get('name', target_user['email'])
+    
+    # Delete the user
+    await db.users.delete_one({"id": user_id})
+    
+    return {"message": f"{user_name} wurde permanent gelöscht"}
+
 # ==================== PDF GENERATION ====================
 
 def format_datetime(dt_str):
