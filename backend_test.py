@@ -1098,6 +1098,20 @@ class TowingManagementAPITester:
             # Service management (after approval)
             self.test_service_linking()
             
+            # NEW: Employee Management System Tests
+            print("\n" + "="*60)
+            print("🏢 EMPLOYEE MANAGEMENT SYSTEM TESTS")
+            print("="*60)
+            
+            self.test_employee_management()
+            self.test_employee_job_creation_and_hierarchy()
+            self.test_employee_blocking_and_management()
+            self.test_employee_error_cases()
+            
+            print("\n" + "="*60)
+            print("📋 CONTINUING WITH REGULAR JOB TESTS")
+            print("="*60)
+            
             # Job management
             if self.test_job_creation():
                 self.test_job_management()
