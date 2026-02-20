@@ -344,6 +344,10 @@ async def login(data: UserLogin):
     if not user or not verify_password(data.password, user["password"]):
         raise HTTPException(status_code=401, detail="Invalid credentials")
     
+    # Check if user is blocked
+    if user.get("is_blocked"):
+        raise HTTPException(status_code=403, detail="Ihr Konto wurde gesperrt. Bitte kontaktieren Sie den Administrator.")
+    
     # Check if towing service is approved
     if user["role"] == UserRole.TOWING_SERVICE:
         approval_status = user.get("approval_status", ApprovalStatus.PENDING)
