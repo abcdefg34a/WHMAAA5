@@ -23,6 +23,7 @@ from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, Tabl
 from reportlab.lib.units import cm
 import base64
 import aiofiles
+import math
 
 ROOT_DIR = Path(__file__).parent
 load_dotenv(ROOT_DIR / '.env')
@@ -57,6 +58,11 @@ class UserRole:
     AUTHORITY = "authority"
     TOWING_SERVICE = "towing_service"
 
+class ApprovalStatus:
+    PENDING = "pending"
+    APPROVED = "approved"
+    REJECTED = "rejected"
+
 class JobStatus:
     PENDING = "pending"
     ASSIGNED = "assigned"
@@ -79,9 +85,12 @@ class UserRegister(BaseModel):
     phone: Optional[str] = None
     address: Optional[str] = None
     yard_address: Optional[str] = None
-    yard_lat: Optional[float] = None
-    yard_lng: Optional[float] = None
     opening_hours: Optional[str] = None
+    # NEW: Cost fields
+    tow_cost: Optional[float] = None  # Anfahrtskosten
+    daily_cost: Optional[float] = None  # Standkosten pro Tag
+    # NEW: Business license (Base64)
+    business_license: Optional[str] = None
 
 class UserLogin(BaseModel):
     email: EmailStr
@@ -98,17 +107,29 @@ class UserResponse(BaseModel):
     phone: Optional[str] = None
     address: Optional[str] = None
     yard_address: Optional[str] = None
-    yard_lat: Optional[float] = None
-    yard_lng: Optional[float] = None
     opening_hours: Optional[str] = None
     service_code: Optional[str] = None
     linked_services: Optional[List[str]] = None
     created_at: str
+    # NEW fields
+    tow_cost: Optional[float] = None
+    daily_cost: Optional[float] = None
+    business_license: Optional[str] = None
+    approval_status: Optional[str] = None
+    rejection_reason: Optional[str] = None
 
 class TokenResponse(BaseModel):
     access_token: str
     token_type: str = "bearer"
     user: UserResponse
+
+class UpdateCostsRequest(BaseModel):
+    tow_cost: float
+    daily_cost: float
+
+class ApproveServiceRequest(BaseModel):
+    approved: bool
+    rejection_reason: Optional[str] = None
 
 # Job Models
 class JobCreate(BaseModel):
@@ -173,12 +194,15 @@ class VehicleSearchResult(BaseModel):
     towed_at: Optional[str] = None
     in_yard_at: Optional[str] = None
     yard_address: Optional[str] = None
-    yard_lat: Optional[float] = None
-    yard_lng: Optional[float] = None
     company_name: Optional[str] = None
     phone: Optional[str] = None
     email: Optional[str] = None
     opening_hours: Optional[str] = None
+    # NEW: Cost calculation
+    tow_cost: Optional[float] = None
+    daily_cost: Optional[float] = None
+    days_in_yard: Optional[int] = None
+    total_cost: Optional[float] = None
 
 class LinkServiceRequest(BaseModel):
     service_code: str
@@ -190,6 +214,7 @@ class StatsResponse(BaseModel):
     released_jobs: int
     total_services: int
     total_authorities: int
+    pending_approvals: int
 
 # ==================== HELPERS ====================
 
@@ -216,6 +241,22 @@ def generate_job_number() -> str:
     timestamp = datetime.now(timezone.utc).strftime("%Y%m%d")
     random_part = ''.join(random.choices(string.ascii_uppercase + string.digits, k=6))
     return f"TOW-{timestamp}-{random_part}"
+
+def calculate_days_in_yard(in_yard_at: str) -> int:
+    """Calculate number of days a vehicle has been in the yard"""
+    if not in_yard_at:
+        return 0
+    try:
+        in_yard_date = datetime.fromisoformat(in_yard_at.replace('Z', '+00:00'))
+        now = datetime.now(timezone.utc)
+        delta = now - in_yard_date
+        return max(1, math.ceil(delta.total_seconds() / 86400))  # Minimum 1 day
+    except:
+        return 1
+
+def calculate_total_cost(tow_cost: float, daily_cost: float, days: int) -> float:
+    """Calculate total cost: tow_cost + (daily_cost * days)"""
+    return (tow_cost or 0) + (daily_cost or 0) * days
 
 async def get_current_user(credentials: HTTPAuthorizationCredentials = Depends(security)):
     try:
@@ -263,14 +304,23 @@ async def register(data: UserRegister):
         user_doc["department"] = data.department
         user_doc["linked_services"] = []
     elif data.role == UserRole.TOWING_SERVICE:
+        # Check if business license is provided
+        if not data.business_license:
+            raise HTTPException(status_code=400, detail="Gewerbenachweis ist erforderlich")
+        
         user_doc["company_name"] = data.company_name
         user_doc["phone"] = data.phone
         user_doc["address"] = data.address
         user_doc["yard_address"] = data.yard_address
-        user_doc["yard_lat"] = data.yard_lat
-        user_doc["yard_lng"] = data.yard_lng
         user_doc["opening_hours"] = data.opening_hours
         user_doc["service_code"] = generate_service_code()
+        # NEW: Cost fields
+        user_doc["tow_cost"] = data.tow_cost or 0
+        user_doc["daily_cost"] = data.daily_cost or 0
+        # NEW: Business license and approval status
+        user_doc["business_license"] = data.business_license
+        user_doc["approval_status"] = ApprovalStatus.PENDING
+        user_doc["rejection_reason"] = None
     
     await db.users.insert_one(user_doc)
     
@@ -285,6 +335,17 @@ async def login(data: UserLogin):
     user = await db.users.find_one({"email": data.email})
     if not user or not verify_password(data.password, user["password"]):
         raise HTTPException(status_code=401, detail="Invalid credentials")
+    
+    # Check if towing service is approved
+    if user["role"] == UserRole.TOWING_SERVICE:
+        approval_status = user.get("approval_status", ApprovalStatus.PENDING)
+        if approval_status == ApprovalStatus.PENDING:
+            raise HTTPException(status_code=403, detail="Ihr Konto wartet noch auf Freischaltung durch einen Administrator")
+        elif approval_status == ApprovalStatus.REJECTED:
+            # Delete the rejected account so they can re-register
+            await db.users.delete_one({"id": user["id"]})
+            rejection_reason = user.get("rejection_reason", "")
+            raise HTTPException(status_code=403, detail=f"Ihre Registrierung wurde abgelehnt: {rejection_reason}. Sie können sich erneut registrieren.")
     
     token = create_token(user["id"], user["role"])
     user.pop("password")
@@ -301,17 +362,18 @@ async def get_me(user: dict = Depends(get_current_user)):
 @api_router.get("/services", response_model=List[UserResponse])
 async def get_towing_services(user: dict = Depends(get_current_user)):
     if user["role"] == UserRole.AUTHORITY:
-        # Get only linked services
+        # Get only linked AND approved services
         linked_ids = user.get("linked_services", [])
         if not linked_ids:
             return []
         services = await db.users.find(
-            {"id": {"$in": linked_ids}, "role": UserRole.TOWING_SERVICE},
+            {"id": {"$in": linked_ids}, "role": UserRole.TOWING_SERVICE, "approval_status": ApprovalStatus.APPROVED},
             {"_id": 0, "password": 0}
         ).to_list(100)
     else:
+        # Admin sees all approved services
         services = await db.users.find(
-            {"role": UserRole.TOWING_SERVICE},
+            {"role": UserRole.TOWING_SERVICE, "approval_status": ApprovalStatus.APPROVED},
             {"_id": 0, "password": 0}
         ).to_list(100)
     return [UserResponse(**s) for s in services]
@@ -321,9 +383,14 @@ async def link_service(data: LinkServiceRequest, user: dict = Depends(get_curren
     if user["role"] != UserRole.AUTHORITY:
         raise HTTPException(status_code=403, detail="Only authorities can link services")
     
-    service = await db.users.find_one({"service_code": data.service_code, "role": UserRole.TOWING_SERVICE})
+    # Only allow linking approved services
+    service = await db.users.find_one({
+        "service_code": data.service_code, 
+        "role": UserRole.TOWING_SERVICE,
+        "approval_status": ApprovalStatus.APPROVED
+    })
     if not service:
-        raise HTTPException(status_code=404, detail="Service not found with this code")
+        raise HTTPException(status_code=404, detail="Kein freigeschalteter Abschleppdienst mit diesem Code gefunden")
     
     linked = user.get("linked_services", [])
     if service["id"] in linked:
@@ -347,6 +414,56 @@ async def unlink_service(service_id: str, user: dict = Depends(get_current_user)
     )
     
     return {"message": "Service unlinked successfully"}
+
+# NEW: Update costs endpoint for towing service
+@api_router.patch("/services/costs")
+async def update_costs(data: UpdateCostsRequest, user: dict = Depends(get_current_user)):
+    if user["role"] != UserRole.TOWING_SERVICE:
+        raise HTTPException(status_code=403, detail="Only towing services can update costs")
+    
+    await db.users.update_one(
+        {"id": user["id"]},
+        {"$set": {"tow_cost": data.tow_cost, "daily_cost": data.daily_cost}}
+    )
+    
+    # Fetch updated user
+    updated_user = await db.users.find_one({"id": user["id"]}, {"_id": 0, "password": 0})
+    return UserResponse(**updated_user)
+
+# ==================== ADMIN APPROVAL ROUTES ====================
+
+@api_router.get("/admin/pending-services", response_model=List[UserResponse])
+async def get_pending_services(user: dict = Depends(get_current_user)):
+    if user["role"] != UserRole.ADMIN:
+        raise HTTPException(status_code=403, detail="Admin only")
+    
+    services = await db.users.find(
+        {"role": UserRole.TOWING_SERVICE, "approval_status": ApprovalStatus.PENDING},
+        {"_id": 0, "password": 0}
+    ).to_list(100)
+    return [UserResponse(**s) for s in services]
+
+@api_router.post("/admin/approve-service/{service_id}")
+async def approve_service(service_id: str, data: ApproveServiceRequest, user: dict = Depends(get_current_user)):
+    if user["role"] != UserRole.ADMIN:
+        raise HTTPException(status_code=403, detail="Admin only")
+    
+    service = await db.users.find_one({"id": service_id, "role": UserRole.TOWING_SERVICE})
+    if not service:
+        raise HTTPException(status_code=404, detail="Towing service not found")
+    
+    if data.approved:
+        await db.users.update_one(
+            {"id": service_id},
+            {"$set": {"approval_status": ApprovalStatus.APPROVED, "rejection_reason": None}}
+        )
+        return {"message": f"{service['company_name']} wurde freigeschaltet"}
+    else:
+        await db.users.update_one(
+            {"id": service_id},
+            {"$set": {"approval_status": ApprovalStatus.REJECTED, "rejection_reason": data.rejection_reason}}
+        )
+        return {"message": f"{service['company_name']} wurde abgelehnt"}
 
 # ==================== JOB ROUTES ====================
 
@@ -556,8 +673,24 @@ async def search_vehicle(q: str):
     
     # Get towing service info
     service = None
+    tow_cost = None
+    daily_cost = None
+    days_in_yard = 0
+    total_cost = None
+    
     if job.get("assigned_service_id"):
         service = await db.users.find_one({"id": job["assigned_service_id"]}, {"_id": 0, "password": 0})
+        if service:
+            tow_cost = service.get("tow_cost", 0)
+            daily_cost = service.get("daily_cost", 0)
+            
+            # Calculate days in yard
+            if job.get("in_yard_at"):
+                days_in_yard = calculate_days_in_yard(job["in_yard_at"])
+            elif job.get("towed_at"):
+                days_in_yard = calculate_days_in_yard(job["towed_at"])
+            
+            total_cost = calculate_total_cost(tow_cost, daily_cost, days_in_yard)
     
     return VehicleSearchResult(
         found=True,
@@ -567,12 +700,14 @@ async def search_vehicle(q: str):
         towed_at=job.get("towed_at"),
         in_yard_at=job.get("in_yard_at"),
         yard_address=service.get("yard_address") if service else None,
-        yard_lat=service.get("yard_lat") if service else None,
-        yard_lng=service.get("yard_lng") if service else None,
         company_name=service.get("company_name") if service else None,
         phone=service.get("phone") if service else None,
         email=service.get("email") if service else None,
-        opening_hours=service.get("opening_hours") if service else None
+        opening_hours=service.get("opening_hours") if service else None,
+        tow_cost=tow_cost,
+        daily_cost=daily_cost,
+        days_in_yard=days_in_yard,
+        total_cost=total_cost
     )
 
 # ==================== ADMIN ROUTES ====================
@@ -586,8 +721,9 @@ async def get_admin_stats(user: dict = Depends(get_current_user)):
     pending_jobs = await db.jobs.count_documents({"status": {"$in": [JobStatus.PENDING, JobStatus.ASSIGNED, JobStatus.ON_SITE, JobStatus.TOWED]}})
     in_yard_jobs = await db.jobs.count_documents({"status": JobStatus.IN_YARD})
     released_jobs = await db.jobs.count_documents({"status": JobStatus.RELEASED})
-    total_services = await db.users.count_documents({"role": UserRole.TOWING_SERVICE})
+    total_services = await db.users.count_documents({"role": UserRole.TOWING_SERVICE, "approval_status": ApprovalStatus.APPROVED})
     total_authorities = await db.users.count_documents({"role": UserRole.AUTHORITY})
+    pending_approvals = await db.users.count_documents({"role": UserRole.TOWING_SERVICE, "approval_status": ApprovalStatus.PENDING})
     
     return StatsResponse(
         total_jobs=total_jobs,
@@ -595,7 +731,8 @@ async def get_admin_stats(user: dict = Depends(get_current_user)):
         in_yard_jobs=in_yard_jobs,
         released_jobs=released_jobs,
         total_services=total_services,
-        total_authorities=total_authorities
+        total_authorities=total_authorities,
+        pending_approvals=pending_approvals
     )
 
 @api_router.get("/admin/jobs", response_model=List[JobResponse])
