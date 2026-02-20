@@ -254,6 +254,7 @@ class TowingManagementAPITester:
             print(f"   Updated costs - Tow: {updated_tow_cost}€, Daily: {updated_daily_cost}€")
         
         return success
+    def test_service_linking(self):
         """Test service linking functionality"""
         print("\n🔗 Testing Service Linking...")
         
@@ -261,7 +262,7 @@ class TowingManagementAPITester:
             print("❌ No towing service code available for linking test")
             return False
         
-        # Link service to authority
+        # Link service to authority (should work now that service is approved)
         link_data = {"service_code": self.towing_service_code}
         success, response = self.run_test(
             "Link Towing Service", "POST", "services/link", 200, 
