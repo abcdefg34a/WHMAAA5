@@ -768,8 +768,19 @@ async def get_all_users(user: dict = Depends(get_current_user)):
 
 # ==================== PDF GENERATION ====================
 
+def format_datetime(dt_str):
+    """Format ISO datetime string to German format"""
+    if not dt_str or dt_str == '-':
+        return '-'
+    try:
+        dt = datetime.fromisoformat(dt_str.replace('Z', '+00:00'))
+        return dt.strftime('%d.%m.%Y %H:%M:%S')
+    except:
+        return dt_str[:19].replace('T', ' ')
+
 @api_router.get("/jobs/{job_id}/pdf")
-async def generate_pdf(job_id: str, user: dict = Depends(get_current_user)):
+async def generate_pdf(job_id: str):
+    """Generate PDF - public endpoint (no auth required)"""
     job = await db.jobs.find_one({"id": job_id}, {"_id": 0})
     if not job:
         raise HTTPException(status_code=404, detail="Job not found")
@@ -825,20 +836,25 @@ async def generate_pdf(job_id: str, user: dict = Depends(get_current_user)):
     ]))
     story.append(location_table)
     
-    # Timeline
-    story.append(Paragraph("Zeitverlauf", heading_style))
+    # Detailed Timeline with all steps
+    story.append(Paragraph("Zeiterfassung (alle Schritte)", heading_style))
     timeline_data = [
-        ["Erfasst am:", job['created_at'][:19].replace('T', ' ')],
-        ["Abgeschleppt am:", job.get('towed_at', '-')[:19].replace('T', ' ') if job.get('towed_at') else '-'],
-        ["Im Hof seit:", job.get('in_yard_at', '-')[:19].replace('T', ' ') if job.get('in_yard_at') else '-'],
-        ["Abgeholt am:", job.get('released_at', '-')[:19].replace('T', ' ') if job.get('released_at') else '-'],
+        ["Schritt", "Datum & Uhrzeit"],
+        ["1. Meldung erfasst:", format_datetime(job.get('created_at'))],
+        ["2. Vor Ort angekommen:", format_datetime(job.get('on_site_at'))],
+        ["3. Abgeschleppt:", format_datetime(job.get('towed_at'))],
+        ["4. Im Hof eingetroffen:", format_datetime(job.get('in_yard_at'))],
+        ["5. Fahrzeug abgeholt:", format_datetime(job.get('released_at'))],
     ]
-    timeline_table = Table(timeline_data, colWidths=[4*cm, 12*cm])
+    timeline_table = Table(timeline_data, colWidths=[5*cm, 11*cm])
     timeline_table.setStyle(TableStyle([
-        ('FONTNAME', (0, 0), (-1, -1), 'Helvetica'),
+        ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+        ('FONTNAME', (0, 1), (-1, -1), 'Helvetica'),
         ('FONTSIZE', (0, 0), (-1, -1), 10),
-        ('FONTNAME', (0, 0), (0, -1), 'Helvetica-Bold'),
+        ('FONTNAME', (0, 1), (0, -1), 'Helvetica-Bold'),
         ('BOTTOMPADDING', (0, 0), (-1, -1), 8),
+        ('BACKGROUND', (0, 0), (-1, 0), colors.lightgrey),
+        ('GRID', (0, 0), (-1, -1), 0.5, colors.grey),
     ]))
     story.append(timeline_table)
     
