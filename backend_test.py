@@ -340,13 +340,28 @@ class TowingManagementAPITester:
         return True
 
     def test_vehicle_search(self):
-        """Test public vehicle search"""
-        print("\n🔍 Testing Vehicle Search...")
+        """Test public vehicle search with cost calculation"""
+        print("\n🔍 Testing Vehicle Search with Cost Calculation...")
         
-        # Search for existing vehicle
+        # Search for existing vehicle (should show costs now)
         success, response = self.run_test(
-            "Search Vehicle - Found", "GET", "search/vehicle?q=B-TEST123", 200
+            "Search Vehicle - Found with Costs", "GET", "search/vehicle?q=B-TEST123", 200
         )
+        
+        if success and response and response.get('found'):
+            tow_cost = response.get('tow_cost')
+            daily_cost = response.get('daily_cost')
+            days_in_yard = response.get('days_in_yard')
+            total_cost = response.get('total_cost')
+            
+            print(f"   Cost calculation - Tow: {tow_cost}€, Daily: {daily_cost}€, Days: {days_in_yard}, Total: {total_cost}€")
+            
+            # Verify cost calculation
+            expected_total = (tow_cost or 0) + (daily_cost or 0) * (days_in_yard or 0)
+            if abs((total_cost or 0) - expected_total) < 0.01:
+                print(f"   ✅ Cost calculation correct")
+            else:
+                print(f"   ❌ Cost calculation incorrect - Expected: {expected_total}€, Got: {total_cost}€")
         
         # Search for non-existing vehicle
         success, response = self.run_test(
