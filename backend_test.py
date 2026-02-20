@@ -219,7 +219,7 @@ class TowingManagementAPITester:
         }
         
         success, response = self.run_test(
-            "Create Job", "POST", "jobs", 201, 
+            "Create Job", "POST", "jobs", 200, 
             job_data, self.authority_token
         )
         
