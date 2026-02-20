@@ -634,7 +634,14 @@ export const AuthorityDashboard = () => {
                             <p className="job-license-plate">{job.license_plate}</p>
                             <p className="text-sm text-slate-500">{job.job_number}</p>
                           </div>
-                          {getStatusBadge(job.status)}
+                          <div className="flex items-center gap-2">
+                            {job.created_by_dienstnummer && (
+                              <span className="px-2 py-1 bg-blue-100 text-blue-700 text-xs rounded font-mono">
+                                {job.created_by_dienstnummer}
+                              </span>
+                            )}
+                            {getStatusBadge(job.status)}
+                          </div>
                         </div>
                         <div className="grid sm:grid-cols-2 gap-3 text-sm">
                           <div className="flex items-center gap-2 text-slate-600">
@@ -646,8 +653,14 @@ export const AuthorityDashboard = () => {
                             <span>{new Date(job.created_at).toLocaleString('de-DE')}</span>
                           </div>
                         </div>
+                        <p className="mt-2 text-sm text-slate-600">
+                          Erfasst von: <span className="font-medium">{job.created_by_name}</span>
+                          {job.created_by_dienstnummer && (
+                            <span className="text-slate-400 ml-1">({job.created_by_dienstnummer})</span>
+                          )}
+                        </p>
                         {job.assigned_service_name && (
-                          <p className="mt-2 text-sm text-slate-600">
+                          <p className="text-sm text-slate-600">
                             Zugewiesen an: <span className="font-medium">{job.assigned_service_name}</span>
                           </p>
                         )}
