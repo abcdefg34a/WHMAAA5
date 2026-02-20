@@ -1096,9 +1096,31 @@ def format_datetime(dt_str):
         return '-'
     try:
         dt = datetime.fromisoformat(dt_str.replace('Z', '+00:00'))
-        return dt.strftime('%d.%m.%Y %H:%M:%S')
+        return dt.strftime('%d.%m.%Y %H:%M')
     except:
         return dt_str[:19].replace('T', ' ')
+
+def wrap_text(text, max_length=60):
+    """Wrap long text for PDF cells"""
+    if not text:
+        return '-'
+    text = str(text)
+    if len(text) <= max_length:
+        return text
+    # Insert line breaks for very long text
+    words = text.split()
+    lines = []
+    current_line = ""
+    for word in words:
+        if len(current_line + " " + word) <= max_length:
+            current_line = (current_line + " " + word).strip()
+        else:
+            if current_line:
+                lines.append(current_line)
+            current_line = word
+    if current_line:
+        lines.append(current_line)
+    return "\n".join(lines)
 
 @api_router.get("/jobs/{job_id}/pdf")
 async def generate_pdf(job_id: str):
@@ -1113,130 +1135,256 @@ async def generate_pdf(job_id: str):
         service = await db.users.find_one({"id": job["assigned_service_id"]}, {"_id": 0, "password": 0})
     
     buffer = BytesIO()
-    doc = SimpleDocTemplate(buffer, pagesize=A4, rightMargin=2*cm, leftMargin=2*cm, topMargin=2*cm, bottomMargin=2*cm)
+    doc = SimpleDocTemplate(
+        buffer, 
+        pagesize=A4, 
+        rightMargin=1.5*cm, 
+        leftMargin=1.5*cm, 
+        topMargin=1.5*cm, 
+        bottomMargin=1.5*cm
+    )
     
     styles = getSampleStyleSheet()
-    title_style = ParagraphStyle('Title', parent=styles['Heading1'], fontSize=18, spaceAfter=20)
-    heading_style = ParagraphStyle('Heading', parent=styles['Heading2'], fontSize=14, spaceAfter=10, spaceBefore=15)
-    normal_style = styles['Normal']
+    
+    # Custom styles
+    title_style = ParagraphStyle(
+        'CustomTitle', 
+        parent=styles['Heading1'], 
+        fontSize=20, 
+        spaceAfter=5,
+        alignment=1,  # Center
+        textColor=colors.HexColor('#1e293b')
+    )
+    subtitle_style = ParagraphStyle(
+        'Subtitle', 
+        parent=styles['Normal'], 
+        fontSize=11, 
+        spaceAfter=20,
+        alignment=1,  # Center
+        textColor=colors.HexColor('#64748b')
+    )
+    heading_style = ParagraphStyle(
+        'CustomHeading', 
+        parent=styles['Heading2'], 
+        fontSize=12, 
+        spaceAfter=8, 
+        spaceBefore=15,
+        textColor=colors.HexColor('#1e293b'),
+        borderPadding=(0, 0, 5, 0)
+    )
+    cell_style = ParagraphStyle(
+        'CellStyle',
+        parent=styles['Normal'],
+        fontSize=9,
+        leading=12,
+        wordWrap='CJK'
+    )
     
     story = []
     
-    # Title
-    story.append(Paragraph("Abschleppprotokoll", title_style))
-    story.append(Paragraph(f"Auftragsnummer: {job['job_number']}", normal_style))
-    story.append(Spacer(1, 20))
+    # ===== HEADER =====
+    story.append(Paragraph("ABSCHLEPPPROTOKOLL", title_style))
+    story.append(Paragraph(f"Auftragsnummer: {job['job_number']}", subtitle_style))
     
-    # Vehicle Info
+    # Horizontal line
+    story.append(Spacer(1, 5))
+    line_table = Table([['']], colWidths=[17*cm])
+    line_table.setStyle(TableStyle([
+        ('LINEABOVE', (0, 0), (-1, 0), 2, colors.HexColor('#f97316')),
+    ]))
+    story.append(line_table)
+    story.append(Spacer(1, 10))
+    
+    # ===== FAHRZEUGDATEN =====
     story.append(Paragraph("Fahrzeugdaten", heading_style))
     vehicle_data = [
-        ["Kennzeichen:", job['license_plate']],
-        ["FIN:", job.get('vin') or '-'],
-        ["Abschleppgrund:", job['tow_reason']],
+        [Paragraph("<b>Kennzeichen</b>", cell_style), Paragraph(job['license_plate'], cell_style)],
+        [Paragraph("<b>FIN</b>", cell_style), Paragraph(job.get('vin') or '-', cell_style)],
+        [Paragraph("<b>Abschleppgrund</b>", cell_style), Paragraph(wrap_text(job['tow_reason'], 50), cell_style)],
     ]
-    vehicle_table = Table(vehicle_data, colWidths=[4*cm, 12*cm])
+    if job.get('created_by_dienstnummer'):
+        vehicle_data.append([
+            Paragraph("<b>Erfasst von</b>", cell_style), 
+            Paragraph(f"{job.get('created_by_name', '-')} ({job['created_by_dienstnummer']})", cell_style)
+        ])
+    
+    vehicle_table = Table(vehicle_data, colWidths=[4.5*cm, 12.5*cm])
     vehicle_table.setStyle(TableStyle([
-        ('FONTNAME', (0, 0), (-1, -1), 'Helvetica'),
-        ('FONTSIZE', (0, 0), (-1, -1), 10),
-        ('FONTNAME', (0, 0), (0, -1), 'Helvetica-Bold'),
-        ('BOTTOMPADDING', (0, 0), (-1, -1), 8),
+        ('BACKGROUND', (0, 0), (0, -1), colors.HexColor('#f8fafc')),
+        ('VALIGN', (0, 0), (-1, -1), 'TOP'),
+        ('TOPPADDING', (0, 0), (-1, -1), 6),
+        ('BOTTOMPADDING', (0, 0), (-1, -1), 6),
+        ('LEFTPADDING', (0, 0), (-1, -1), 8),
+        ('RIGHTPADDING', (0, 0), (-1, -1), 8),
+        ('GRID', (0, 0), (-1, -1), 0.5, colors.HexColor('#e2e8f0')),
     ]))
     story.append(vehicle_table)
     
-    # Location
+    # ===== FUNDORT =====
     story.append(Paragraph("Fundort", heading_style))
     location_data = [
-        ["Adresse:", job['location_address']],
-        ["Koordinaten:", f"{job['location_lat']}, {job['location_lng']}"],
+        [Paragraph("<b>Adresse</b>", cell_style), Paragraph(wrap_text(job['location_address'], 55), cell_style)],
+        [Paragraph("<b>Koordinaten</b>", cell_style), Paragraph(f"{job['location_lat']:.6f}, {job['location_lng']:.6f}", cell_style)],
     ]
-    location_table = Table(location_data, colWidths=[4*cm, 12*cm])
+    location_table = Table(location_data, colWidths=[4.5*cm, 12.5*cm])
     location_table.setStyle(TableStyle([
-        ('FONTNAME', (0, 0), (-1, -1), 'Helvetica'),
-        ('FONTSIZE', (0, 0), (-1, -1), 10),
-        ('FONTNAME', (0, 0), (0, -1), 'Helvetica-Bold'),
-        ('BOTTOMPADDING', (0, 0), (-1, -1), 8),
+        ('BACKGROUND', (0, 0), (0, -1), colors.HexColor('#f8fafc')),
+        ('VALIGN', (0, 0), (-1, -1), 'TOP'),
+        ('TOPPADDING', (0, 0), (-1, -1), 6),
+        ('BOTTOMPADDING', (0, 0), (-1, -1), 6),
+        ('LEFTPADDING', (0, 0), (-1, -1), 8),
+        ('RIGHTPADDING', (0, 0), (-1, -1), 8),
+        ('GRID', (0, 0), (-1, -1), 0.5, colors.HexColor('#e2e8f0')),
     ]))
     story.append(location_table)
     
-    # Detailed Timeline with all steps
-    story.append(Paragraph("Zeiterfassung (alle Schritte)", heading_style))
+    # ===== ZEITERFASSUNG =====
+    story.append(Paragraph("Zeiterfassung", heading_style))
     timeline_data = [
-        ["Schritt", "Datum & Uhrzeit"],
-        ["1. Meldung erfasst:", format_datetime(job.get('created_at'))],
-        ["2. Vor Ort angekommen:", format_datetime(job.get('on_site_at'))],
-        ["3. Abgeschleppt:", format_datetime(job.get('towed_at'))],
-        ["4. Im Hof eingetroffen:", format_datetime(job.get('in_yard_at'))],
-        ["5. Fahrzeug abgeholt:", format_datetime(job.get('released_at'))],
+        [
+            Paragraph("<b>Schritt</b>", cell_style), 
+            Paragraph("<b>Datum & Uhrzeit</b>", cell_style),
+            Paragraph("<b>Status</b>", cell_style)
+        ],
+        [
+            Paragraph("1. Meldung erfasst", cell_style), 
+            Paragraph(format_datetime(job.get('created_at')), cell_style),
+            Paragraph("✓" if job.get('created_at') else "-", cell_style)
+        ],
+        [
+            Paragraph("2. Vor Ort angekommen", cell_style), 
+            Paragraph(format_datetime(job.get('on_site_at')), cell_style),
+            Paragraph("✓" if job.get('on_site_at') else "-", cell_style)
+        ],
+        [
+            Paragraph("3. Abgeschleppt", cell_style), 
+            Paragraph(format_datetime(job.get('towed_at')), cell_style),
+            Paragraph("✓" if job.get('towed_at') else "-", cell_style)
+        ],
+        [
+            Paragraph("4. Im Hof eingetroffen", cell_style), 
+            Paragraph(format_datetime(job.get('in_yard_at')), cell_style),
+            Paragraph("✓" if job.get('in_yard_at') else "-", cell_style)
+        ],
+        [
+            Paragraph("5. Fahrzeug abgeholt", cell_style), 
+            Paragraph(format_datetime(job.get('released_at')), cell_style),
+            Paragraph("✓" if job.get('released_at') else "-", cell_style)
+        ],
     ]
-    timeline_table = Table(timeline_data, colWidths=[5*cm, 11*cm])
+    timeline_table = Table(timeline_data, colWidths=[6*cm, 8*cm, 3*cm])
     timeline_table.setStyle(TableStyle([
-        ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
-        ('FONTNAME', (0, 1), (-1, -1), 'Helvetica'),
-        ('FONTSIZE', (0, 0), (-1, -1), 10),
-        ('FONTNAME', (0, 1), (0, -1), 'Helvetica-Bold'),
-        ('BOTTOMPADDING', (0, 0), (-1, -1), 8),
-        ('BACKGROUND', (0, 0), (-1, 0), colors.lightgrey),
-        ('GRID', (0, 0), (-1, -1), 0.5, colors.grey),
+        ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#1e293b')),
+        ('TEXTCOLOR', (0, 0), (-1, 0), colors.white),
+        ('BACKGROUND', (0, 1), (-1, -1), colors.white),
+        ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
+        ('ALIGN', (2, 0), (2, -1), 'CENTER'),
+        ('TOPPADDING', (0, 0), (-1, -1), 6),
+        ('BOTTOMPADDING', (0, 0), (-1, -1), 6),
+        ('LEFTPADDING', (0, 0), (-1, -1), 8),
+        ('RIGHTPADDING', (0, 0), (-1, -1), 8),
+        ('GRID', (0, 0), (-1, -1), 0.5, colors.HexColor('#e2e8f0')),
+        ('ROWBACKGROUNDS', (0, 1), (-1, -1), [colors.white, colors.HexColor('#f8fafc')]),
     ]))
     story.append(timeline_table)
     
-    # Owner Info (if released)
+    # ===== HALTERDATEN (if released) =====
     if job.get('owner_first_name'):
         story.append(Paragraph("Halterdaten", heading_style))
         owner_data = [
-            ["Vorname:", job.get('owner_first_name', '-')],
-            ["Nachname:", job.get('owner_last_name', '-')],
-            ["Adresse:", job.get('owner_address', '-')],
+            [Paragraph("<b>Name</b>", cell_style), Paragraph(f"{job.get('owner_first_name', '')} {job.get('owner_last_name', '')}", cell_style)],
+            [Paragraph("<b>Adresse</b>", cell_style), Paragraph(wrap_text(job.get('owner_address', '-'), 55), cell_style)],
         ]
-        owner_table = Table(owner_data, colWidths=[4*cm, 12*cm])
+        owner_table = Table(owner_data, colWidths=[4.5*cm, 12.5*cm])
         owner_table.setStyle(TableStyle([
-            ('FONTNAME', (0, 0), (-1, -1), 'Helvetica'),
-            ('FONTSIZE', (0, 0), (-1, -1), 10),
-            ('FONTNAME', (0, 0), (0, -1), 'Helvetica-Bold'),
-            ('BOTTOMPADDING', (0, 0), (-1, -1), 8),
+            ('BACKGROUND', (0, 0), (0, -1), colors.HexColor('#f8fafc')),
+            ('VALIGN', (0, 0), (-1, -1), 'TOP'),
+            ('TOPPADDING', (0, 0), (-1, -1), 6),
+            ('BOTTOMPADDING', (0, 0), (-1, -1), 6),
+            ('LEFTPADDING', (0, 0), (-1, -1), 8),
+            ('RIGHTPADDING', (0, 0), (-1, -1), 8),
+            ('GRID', (0, 0), (-1, -1), 0.5, colors.HexColor('#e2e8f0')),
         ]))
         story.append(owner_table)
     
-    # Payment Info
+    # ===== ZAHLUNGSINFORMATIONEN =====
     if job.get('payment_method'):
         story.append(Paragraph("Zahlungsinformationen", heading_style))
+        payment_method_text = "Bar" if job['payment_method'] == 'cash' else "Kartenzahlung"
         payment_data = [
-            ["Zahlungsart:", "Bar" if job['payment_method'] == 'cash' else "Karte"],
-            ["Betrag:", f"{job.get('payment_amount', 0):.2f} €"],
+            [Paragraph("<b>Zahlungsart</b>", cell_style), Paragraph(payment_method_text, cell_style)],
+            [Paragraph("<b>Betrag</b>", cell_style), Paragraph(f"{job.get('payment_amount', 0):.2f} €", cell_style)],
         ]
-        payment_table = Table(payment_data, colWidths=[4*cm, 12*cm])
+        payment_table = Table(payment_data, colWidths=[4.5*cm, 12.5*cm])
         payment_table.setStyle(TableStyle([
-            ('FONTNAME', (0, 0), (-1, -1), 'Helvetica'),
-            ('FONTSIZE', (0, 0), (-1, -1), 10),
-            ('FONTNAME', (0, 0), (0, -1), 'Helvetica-Bold'),
-            ('BOTTOMPADDING', (0, 0), (-1, -1), 8),
+            ('BACKGROUND', (0, 0), (0, -1), colors.HexColor('#f8fafc')),
+            ('BACKGROUND', (1, 1), (1, 1), colors.HexColor('#dcfce7')),  # Green background for amount
+            ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
+            ('TOPPADDING', (0, 0), (-1, -1), 6),
+            ('BOTTOMPADDING', (0, 0), (-1, -1), 6),
+            ('LEFTPADDING', (0, 0), (-1, -1), 8),
+            ('RIGHTPADDING', (0, 0), (-1, -1), 8),
+            ('GRID', (0, 0), (-1, -1), 0.5, colors.HexColor('#e2e8f0')),
         ]))
         story.append(payment_table)
     
-    # Service Info
+    # ===== ABSCHLEPPDIENST =====
     if service:
         story.append(Paragraph("Abschleppdienst", heading_style))
         service_data = [
-            ["Unternehmen:", service.get('company_name', '-')],
-            ["Telefon:", service.get('phone', '-')],
-            ["Hof-Adresse:", service.get('yard_address', '-')],
+            [Paragraph("<b>Unternehmen</b>", cell_style), Paragraph(service.get('company_name', '-'), cell_style)],
+            [Paragraph("<b>Telefon</b>", cell_style), Paragraph(service.get('phone', '-'), cell_style)],
+            [Paragraph("<b>Hof-Adresse</b>", cell_style), Paragraph(wrap_text(service.get('yard_address', '-'), 55), cell_style)],
+            [Paragraph("<b>Öffnungszeiten</b>", cell_style), Paragraph(service.get('opening_hours', '-'), cell_style)],
         ]
-        service_table = Table(service_data, colWidths=[4*cm, 12*cm])
+        service_table = Table(service_data, colWidths=[4.5*cm, 12.5*cm])
         service_table.setStyle(TableStyle([
-            ('FONTNAME', (0, 0), (-1, -1), 'Helvetica'),
-            ('FONTSIZE', (0, 0), (-1, -1), 10),
-            ('FONTNAME', (0, 0), (0, -1), 'Helvetica-Bold'),
-            ('BOTTOMPADDING', (0, 0), (-1, -1), 8),
+            ('BACKGROUND', (0, 0), (0, -1), colors.HexColor('#f8fafc')),
+            ('VALIGN', (0, 0), (-1, -1), 'TOP'),
+            ('TOPPADDING', (0, 0), (-1, -1), 6),
+            ('BOTTOMPADDING', (0, 0), (-1, -1), 6),
+            ('LEFTPADDING', (0, 0), (-1, -1), 8),
+            ('RIGHTPADDING', (0, 0), (-1, -1), 8),
+            ('GRID', (0, 0), (-1, -1), 0.5, colors.HexColor('#e2e8f0')),
         ]))
         story.append(service_table)
     
-    # Notes
+    # ===== BEMERKUNGEN =====
     if job.get('notes') or job.get('service_notes'):
         story.append(Paragraph("Bemerkungen", heading_style))
+        notes_data = []
         if job.get('notes'):
-            story.append(Paragraph(f"Behörde: {job['notes']}", normal_style))
+            notes_data.append([
+                Paragraph("<b>Behörde</b>", cell_style), 
+                Paragraph(wrap_text(job['notes'], 55), cell_style)
+            ])
         if job.get('service_notes'):
-            story.append(Paragraph(f"Abschleppdienst: {job['service_notes']}", normal_style))
+            notes_data.append([
+                Paragraph("<b>Abschleppdienst</b>", cell_style), 
+                Paragraph(wrap_text(job['service_notes'], 55), cell_style)
+            ])
+        notes_table = Table(notes_data, colWidths=[4.5*cm, 12.5*cm])
+        notes_table.setStyle(TableStyle([
+            ('BACKGROUND', (0, 0), (0, -1), colors.HexColor('#f8fafc')),
+            ('VALIGN', (0, 0), (-1, -1), 'TOP'),
+            ('TOPPADDING', (0, 0), (-1, -1), 6),
+            ('BOTTOMPADDING', (0, 0), (-1, -1), 6),
+            ('LEFTPADDING', (0, 0), (-1, -1), 8),
+            ('RIGHTPADDING', (0, 0), (-1, -1), 8),
+            ('GRID', (0, 0), (-1, -1), 0.5, colors.HexColor('#e2e8f0')),
+        ]))
+        story.append(notes_table)
+    
+    # ===== FOOTER =====
+    story.append(Spacer(1, 20))
+    footer_style = ParagraphStyle(
+        'Footer',
+        parent=styles['Normal'],
+        fontSize=8,
+        textColor=colors.HexColor('#94a3b8'),
+        alignment=1
+    )
+    story.append(Paragraph(f"Erstellt am: {datetime.now(timezone.utc).strftime('%d.%m.%Y %H:%M')} UTC", footer_style))
     
     doc.build(story)
     buffer.seek(0)
