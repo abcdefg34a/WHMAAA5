@@ -991,7 +991,7 @@ export const TowingDashboard = () => {
 
       {/* Release Dialog */}
       <Dialog open={releaseDialogOpen} onOpenChange={setReleaseDialogOpen}>
-        <DialogContent>
+        <DialogContent className="max-w-md">
           <DialogHeader>
             <DialogTitle>Fahrzeug freigeben</DialogTitle>
             <DialogDescription>
@@ -1052,18 +1052,67 @@ export const TowingDashboard = () => {
               </RadioGroup>
             </div>
 
-            <div className="space-y-2">
-              <Label htmlFor="paymentAmount">Betrag (€) *</Label>
-              <Input
-                data-testid="release-amount-input"
-                id="paymentAmount"
-                type="number"
-                step="0.01"
-                value={paymentAmount}
-                onChange={(e) => setPaymentAmount(e.target.value)}
-                placeholder="250.00"
-                required
-              />
+            {/* Price Calculation Section */}
+            <div className="space-y-3 p-4 bg-slate-50 rounded-lg border">
+              <Label className="font-semibold">Betrag (€) *</Label>
+              
+              {/* Calculated Price Info */}
+              {selectedJob?.in_yard_at && (
+                <div className="text-sm text-slate-600 space-y-1">
+                  <div className="flex justify-between">
+                    <span>Anfahrtskosten:</span>
+                    <span>{(user?.tow_cost || 0).toFixed(2)} €</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span>Standtage:</span>
+                    <span>{Math.max(1, Math.ceil((new Date() - new Date(selectedJob.in_yard_at)) / (1000 * 60 * 60 * 24)))} Tag(e)</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span>Standkosten ({(user?.daily_cost || 0).toFixed(2)} €/Tag):</span>
+                    <span>{(Math.max(1, Math.ceil((new Date() - new Date(selectedJob.in_yard_at)) / (1000 * 60 * 60 * 24))) * (user?.daily_cost || 0)).toFixed(2)} €</span>
+                  </div>
+                  <div className="flex justify-between font-bold border-t pt-2 mt-2">
+                    <span>Berechneter Gesamtpreis:</span>
+                    <span className="text-green-600">
+                      {((user?.tow_cost || 0) + Math.max(1, Math.ceil((new Date() - new Date(selectedJob.in_yard_at)) / (1000 * 60 * 60 * 24))) * (user?.daily_cost || 0)).toFixed(2)} €
+                    </span>
+                  </div>
+                </div>
+              )}
+              
+              <div className="flex gap-2 mt-3">
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={() => {
+                    if (selectedJob?.in_yard_at) {
+                      const days = Math.max(1, Math.ceil((new Date() - new Date(selectedJob.in_yard_at)) / (1000 * 60 * 60 * 24)));
+                      const total = (user?.tow_cost || 0) + days * (user?.daily_cost || 0);
+                      setPaymentAmount(total.toFixed(2));
+                    }
+                  }}
+                  className="flex-1"
+                >
+                  <Euro className="h-4 w-4 mr-1" />
+                  Berechnung übernehmen
+                </Button>
+              </div>
+
+              <div className="space-y-2 mt-3">
+                <Label htmlFor="paymentAmount" className="text-sm text-slate-500">Oder manuell eingeben:</Label>
+                <Input
+                  data-testid="release-amount-input"
+                  id="paymentAmount"
+                  type="number"
+                  step="0.01"
+                  value={paymentAmount}
+                  onChange={(e) => setPaymentAmount(e.target.value)}
+                  placeholder="Betrag eingeben..."
+                  className="text-lg font-bold"
+                  required
+                />
+              </div>
             </div>
 
             <Button
