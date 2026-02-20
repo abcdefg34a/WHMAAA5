@@ -75,9 +75,25 @@ export const TowingDashboard = () => {
     setDailyCost(user?.daily_cost || 0);
   }, [user]);
 
+  // Clear selection when tab changes
+  useEffect(() => {
+    setSelectedJobIds([]);
+  }, [activeTab]);
+
   const fetchJobs = async () => {
     try {
-      const response = await axios.get(`${API}/jobs`);
+      const params = new URLSearchParams();
+      if (filterStatus && filterStatus !== 'all') {
+        params.append('status', filterStatus);
+      }
+      if (filterDateFrom) {
+        params.append('date_from', filterDateFrom);
+      }
+      if (filterDateTo) {
+        params.append('date_to', filterDateTo);
+      }
+      const url = `${API}/jobs${params.toString() ? '?' + params.toString() : ''}`;
+      const response = await axios.get(url);
       setJobs(response.data);
     } catch (error) {
       console.error('Error fetching jobs:', error);
@@ -85,6 +101,53 @@ export const TowingDashboard = () => {
       setLoading(false);
     }
   };
+
+  // Bulk selection handlers
+  const toggleJobSelection = (jobId, event) => {
+    event.stopPropagation();
+    setSelectedJobIds(prev => 
+      prev.includes(jobId) 
+        ? prev.filter(id => id !== jobId)
+        : [...prev, jobId]
+    );
+  };
+
+  const selectAllInTab = (tabJobs) => {
+    const tabJobIds = tabJobs.map(j => j.id);
+    const allSelected = tabJobIds.every(id => selectedJobIds.includes(id));
+    if (allSelected) {
+      setSelectedJobIds(prev => prev.filter(id => !tabJobIds.includes(id)));
+    } else {
+      setSelectedJobIds(prev => [...new Set([...prev, ...tabJobIds])]);
+    }
+  };
+
+  const handleBulkStatusUpdate = async (newStatus) => {
+    if (selectedJobIds.length === 0) return;
+    
+    setBulkUpdating(true);
+    try {
+      const response = await axios.post(`${API}/jobs/bulk-update-status`, {
+        job_ids: selectedJobIds,
+        status: newStatus
+      });
+      toast.success(response.data.message);
+      setSelectedJobIds([]);
+      fetchJobs();
+    } catch (error) {
+      toast.error(error.response?.data?.detail || 'Fehler bei der Massenaktualisierung');
+    } finally {
+      setBulkUpdating(false);
+    }
+  };
+
+  const clearFilters = () => {
+    setFilterStatus('all');
+    setFilterDateFrom('');
+    setFilterDateTo('');
+  };
+
+  const hasActiveFilters = filterStatus !== 'all' || filterDateFrom || filterDateTo;
 
   const copyServiceCode = async () => {
     if (user?.service_code) {
