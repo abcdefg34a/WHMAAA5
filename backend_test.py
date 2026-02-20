@@ -42,9 +42,10 @@ class TowingManagementAPITester:
             "phone": "+49 123 456789",
             "address": "Teststraße 1, 12345 Berlin",
             "yard_address": "Hofstraße 1, 12345 Berlin",
-            "yard_lat": 52.520008,
-            "yard_lng": 13.404954,
-            "opening_hours": "Mo-Fr 8:00-18:00"
+            "opening_hours": "Mo-Fr 8:00-18:00",
+            "tow_cost": 150.0,
+            "daily_cost": 25.0,
+            "business_license": "data:image/jpeg;base64,/9j/4AAQSkZJRgABAQEAYABgAAD/2wBDAAEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQH/2wBDAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQH/wAARCAABAAEDASIAAhEBAxEB/8QAFQABAQAAAAAAAAAAAAAAAAAAAAv/xAAUEAEAAAAAAAAAAAAAAAAAAAAA/8QAFQEBAQAAAAAAAAAAAAAAAAAAAAX/xAAUEQEAAAAAAAAAAAAAAAAAAAAA/9oADAMBAAIRAxEAPwA/8A"
         }
 
     def run_test(self, name: str, method: str, endpoint: str, expected_status: int, 
