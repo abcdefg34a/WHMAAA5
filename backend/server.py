@@ -472,6 +472,10 @@ async def unlink_service(service_id: str, user: dict = Depends(get_current_user)
     if user["role"] != UserRole.AUTHORITY:
         raise HTTPException(status_code=403, detail="Only authorities can unlink services")
     
+    # Only main authority can unlink services
+    if not user.get("is_main_authority"):
+        raise HTTPException(status_code=403, detail="Nur der Haupt-Account kann Abschleppdienste entfernen")
+    
     await db.users.update_one(
         {"id": user["id"]},
         {"$pull": {"linked_services": service_id}}
