@@ -483,6 +483,129 @@ async def update_costs(data: UpdateCostsRequest, user: dict = Depends(get_curren
     updated_user = await db.users.find_one({"id": user["id"]}, {"_id": 0, "password": 0})
     return UserResponse(**updated_user)
 
+# ==================== AUTHORITY EMPLOYEE MANAGEMENT ====================
+
+def get_authority_id(user: dict) -> str:
+    """Get the main authority ID for a user (either main authority or employee)"""
+    if user.get("is_main_authority"):
+        return user["id"]
+    return user.get("parent_authority_id", user["id"])
+
+@api_router.post("/authority/employees", response_model=EmployeeResponse)
+async def create_employee(data: CreateEmployeeRequest, user: dict = Depends(get_current_user)):
+    """Create a new employee for the authority"""
+    if user["role"] != UserRole.AUTHORITY:
+        raise HTTPException(status_code=403, detail="Nur Behörden können Mitarbeiter erstellen")
+    
+    # Only main authority can create employees
+    if not user.get("is_main_authority"):
+        raise HTTPException(status_code=403, detail="Nur der Haupt-Account kann Mitarbeiter erstellen")
+    
+    # Check if email exists
+    existing = await db.users.find_one({"email": data.email})
+    if existing:
+        raise HTTPException(status_code=400, detail="E-Mail bereits registriert")
+    
+    employee_id = str(uuid.uuid4())
+    now = datetime.now(timezone.utc).isoformat()
+    
+    # Generate Dienstnummer
+    dienstnummer = await generate_dienstnummer(user["id"])
+    
+    employee_doc = {
+        "id": employee_id,
+        "email": data.email,
+        "password": hash_password(data.password),
+        "role": UserRole.AUTHORITY,
+        "name": data.name,
+        "created_at": now,
+        "authority_name": user.get("authority_name"),
+        "department": user.get("department"),
+        "linked_services": user.get("linked_services", []),  # Inherit linked services
+        "is_main_authority": False,
+        "parent_authority_id": user["id"],
+        "dienstnummer": dienstnummer
+    }
+    
+    await db.users.insert_one(employee_doc)
+    
+    return EmployeeResponse(
+        id=employee_id,
+        email=data.email,
+        name=data.name,
+        dienstnummer=dienstnummer,
+        is_blocked=False,
+        created_at=now
+    )
+
+@api_router.get("/authority/employees", response_model=List[EmployeeResponse])
+async def get_employees(user: dict = Depends(get_current_user)):
+    """Get all employees for the authority"""
+    if user["role"] != UserRole.AUTHORITY:
+        raise HTTPException(status_code=403, detail="Nur Behörden")
+    
+    # Only main authority can view employees
+    if not user.get("is_main_authority"):
+        raise HTTPException(status_code=403, detail="Nur der Haupt-Account kann Mitarbeiter sehen")
+    
+    employees = await db.users.find(
+        {"parent_authority_id": user["id"]},
+        {"_id": 0, "password": 0}
+    ).to_list(100)
+    
+    return [EmployeeResponse(
+        id=e["id"],
+        email=e["email"],
+        name=e["name"],
+        dienstnummer=e.get("dienstnummer", ""),
+        is_blocked=e.get("is_blocked", False),
+        created_at=e["created_at"]
+    ) for e in employees]
+
+@api_router.patch("/authority/employees/{employee_id}/block")
+async def block_employee(employee_id: str, data: AdminBlockUserRequest, user: dict = Depends(get_current_user)):
+    """Block/unblock an employee"""
+    if user["role"] != UserRole.AUTHORITY or not user.get("is_main_authority"):
+        raise HTTPException(status_code=403, detail="Nur der Haupt-Account kann Mitarbeiter sperren")
+    
+    employee = await db.users.find_one({"id": employee_id, "parent_authority_id": user["id"]})
+    if not employee:
+        raise HTTPException(status_code=404, detail="Mitarbeiter nicht gefunden")
+    
+    await db.users.update_one({"id": employee_id}, {"$set": {"is_blocked": data.blocked}})
+    
+    action = "gesperrt" if data.blocked else "entsperrt"
+    return {"message": f"Mitarbeiter {employee['name']} wurde {action}"}
+
+@api_router.delete("/authority/employees/{employee_id}")
+async def delete_employee(employee_id: str, user: dict = Depends(get_current_user)):
+    """Delete an employee"""
+    if user["role"] != UserRole.AUTHORITY or not user.get("is_main_authority"):
+        raise HTTPException(status_code=403, detail="Nur der Haupt-Account kann Mitarbeiter löschen")
+    
+    employee = await db.users.find_one({"id": employee_id, "parent_authority_id": user["id"]})
+    if not employee:
+        raise HTTPException(status_code=404, detail="Mitarbeiter nicht gefunden")
+    
+    await db.users.delete_one({"id": employee_id})
+    
+    return {"message": f"Mitarbeiter {employee['name']} wurde gelöscht"}
+
+@api_router.patch("/authority/employees/{employee_id}/password")
+async def update_employee_password(employee_id: str, data: AdminUpdatePasswordRequest, user: dict = Depends(get_current_user)):
+    """Update an employee's password"""
+    if user["role"] != UserRole.AUTHORITY or not user.get("is_main_authority"):
+        raise HTTPException(status_code=403, detail="Nur der Haupt-Account kann Passwörter ändern")
+    
+    employee = await db.users.find_one({"id": employee_id, "parent_authority_id": user["id"]})
+    if not employee:
+        raise HTTPException(status_code=404, detail="Mitarbeiter nicht gefunden")
+    
+    new_hashed = hash_password(data.new_password)
+    await db.users.update_one({"id": employee_id}, {"$set": {"password": new_hashed}})
+    
+    return {"message": f"Passwort für {employee['name']} wurde aktualisiert"}
+
 # ==================== ADMIN APPROVAL ROUTES ====================
 
 @api_router.get("/admin/pending-services", response_model=List[UserResponse])
