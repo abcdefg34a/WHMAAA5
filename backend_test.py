@@ -47,6 +47,28 @@ class TowingManagementAPITester:
             "daily_cost": 25.0,
             "business_license": "data:image/jpeg;base64,/9j/4AAQSkZJRgABAQEAYABgAAD/2wBDAAEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQH/2wBDAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQH/wAARCAABAAEDASIAAhEBAxEB/8QAFQABAQAAAAAAAAAAAAAAAAAAAAv/xAAUEAEAAAAAAAAAAAAAAAAAAAAA/8QAFQEBAQAAAAAAAAAAAAAAAAAAAAX/xAAUEQEAAAAAAAAAAAAAAAAAAAAA/9oADAMBAAIRAxEAPwA/8A"
         }
+        
+        # Employee management test data
+        self.employee_data = {
+            "email": f"employee_{datetime.now().strftime('%H%M%S')}@test.de",
+            "password": "EmployeePass123!",
+            "name": "Test Employee"
+        }
+        
+        self.employee2_data = {
+            "email": f"employee2_{datetime.now().strftime('%H%M%S')}@test.de", 
+            "password": "Employee2Pass123!",
+            "name": "Test Employee 2"
+        }
+        
+        # Store employee tokens and IDs
+        self.employee_token = None
+        self.employee2_token = None
+        self.employee_id = None
+        self.employee2_id = None
+        self.main_authority_dienstnummer = None
+        self.employee_dienstnummer = None
+        self.employee2_dienstnummer = None
 
     def run_test(self, name: str, method: str, endpoint: str, expected_status: int, 
                  data: Optional[Dict] = None, token: Optional[str] = None) -> tuple[bool, Dict]:
