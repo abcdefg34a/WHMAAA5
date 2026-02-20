@@ -761,8 +761,178 @@ export const AuthorityDashboard = () => {
               </CardContent>
             </Card>
           </TabsContent>
+
+          {/* Employees Tab - Only for Main Authority */}
+          {user?.is_main_authority && (
+            <TabsContent value="employees">
+              <Card>
+                <CardHeader>
+                  <div className="flex justify-between items-center">
+                    <div>
+                      <CardTitle className="flex items-center gap-2">
+                        <Users className="h-5 w-5" />
+                        Mitarbeiter verwalten
+                      </CardTitle>
+                      <CardDescription>
+                        Mitarbeiter können sich einloggen und Fahrzeuge erfassen
+                      </CardDescription>
+                    </div>
+                    <Button onClick={() => setEmployeeDialogOpen(true)}>
+                      <UserPlus className="h-4 w-4 mr-2" />
+                      Neuer Mitarbeiter
+                    </Button>
+                  </div>
+                </CardHeader>
+                <CardContent>
+                  {employees.length === 0 ? (
+                    <div className="text-center py-8 text-slate-500">
+                      <Users className="h-12 w-12 mx-auto mb-4 opacity-50" />
+                      <p>Noch keine Mitarbeiter angelegt</p>
+                      <p className="text-sm">Legen Sie Mitarbeiter an, damit diese Fahrzeuge erfassen können</p>
+                    </div>
+                  ) : (
+                    <div className="space-y-3">
+                      {employees.map(emp => (
+                        <div 
+                          key={emp.id} 
+                          className={`flex items-center justify-between p-4 border rounded-lg ${
+                            emp.is_blocked ? 'bg-red-50 border-red-200' : 'bg-white'
+                          }`}
+                        >
+                          <div className="flex items-center gap-4">
+                            <div className={`w-10 h-10 rounded-full flex items-center justify-center ${
+                              emp.is_blocked ? 'bg-red-200' : 'bg-blue-100'
+                            }`}>
+                              <Users className={`h-5 w-5 ${emp.is_blocked ? 'text-red-600' : 'text-blue-600'}`} />
+                            </div>
+                            <div>
+                              <p className="font-medium">{emp.name}</p>
+                              <p className="text-sm text-slate-500">{emp.email}</p>
+                            </div>
+                            <div className="ml-4 px-3 py-1 bg-slate-100 rounded">
+                              <span className="text-xs text-slate-500">Dienstnummer:</span>
+                              <span className="ml-1 font-mono font-bold text-slate-700">{emp.dienstnummer}</span>
+                            </div>
+                            {emp.is_blocked && (
+                              <span className="px-2 py-1 bg-red-100 text-red-700 text-xs rounded">Gesperrt</span>
+                            )}
+                          </div>
+                          <div className="flex items-center gap-2">
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={() => {
+                                setSelectedEmployee(emp);
+                                setPasswordDialogOpen(true);
+                              }}
+                              title="Passwort ändern"
+                            >
+                              <Key className="h-4 w-4" />
+                            </Button>
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={() => handleBlockEmployee(emp.id, !emp.is_blocked)}
+                              title={emp.is_blocked ? 'Entsperren' : 'Sperren'}
+                            >
+                              {emp.is_blocked ? <Unlock className="h-4 w-4" /> : <Lock className="h-4 w-4" />}
+                            </Button>
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={() => handleDeleteEmployee(emp.id)}
+                              className="text-red-600 hover:text-red-700"
+                              title="Löschen"
+                            >
+                              <Trash2 className="h-4 w-4" />
+                            </Button>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
+            </TabsContent>
+          )}
         </Tabs>
       </main>
+
+      {/* Create Employee Dialog */}
+      <Dialog open={employeeDialogOpen} onOpenChange={setEmployeeDialogOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Neuen Mitarbeiter anlegen</DialogTitle>
+            <DialogDescription>
+              Der Mitarbeiter erhält automatisch eine Dienstnummer und kann sich einloggen
+            </DialogDescription>
+          </DialogHeader>
+          <form onSubmit={handleCreateEmployee} className="space-y-4">
+            <div className="space-y-2">
+              <Label htmlFor="empName">Name *</Label>
+              <Input
+                id="empName"
+                value={newEmployeeName}
+                onChange={(e) => setNewEmployeeName(e.target.value)}
+                placeholder="Max Mustermann"
+                required
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="empEmail">E-Mail *</Label>
+              <Input
+                id="empEmail"
+                type="email"
+                value={newEmployeeEmail}
+                onChange={(e) => setNewEmployeeEmail(e.target.value)}
+                placeholder="mitarbeiter@behoerde.de"
+                required
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="empPassword">Passwort *</Label>
+              <Input
+                id="empPassword"
+                type="password"
+                value={newEmployeePassword}
+                onChange={(e) => setNewEmployeePassword(e.target.value)}
+                placeholder="Mindestens 6 Zeichen"
+                required
+              />
+            </div>
+            <Button type="submit" className="w-full" disabled={creatingEmployee}>
+              {creatingEmployee ? 'Wird angelegt...' : 'Mitarbeiter anlegen'}
+            </Button>
+          </form>
+        </DialogContent>
+      </Dialog>
+
+      {/* Change Password Dialog */}
+      <Dialog open={passwordDialogOpen} onOpenChange={setPasswordDialogOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Passwort ändern</DialogTitle>
+            <DialogDescription>
+              Neues Passwort für {selectedEmployee?.name} setzen
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div className="space-y-2">
+              <Label htmlFor="newPwd">Neues Passwort</Label>
+              <Input
+                id="newPwd"
+                type="password"
+                value={newPassword}
+                onChange={(e) => setNewPassword(e.target.value)}
+                placeholder="Mindestens 6 Zeichen"
+              />
+            </div>
+            <Button onClick={handleChangeEmployeePassword} className="w-full">
+              Passwort ändern
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 };
