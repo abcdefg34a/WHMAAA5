@@ -323,10 +323,17 @@ class TowingManagementAPITester:
             token=self.authority_token
         )
         
-        # Update job status (towing service)
-        update_data = {"status": "on_site", "service_notes": "Arrived at location"}
+        # Update job status to towed (towing service)
+        update_data = {"status": "towed", "service_notes": "Vehicle towed successfully"}
         success, response = self.run_test(
-            "Update Job Status", "PATCH", f"jobs/{self.test_job_id}", 200,
+            "Update Job Status to Towed", "PATCH", f"jobs/{self.test_job_id}", 200,
+            update_data, self.towing_token
+        )
+        
+        # Update job status to in_yard (towing service)
+        update_data = {"status": "in_yard"}
+        success, response = self.run_test(
+            "Update Job Status to In Yard", "PATCH", f"jobs/{self.test_job_id}", 200,
             update_data, self.towing_token
         )
         
