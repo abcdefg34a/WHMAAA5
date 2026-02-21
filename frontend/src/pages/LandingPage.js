@@ -408,9 +408,25 @@ export const LandingPage = () => {
                 AbschleppPortal
               </span>
             </div>
-            <p className="text-slate-400 text-sm">
-              © {new Date().getFullYear()} AbschleppPortal. Alle Rechte vorbehalten.
-            </p>
+            <div className="flex flex-col md:flex-row items-center gap-4 md:gap-8">
+              <div className="flex gap-6">
+                <a 
+                  href="/datenschutz" 
+                  className="text-slate-400 hover:text-white text-sm transition-colors"
+                >
+                  Datenschutz
+                </a>
+                <a 
+                  href="/impressum" 
+                  className="text-slate-400 hover:text-white text-sm transition-colors"
+                >
+                  Impressum
+                </a>
+              </div>
+              <p className="text-slate-400 text-sm">
+                © {new Date().getFullYear()} AbschleppPortal. Alle Rechte vorbehalten.
+              </p>
+            </div>
           </div>
         </div>
       </footer>
