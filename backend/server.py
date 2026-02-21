@@ -1240,6 +1240,16 @@ async def update_job(job_id: str, data: JobUpdate, user: dict = Depends(get_curr
     
     await db.jobs.update_one({"id": job_id}, {"$set": update_data})
     
+    # Audit log job update
+    if data.status:
+        await log_audit("JOB_STATUS_UPDATED", user["id"], user.get("name", user["email"]), {
+            "job_id": job_id,
+            "job_number": job.get("job_number"),
+            "license_plate": job.get("license_plate"),
+            "old_status": job.get("status"),
+            "new_status": data.status
+        })
+    
     updated_job = await db.jobs.find_one({"id": job_id}, {"_id": 0})
     return JobResponse(**updated_job)
 
