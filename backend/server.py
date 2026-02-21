@@ -1494,6 +1494,8 @@ async def get_admin_stats(user: dict = Depends(get_current_user)):
 async def get_all_jobs(
     status: Optional[str] = None,
     search: Optional[str] = None,
+    page: int = 1,
+    limit: int = 50,
     user: dict = Depends(get_current_user)
 ):
     if user["role"] != UserRole.ADMIN:
@@ -1510,8 +1512,33 @@ async def get_all_jobs(
             {"job_number": {"$regex": search_upper, "$options": "i"}}
         ]
     
-    jobs = await db.jobs.find(query, {"_id": 0}).sort("created_at", -1).to_list(1000)
+    skip = (page - 1) * limit
+    jobs = await db.jobs.find(query, {"_id": 0}).sort("created_at", -1).skip(skip).limit(limit).to_list(limit)
     return [JobResponse(**j) for j in jobs]
+
+@api_router.get("/admin/jobs/count")
+async def get_all_jobs_count(
+    status: Optional[str] = None,
+    search: Optional[str] = None,
+    user: dict = Depends(get_current_user)
+):
+    """Get total count of jobs for admin pagination"""
+    if user["role"] != UserRole.ADMIN:
+        raise HTTPException(status_code=403, detail="Admin only")
+    
+    query = {}
+    if status:
+        query["status"] = status
+    if search:
+        search_upper = search.upper()
+        query["$or"] = [
+            {"license_plate": {"$regex": search_upper, "$options": "i"}},
+            {"vin": {"$regex": search_upper, "$options": "i"}},
+            {"job_number": {"$regex": search_upper, "$options": "i"}}
+        ]
+    
+    count = await db.jobs.count_documents(query)
+    return {"total": count}
 
 @api_router.get("/admin/users", response_model=List[UserResponse])
 async def get_all_users(user: dict = Depends(get_current_user)):
