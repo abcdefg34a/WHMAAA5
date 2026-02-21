@@ -1038,12 +1038,23 @@ async def approve_authority(authority_id: str, data: ApproveServiceRequest, user
             {"id": authority_id},
             {"$set": {"approval_status": ApprovalStatus.APPROVED, "rejection_reason": None}}
         )
+        # Audit log approval
+        await log_audit("AUTHORITY_APPROVED", user["id"], user["name"], {
+            "authority_id": authority_id,
+            "authority_name": authority["authority_name"]
+        })
         return {"message": f"{authority['authority_name']} wurde freigeschaltet"}
     else:
         await db.users.update_one(
             {"id": authority_id},
             {"$set": {"approval_status": ApprovalStatus.REJECTED, "rejection_reason": data.rejection_reason}}
         )
+        # Audit log rejection
+        await log_audit("AUTHORITY_REJECTED", user["id"], user["name"], {
+            "authority_id": authority_id,
+            "authority_name": authority["authority_name"],
+            "reason": data.rejection_reason
+        })
         return {"message": f"{authority['authority_name']} wurde abgelehnt"}
 
 # ==================== JOB ROUTES ====================
