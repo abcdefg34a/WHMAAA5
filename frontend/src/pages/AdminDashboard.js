@@ -28,13 +28,16 @@ export const AdminDashboard = () => {
   const [jobs, setJobs] = useState([]);
   const [users, setUsers] = useState([]);
   const [pendingServices, setPendingServices] = useState([]);
+  const [pendingAuthorities, setPendingAuthorities] = useState([]);
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState('all');
   
   // Approval dialog state
   const [selectedService, setSelectedService] = useState(null);
+  const [selectedAuthority, setSelectedAuthority] = useState(null);
   const [approvalDialogOpen, setApprovalDialogOpen] = useState(false);
+  const [authorityApprovalDialogOpen, setAuthorityApprovalDialogOpen] = useState(false);
   const [rejectionReason, setRejectionReason] = useState('');
   const [approving, setApproving] = useState(false);
 
@@ -52,11 +55,12 @@ export const AdminDashboard = () => {
   const fetchData = async () => {
     setLoading(true);
     try {
-      const [statsRes, jobsRes, usersRes, pendingRes] = await Promise.all([
+      const [statsRes, jobsRes, usersRes, pendingServicesRes, pendingAuthoritiesRes] = await Promise.all([
         axios.get(`${API}/admin/stats`),
         axios.get(`${API}/admin/jobs`),
         axios.get(`${API}/admin/users`),
-        axios.get(`${API}/admin/pending-services`)
+        axios.get(`${API}/admin/pending-services`),
+        axios.get(`${API}/admin/pending-authorities`)
       ]);
       setStats(statsRes.data);
       setJobs(jobsRes.data);
