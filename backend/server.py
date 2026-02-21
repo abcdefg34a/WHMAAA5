@@ -1748,6 +1748,436 @@ async def generate_pdf(job_id: str):
         headers={"Content-Disposition": f"attachment; filename=Abschleppprotokoll_{job['job_number']}.pdf"}
     )
 
+# ==================== EXPORT ENDPOINTS ====================
+
+@api_router.get("/export/jobs/csv")
+async def export_jobs_csv(
+    status: Optional[str] = None,
+    date_from: Optional[str] = None,
+    date_to: Optional[str] = None,
+    user: dict = Depends(get_current_user)
+):
+    """Export jobs as CSV"""
+    if user["role"] != UserRole.ADMIN:
+        raise HTTPException(status_code=403, detail="Admin only")
+    
+    # Build query
+    query = {}
+    if status:
+        query["status"] = status
+    if date_from or date_to:
+        date_query = {}
+        if date_from:
+            date_query["$gte"] = date_from
+        if date_to:
+            date_query["$lte"] = date_to + "T23:59:59"
+        query["created_at"] = date_query
+    
+    jobs = await db.jobs.find(query, {"_id": 0}).sort("created_at", -1).to_list(10000)
+    
+    # Create CSV
+    output = BytesIO()
+    output.write('\ufeff'.encode('utf-8'))  # UTF-8 BOM for Excel
+    
+    import csv
+    import io
+    text_output = io.StringIO()
+    
+    fieldnames = [
+        'Auftragsnummer', 'Kennzeichen', 'FIN', 'Abschleppgrund', 'Status',
+        'Standort', 'Behörde', 'Dienstnummer', 'Abschleppdienst',
+        'Erstellt am', 'Vor Ort', 'Abgeschleppt', 'Im Hof', 'Abgeholt',
+        'Halter Name', 'Halter Adresse', 'Zahlungsart', 'Betrag'
+    ]
+    
+    writer = csv.DictWriter(text_output, fieldnames=fieldnames, delimiter=';')
+    writer.writeheader()
+    
+    status_map = {
+        'pending': 'Ausstehend', 'assigned': 'Zugewiesen', 'on_site': 'Vor Ort',
+        'towed': 'Abgeschleppt', 'in_yard': 'Im Hof', 'released': 'Abgeholt'
+    }
+    
+    for job in jobs:
+        writer.writerow({
+            'Auftragsnummer': job.get('job_number', ''),
+            'Kennzeichen': job.get('license_plate', ''),
+            'FIN': job.get('vin', ''),
+            'Abschleppgrund': job.get('tow_reason', ''),
+            'Status': status_map.get(job.get('status', ''), job.get('status', '')),
+            'Standort': job.get('location_address', ''),
+            'Behörde': job.get('created_by_authority', ''),
+            'Dienstnummer': job.get('created_by_dienstnummer', ''),
+            'Abschleppdienst': job.get('assigned_service_name', ''),
+            'Erstellt am': job.get('created_at', '')[:19].replace('T', ' ') if job.get('created_at') else '',
+            'Vor Ort': job.get('on_site_at', '')[:19].replace('T', ' ') if job.get('on_site_at') else '',
+            'Abgeschleppt': job.get('towed_at', '')[:19].replace('T', ' ') if job.get('towed_at') else '',
+            'Im Hof': job.get('in_yard_at', '')[:19].replace('T', ' ') if job.get('in_yard_at') else '',
+            'Abgeholt': job.get('released_at', '')[:19].replace('T', ' ') if job.get('released_at') else '',
+            'Halter Name': f"{job.get('owner_first_name', '')} {job.get('owner_last_name', '')}".strip(),
+            'Halter Adresse': job.get('owner_address', ''),
+            'Zahlungsart': 'Bar' if job.get('payment_method') == 'cash' else ('Karte' if job.get('payment_method') == 'card' else ''),
+            'Betrag': f"{job.get('payment_amount', 0):.2f}" if job.get('payment_amount') else ''
+        })
+    
+    await log_audit("EXPORT_CSV", user["id"], user["name"], {"count": len(jobs)})
+    
+    csv_content = text_output.getvalue().encode('utf-8-sig')
+    
+    return StreamingResponse(
+        BytesIO(csv_content),
+        media_type="text/csv",
+        headers={"Content-Disposition": f"attachment; filename=Auftraege_Export_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv"}
+    )
+
+@api_router.get("/export/jobs/excel")
+async def export_jobs_excel(
+    status: Optional[str] = None,
+    date_from: Optional[str] = None,
+    date_to: Optional[str] = None,
+    user: dict = Depends(get_current_user)
+):
+    """Export jobs as Excel"""
+    if user["role"] != UserRole.ADMIN:
+        raise HTTPException(status_code=403, detail="Admin only")
+    
+    # Build query
+    query = {}
+    if status:
+        query["status"] = status
+    if date_from or date_to:
+        date_query = {}
+        if date_from:
+            date_query["$gte"] = date_from
+        if date_to:
+            date_query["$lte"] = date_to + "T23:59:59"
+        query["created_at"] = date_query
+    
+    jobs = await db.jobs.find(query, {"_id": 0}).sort("created_at", -1).to_list(10000)
+    
+    # Create Excel workbook
+    wb = openpyxl.Workbook()
+    ws = wb.active
+    ws.title = "Aufträge"
+    
+    # Header styling
+    header_fill = PatternFill(start_color="1e293b", end_color="1e293b", fill_type="solid")
+    header_font = Font(color="FFFFFF", bold=True)
+    border = Border(
+        left=Side(style='thin'),
+        right=Side(style='thin'),
+        top=Side(style='thin'),
+        bottom=Side(style='thin')
+    )
+    
+    headers = [
+        'Auftragsnummer', 'Kennzeichen', 'FIN', 'Abschleppgrund', 'Status',
+        'Standort', 'Behörde', 'Dienstnummer', 'Abschleppdienst',
+        'Erstellt am', 'Vor Ort', 'Abgeschleppt', 'Im Hof', 'Abgeholt',
+        'Halter Name', 'Halter Adresse', 'Zahlungsart', 'Betrag'
+    ]
+    
+    for col, header in enumerate(headers, 1):
+        cell = ws.cell(row=1, column=col, value=header)
+        cell.fill = header_fill
+        cell.font = header_font
+        cell.border = border
+        cell.alignment = Alignment(horizontal='center')
+    
+    status_map = {
+        'pending': 'Ausstehend', 'assigned': 'Zugewiesen', 'on_site': 'Vor Ort',
+        'towed': 'Abgeschleppt', 'in_yard': 'Im Hof', 'released': 'Abgeholt'
+    }
+    
+    for row, job in enumerate(jobs, 2):
+        data = [
+            job.get('job_number', ''),
+            job.get('license_plate', ''),
+            job.get('vin', ''),
+            job.get('tow_reason', ''),
+            status_map.get(job.get('status', ''), job.get('status', '')),
+            job.get('location_address', ''),
+            job.get('created_by_authority', ''),
+            job.get('created_by_dienstnummer', ''),
+            job.get('assigned_service_name', ''),
+            job.get('created_at', '')[:19].replace('T', ' ') if job.get('created_at') else '',
+            job.get('on_site_at', '')[:19].replace('T', ' ') if job.get('on_site_at') else '',
+            job.get('towed_at', '')[:19].replace('T', ' ') if job.get('towed_at') else '',
+            job.get('in_yard_at', '')[:19].replace('T', ' ') if job.get('in_yard_at') else '',
+            job.get('released_at', '')[:19].replace('T', ' ') if job.get('released_at') else '',
+            f"{job.get('owner_first_name', '')} {job.get('owner_last_name', '')}".strip(),
+            job.get('owner_address', ''),
+            'Bar' if job.get('payment_method') == 'cash' else ('Karte' if job.get('payment_method') == 'card' else ''),
+            job.get('payment_amount', 0) if job.get('payment_amount') else ''
+        ]
+        
+        for col, value in enumerate(data, 1):
+            cell = ws.cell(row=row, column=col, value=value)
+            cell.border = border
+    
+    # Auto-adjust column widths
+    for col in ws.columns:
+        max_length = 0
+        column = col[0].column_letter
+        for cell in col:
+            try:
+                if len(str(cell.value)) > max_length:
+                    max_length = len(str(cell.value))
+            except:
+                pass
+        ws.column_dimensions[column].width = min(max_length + 2, 50)
+    
+    await log_audit("EXPORT_EXCEL", user["id"], user["name"], {"count": len(jobs)})
+    
+    # Save to bytes
+    output = BytesIO()
+    wb.save(output)
+    output.seek(0)
+    
+    return StreamingResponse(
+        output,
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers={"Content-Disposition": f"attachment; filename=Auftraege_Export_{datetime.now().strftime('%Y%m%d_%H%M%S')}.xlsx"}
+    )
+
+# ==================== AUDIT LOG ENDPOINTS ====================
+
+class AuditLogResponse(BaseModel):
+    id: str
+    timestamp: str
+    action: str
+    user_id: str
+    user_name: str
+    details: Dict[str, Any]
+
+@api_router.get("/admin/audit-logs", response_model=List[AuditLogResponse])
+async def get_audit_logs(
+    action: Optional[str] = None,
+    user_id: Optional[str] = None,
+    date_from: Optional[str] = None,
+    date_to: Optional[str] = None,
+    limit: int = 100,
+    skip: int = 0,
+    user: dict = Depends(get_current_user)
+):
+    """Get audit logs (Admin only)"""
+    if user["role"] != UserRole.ADMIN:
+        raise HTTPException(status_code=403, detail="Admin only")
+    
+    query = {}
+    if action:
+        query["action"] = {"$regex": action, "$options": "i"}
+    if user_id:
+        query["user_id"] = user_id
+    if date_from or date_to:
+        date_query = {}
+        if date_from:
+            date_query["$gte"] = date_from
+        if date_to:
+            date_query["$lte"] = date_to + "T23:59:59"
+        query["timestamp"] = date_query
+    
+    logs = await db.audit_logs.find(query, {"_id": 0}).sort("timestamp", -1).skip(skip).limit(limit).to_list(limit)
+    
+    return [AuditLogResponse(**log) for log in logs]
+
+@api_router.get("/admin/audit-logs/count")
+async def get_audit_logs_count(user: dict = Depends(get_current_user)):
+    """Get total audit log count"""
+    if user["role"] != UserRole.ADMIN:
+        raise HTTPException(status_code=403, detail="Admin only")
+    
+    count = await db.audit_logs.count_documents({})
+    return {"count": count}
+
+# ==================== FULL-TEXT SEARCH ====================
+
+@api_router.get("/search/jobs")
+async def search_jobs_fulltext(
+    q: str,
+    limit: int = 50,
+    skip: int = 0,
+    user: dict = Depends(get_current_user)
+):
+    """Full-text search across all job fields"""
+    if not q or len(q) < 2:
+        raise HTTPException(status_code=400, detail="Suchbegriff muss mindestens 2 Zeichen haben")
+    
+    # Build search query
+    search_regex = {"$regex": q, "$options": "i"}
+    
+    query = {
+        "$or": [
+            {"job_number": search_regex},
+            {"license_plate": search_regex},
+            {"vin": search_regex},
+            {"tow_reason": search_regex},
+            {"location_address": search_regex},
+            {"created_by_name": search_regex},
+            {"created_by_authority": search_regex},
+            {"created_by_dienstnummer": search_regex},
+            {"assigned_service_name": search_regex},
+            {"owner_first_name": search_regex},
+            {"owner_last_name": search_regex},
+            {"owner_address": search_regex},
+            {"notes": search_regex},
+            {"service_notes": search_regex}
+        ]
+    }
+    
+    # Apply role-based filtering
+    if user["role"] == UserRole.AUTHORITY:
+        if user.get("is_main_authority"):
+            query["authority_id"] = user["id"]
+        else:
+            query["created_by_id"] = user["id"]
+    elif user["role"] == UserRole.TOWING_SERVICE:
+        query["assigned_service_id"] = user["id"]
+    
+    total = await db.jobs.count_documents(query)
+    jobs = await db.jobs.find(query, {"_id": 0}).sort("created_at", -1).skip(skip).limit(limit).to_list(limit)
+    
+    return {
+        "total": total,
+        "results": [JobResponse(**j) for j in jobs],
+        "query": q
+    }
+
+# ==================== PAGINATION FOR JOBS ====================
+
+@api_router.get("/jobs/paginated")
+async def get_jobs_paginated(
+    page: int = 1,
+    per_page: int = 20,
+    status: Optional[str] = None,
+    search: Optional[str] = None,
+    date_from: Optional[str] = None,
+    date_to: Optional[str] = None,
+    user: dict = Depends(get_current_user)
+):
+    """Get paginated jobs with filters"""
+    query = {}
+    
+    # Role-based filtering
+    if user["role"] == UserRole.AUTHORITY:
+        if user.get("is_main_authority"):
+            query["authority_id"] = user["id"]
+        else:
+            query["created_by_id"] = user["id"]
+    elif user["role"] == UserRole.TOWING_SERVICE:
+        query["assigned_service_id"] = user["id"]
+    
+    # Apply filters
+    if status:
+        query["status"] = status
+    
+    if date_from or date_to:
+        date_query = {}
+        if date_from:
+            date_query["$gte"] = date_from
+        if date_to:
+            date_query["$lte"] = date_to + "T23:59:59"
+        query["created_at"] = date_query
+    
+    if search:
+        search_upper = search.upper()
+        query["$or"] = [
+            {"license_plate": {"$regex": search_upper, "$options": "i"}},
+            {"vin": {"$regex": search_upper, "$options": "i"}},
+            {"job_number": {"$regex": search_upper, "$options": "i"}}
+        ]
+    
+    # Calculate pagination
+    skip = (page - 1) * per_page
+    total = await db.jobs.count_documents(query)
+    total_pages = math.ceil(total / per_page) if total > 0 else 1
+    
+    jobs = await db.jobs.find(query, {"_id": 0}).sort("created_at", -1).skip(skip).limit(per_page).to_list(per_page)
+    
+    return {
+        "data": [JobResponse(**j) for j in jobs],
+        "pagination": {
+            "page": page,
+            "per_page": per_page,
+            "total": total,
+            "total_pages": total_pages,
+            "has_next": page < total_pages,
+            "has_prev": page > 1
+        }
+    }
+
+# ==================== DATABASE BACKUP ====================
+
+@api_router.post("/admin/backup")
+async def create_backup(user: dict = Depends(get_current_user)):
+    """Create a database backup (Admin only)"""
+    if user["role"] != UserRole.ADMIN:
+        raise HTTPException(status_code=403, detail="Admin only")
+    
+    try:
+        backup_time = datetime.now().strftime("%Y%m%d_%H%M%S")
+        backup_data = {
+            "created_at": datetime.now(timezone.utc).isoformat(),
+            "created_by": user["name"],
+            "collections": {}
+        }
+        
+        # Export collections
+        collections = ["users", "jobs", "audit_logs", "password_resets"]
+        for collection_name in collections:
+            docs = await db[collection_name].find({}, {"_id": 0}).to_list(None)
+            backup_data["collections"][collection_name] = docs
+        
+        # Save backup file
+        backup_file = BACKUP_DIR / f"backup_{backup_time}.json"
+        async with aiofiles.open(backup_file, 'w') as f:
+            await f.write(json.dumps(backup_data, ensure_ascii=False, indent=2, default=str))
+        
+        # Log audit
+        await log_audit("DATABASE_BACKUP", user["id"], user["name"], {
+            "filename": f"backup_{backup_time}.json",
+            "collections": collections
+        })
+        
+        logger.info(f"Database backup created: {backup_file}")
+        
+        return {
+            "message": "Backup erfolgreich erstellt",
+            "filename": f"backup_{backup_time}.json",
+            "size": backup_file.stat().st_size
+        }
+    except Exception as e:
+        logger.error(f"Backup failed: {e}")
+        raise HTTPException(status_code=500, detail=f"Backup fehlgeschlagen: {str(e)}")
+
+@api_router.get("/admin/backups")
+async def list_backups(user: dict = Depends(get_current_user)):
+    """List all available backups"""
+    if user["role"] != UserRole.ADMIN:
+        raise HTTPException(status_code=403, detail="Admin only")
+    
+    backups = []
+    for f in sorted(BACKUP_DIR.glob("backup_*.json"), reverse=True):
+        backups.append({
+            "filename": f.name,
+            "size": f.stat().st_size,
+            "created_at": datetime.fromtimestamp(f.stat().st_mtime).isoformat()
+        })
+    
+    return backups
+
+@api_router.get("/admin/backups/{filename}")
+async def download_backup(filename: str, user: dict = Depends(get_current_user)):
+    """Download a backup file"""
+    if user["role"] != UserRole.ADMIN:
+        raise HTTPException(status_code=403, detail="Admin only")
+    
+    backup_file = BACKUP_DIR / filename
+    if not backup_file.exists() or not filename.startswith("backup_"):
+        raise HTTPException(status_code=404, detail="Backup nicht gefunden")
+    
+    return FileResponse(backup_file, filename=filename)
+
 # ==================== FILE UPLOAD ====================
 
 @api_router.post("/upload")
