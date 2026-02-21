@@ -5,7 +5,7 @@ import json
 from datetime import datetime
 
 # Quick focused test of employee management system
-base_url = "https://abschlepp-manager.preview.emergentagent.com/api"
+base_url = "https://tow-track-system.preview.emergentagent.com/api"
 
 def test_employee_system():
     print("🏢 Testing Employee Management System - Focused Test")
