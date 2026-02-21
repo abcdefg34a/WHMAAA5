@@ -1518,6 +1518,14 @@ async def admin_delete_user(user_id: str, user: dict = Depends(get_current_user)
     # Delete the user
     await db.users.delete_one({"id": user_id})
     
+    # Audit log user deletion
+    await log_audit("USER_DELETED", user["id"], user["name"], {
+        "deleted_user_id": user_id,
+        "deleted_user_email": target_user.get("email"),
+        "deleted_user_name": user_name,
+        "deleted_user_role": target_user.get("role")
+    })
+    
     return {"message": f"{user_name} wurde permanent gelöscht"}
 
 # ==================== PDF GENERATION ====================
