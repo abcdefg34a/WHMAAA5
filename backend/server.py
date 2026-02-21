@@ -943,6 +943,14 @@ async def block_employee(employee_id: str, data: AdminBlockUserRequest, user: di
     await db.users.update_one({"id": employee_id}, {"$set": {"is_blocked": data.blocked}})
     
     action = "gesperrt" if data.blocked else "entsperrt"
+    
+    # Audit log employee block/unblock
+    await log_audit("EMPLOYEE_BLOCKED" if data.blocked else "EMPLOYEE_UNBLOCKED", user["id"], user["name"], {
+        "employee_id": employee_id,
+        "employee_name": employee["name"],
+        "blocked": data.blocked
+    })
+    
     return {"message": f"Mitarbeiter {employee['name']} wurde {action}"}
 
 @api_router.delete("/authority/employees/{employee_id}")
