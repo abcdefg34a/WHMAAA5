@@ -1484,6 +1484,15 @@ async def admin_block_user(user_id: str, data: AdminBlockUserRequest, user: dict
     await db.users.update_one({"id": user_id}, {"$set": {"is_blocked": data.blocked}})
     
     action = "gesperrt" if data.blocked else "entsperrt"
+    
+    # Audit log user block/unblock
+    await log_audit("USER_BLOCKED" if data.blocked else "USER_UNBLOCKED", user["id"], user["name"], {
+        "target_user_id": user_id,
+        "target_user_email": target_user.get("email"),
+        "target_user_name": target_user.get("name"),
+        "blocked": data.blocked
+    })
+    
     return {"message": f"{target_user.get('name', target_user['email'])} wurde {action}"}
 
 @api_router.delete("/admin/users/{user_id}")
