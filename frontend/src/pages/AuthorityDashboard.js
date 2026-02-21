@@ -51,6 +51,11 @@ export const AuthorityDashboard = () => {
   const [serviceCodeInput, setServiceCodeInput] = useState('');
   const [linkDialogOpen, setLinkDialogOpen] = useState(false);
 
+  // Pagination state
+  const [currentPage, setCurrentPage] = useState(1);
+  const [totalJobs, setTotalJobs] = useState(0);
+  const itemsPerPage = 50;
+
   // Employee management state
   const [employees, setEmployees] = useState([]);
   const [employeeDialogOpen, setEmployeeDialogOpen] = useState(false);
