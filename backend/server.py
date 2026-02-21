@@ -264,6 +264,56 @@ def hash_password(password: str) -> str:
 def verify_password(password: str, hashed: str) -> bool:
     return bcrypt.checkpw(password.encode(), hashed.encode())
 
+def validate_password(password: str) -> tuple[bool, str]:
+    """
+    Validate password strength:
+    - Minimum 8 characters
+    - At least one uppercase letter
+    - At least one lowercase letter
+    - At least one number
+    Returns (is_valid, error_message)
+    """
+    if len(password) < 8:
+        return False, "Passwort muss mindestens 8 Zeichen lang sein"
+    if not re.search(r'[A-Z]', password):
+        return False, "Passwort muss mindestens einen Großbuchstaben enthalten"
+    if not re.search(r'[a-z]', password):
+        return False, "Passwort muss mindestens einen Kleinbuchstaben enthalten"
+    if not re.search(r'\d', password):
+        return False, "Passwort muss mindestens eine Zahl enthalten"
+    return True, ""
+
+def check_rate_limit(identifier: str) -> tuple[bool, int]:
+    """
+    Check if login attempts are within rate limit.
+    Returns (is_allowed, seconds_until_reset)
+    """
+    current_time = time.time()
+    # Clean old attempts
+    login_attempts[identifier] = [
+        t for t in login_attempts[identifier] 
+        if current_time - t < RATE_LIMIT_WINDOW
+    ]
+    
+    if len(login_attempts[identifier]) >= MAX_LOGIN_ATTEMPTS:
+        oldest_attempt = min(login_attempts[identifier])
+        seconds_remaining = int(RATE_LIMIT_WINDOW - (current_time - oldest_attempt))
+        return False, seconds_remaining
+    
+    return True, 0
+
+def record_login_attempt(identifier: str):
+    """Record a failed login attempt"""
+    login_attempts[identifier].append(time.time())
+
+def clear_login_attempts(identifier: str):
+    """Clear login attempts after successful login"""
+    login_attempts[identifier] = []
+
+def generate_reset_token() -> str:
+    """Generate a secure password reset token"""
+    return ''.join(random.choices(string.ascii_letters + string.digits, k=64))
+
 def create_token(user_id: str, role: str) -> str:
     payload = {
         "user_id": user_id,
