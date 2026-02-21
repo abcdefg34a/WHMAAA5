@@ -13,6 +13,8 @@ import ResetPasswordPage from "./pages/ResetPasswordPage";
 import AuthorityDashboard from "./pages/AuthorityDashboard";
 import TowingDashboard from "./pages/TowingDashboard";
 import AdminDashboard from "./pages/AdminDashboard";
+import DatenschutzPage from "./pages/DatenschutzPage";
+import ImpressumPage from "./pages/ImpressumPage";
 
 // Protected Route Component
 const ProtectedRoute = ({ children, allowedRoles }) => {
