@@ -726,6 +726,12 @@ async def reset_password(data: PasswordResetConfirm):
         {"$set": {"password": new_hashed}}
     )
     
+    # Audit log password reset
+    await log_audit("PASSWORD_RESET", reset_record["user_id"], reset_record["email"], {
+        "email": reset_record["email"],
+        "method": "reset_token"
+    })
+    
     # Delete used token
     await db.password_resets.delete_one({"token": data.token})
     
