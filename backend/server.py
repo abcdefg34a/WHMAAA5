@@ -6,9 +6,10 @@ from starlette.middleware.cors import CORSMiddleware
 from motor.motor_asyncio import AsyncIOMotorClient
 import os
 import logging
+from logging.handlers import RotatingFileHandler
 from pathlib import Path
 from pydantic import BaseModel, Field, EmailStr, validator
-from typing import List, Optional, Dict
+from typing import List, Optional, Dict, Any
 import uuid
 from datetime import datetime, timezone, timedelta
 import jwt
@@ -27,6 +28,11 @@ import aiofiles
 import math
 from collections import defaultdict
 import time
+from PIL import Image as PILImage
+import openpyxl
+from openpyxl.styles import Font, Alignment, PatternFill, Border, Side
+import csv
+import json
 
 ROOT_DIR = Path(__file__).parent
 load_dotenv(ROOT_DIR / '.env')
@@ -36,9 +42,13 @@ mongo_url = os.environ['MONGO_URL']
 client = AsyncIOMotorClient(mongo_url)
 db = client[os.environ['DB_NAME']]
 
-# Create uploads directory
+# Create directories
 UPLOAD_DIR = ROOT_DIR / "uploads"
 UPLOAD_DIR.mkdir(exist_ok=True)
+LOG_DIR = ROOT_DIR / "logs"
+LOG_DIR.mkdir(exist_ok=True)
+BACKUP_DIR = ROOT_DIR / "backups"
+BACKUP_DIR.mkdir(exist_ok=True)
 
 # JWT Configuration
 JWT_SECRET = os.environ.get('JWT_SECRET', 'your-super-secret-key-change-in-production')
@@ -50,14 +60,67 @@ RATE_LIMIT_WINDOW = 900  # 15 minutes in seconds
 MAX_LOGIN_ATTEMPTS = 5   # Max attempts per window
 login_attempts: Dict[str, List[float]] = defaultdict(list)
 
+# Image Compression Settings
+MAX_IMAGE_SIZE = (1920, 1080)  # Max dimensions
+JPEG_QUALITY = 75  # Quality for JPEG compression
+
 # Create the main app
 app = FastAPI(title="Abschlepp-Management API")
 api_router = APIRouter(prefix="/api")
 security = HTTPBearer()
 
-# Logging
-logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
-logger = logging.getLogger(__name__)
+# ==================== STRUCTURED LOGGING ====================
+def setup_logging():
+    """Setup structured logging with file rotation"""
+    log_format = '%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+    
+    # Console handler
+    console_handler = logging.StreamHandler()
+    console_handler.setLevel(logging.INFO)
+    console_handler.setFormatter(logging.Formatter(log_format))
+    
+    # File handler with rotation (10MB max, keep 5 backups)
+    file_handler = RotatingFileHandler(
+        LOG_DIR / "app.log",
+        maxBytes=10*1024*1024,
+        backupCount=5
+    )
+    file_handler.setLevel(logging.INFO)
+    file_handler.setFormatter(logging.Formatter(log_format))
+    
+    # Error file handler
+    error_handler = RotatingFileHandler(
+        LOG_DIR / "error.log",
+        maxBytes=10*1024*1024,
+        backupCount=5
+    )
+    error_handler.setLevel(logging.ERROR)
+    error_handler.setFormatter(logging.Formatter(log_format))
+    
+    # Audit log handler
+    audit_handler = RotatingFileHandler(
+        LOG_DIR / "audit.log",
+        maxBytes=10*1024*1024,
+        backupCount=10
+    )
+    audit_handler.setLevel(logging.INFO)
+    audit_handler.setFormatter(logging.Formatter('%(asctime)s - %(message)s'))
+    
+    # Configure root logger
+    root_logger = logging.getLogger()
+    root_logger.setLevel(logging.INFO)
+    root_logger.addHandler(console_handler)
+    root_logger.addHandler(file_handler)
+    root_logger.addHandler(error_handler)
+    
+    # Configure audit logger
+    audit_logger = logging.getLogger('audit')
+    audit_logger.addHandler(audit_handler)
+    audit_logger.setLevel(logging.INFO)
+    
+    return logging.getLogger(__name__), audit_logger
+
+logger, audit_logger = setup_logging()
 
 # ==================== MODELS ====================
 
