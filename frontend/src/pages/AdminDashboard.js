@@ -110,16 +110,43 @@ export const AdminDashboard = () => {
     }
   };
 
+  const handleAuthorityApproval = async (approved) => {
+    if (!selectedAuthority) return;
+    setApproving(true);
+
+    try {
+      await axios.post(`${API}/admin/approve-authority/${selectedAuthority.id}`, {
+        approved,
+        rejection_reason: approved ? null : rejectionReason
+      });
+      
+      toast.success(approved ? 'Behörde freigeschaltet' : 'Behörde abgelehnt');
+      setAuthorityApprovalDialogOpen(false);
+      setSelectedAuthority(null);
+      setRejectionReason('');
+      fetchData();
+    } catch (error) {
+      toast.error('Fehler bei der Verarbeitung');
+    } finally {
+      setApproving(false);
+    }
+  };
+
   const openApprovalDialog = (service) => {
     setSelectedService(service);
     setApprovalDialogOpen(true);
   };
 
+  const openAuthorityApprovalDialog = (authority) => {
+    setSelectedAuthority(authority);
+    setAuthorityApprovalDialogOpen(true);
+  };
+
   // User Management Functions
   const handleUpdatePassword = async () => {
     if (!selectedUser || !newPassword) return;
-    if (newPassword.length < 6) {
-      toast.error('Passwort muss mindestens 6 Zeichen haben');
+    if (newPassword.length < 8) {
+      toast.error('Passwort muss mindestens 8 Zeichen haben');
       return;
     }
     
