@@ -52,6 +52,13 @@ export const AdminDashboard = () => {
   useEffect(() => {
     fetchData();
   }, []);
+  // Audit logs state
+  const [auditLogs, setAuditLogs] = useState([]);
+  const [auditLoading, setAuditLoading] = useState(false);
+  
+  // Backup state
+  const [backups, setBackups] = useState([]);
+  const [backupLoading, setBackupLoading] = useState(false);
 
   const fetchData = async () => {
     setLoading(true);
@@ -74,6 +81,49 @@ export const AdminDashboard = () => {
     } finally {
       setLoading(false);
     }
+  };
+
+  const fetchAuditLogs = async () => {
+    setAuditLoading(true);
+    try {
+      const response = await axios.get(`${API}/admin/audit-logs?limit=100`);
+      setAuditLogs(response.data);
+    } catch (error) {
+      console.error('Error fetching audit logs:', error);
+    } finally {
+      setAuditLoading(false);
+    }
+  };
+
+  const fetchBackups = async () => {
+    setBackupLoading(true);
+    try {
+      const response = await axios.get(`${API}/admin/backups`);
+      setBackups(response.data);
+    } catch (error) {
+      console.error('Error fetching backups:', error);
+    } finally {
+      setBackupLoading(false);
+    }
+  };
+
+  const handleCreateBackup = async () => {
+    try {
+      toast.info('Backup wird erstellt...');
+      await axios.post(`${API}/admin/backup`);
+      toast.success('Backup erfolgreich erstellt');
+      fetchBackups();
+    } catch (error) {
+      toast.error('Backup fehlgeschlagen');
+    }
+  };
+
+  const handleExportCSV = () => {
+    window.open(`${API}/export/jobs/csv`, '_blank');
+  };
+
+  const handleExportExcel = () => {
+    window.open(`${API}/export/jobs/excel`, '_blank');
   };
 
   const handleSearch = async () => {
