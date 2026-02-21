@@ -1004,12 +1004,23 @@ async def approve_service(service_id: str, data: ApproveServiceRequest, user: di
             {"id": service_id},
             {"$set": {"approval_status": ApprovalStatus.APPROVED, "rejection_reason": None}}
         )
+        # Audit log approval
+        await log_audit("SERVICE_APPROVED", user["id"], user["name"], {
+            "service_id": service_id,
+            "company_name": service["company_name"]
+        })
         return {"message": f"{service['company_name']} wurde freigeschaltet"}
     else:
         await db.users.update_one(
             {"id": service_id},
             {"$set": {"approval_status": ApprovalStatus.REJECTED, "rejection_reason": data.rejection_reason}}
         )
+        # Audit log rejection
+        await log_audit("SERVICE_REJECTED", user["id"], user["name"], {
+            "service_id": service_id,
+            "company_name": service["company_name"],
+            "reason": data.rejection_reason
+        })
         return {"message": f"{service['company_name']} wurde abgelehnt"}
 
 @api_router.post("/admin/approve-authority/{authority_id}")
