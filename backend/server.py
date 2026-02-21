@@ -424,6 +424,9 @@ async def register(data: UserRegister, request: Request):
         user_doc["parent_authority_id"] = None
         # Generate Dienstnummer for main authority
         user_doc["dienstnummer"] = await generate_dienstnummer(user_id)
+        # Authority also needs approval
+        user_doc["approval_status"] = ApprovalStatus.PENDING
+        user_doc["rejection_reason"] = None
     elif data.role == UserRole.TOWING_SERVICE:
         # Check if business license is provided
         if not data.business_license:
