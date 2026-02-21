@@ -384,12 +384,24 @@ async def require_role(roles: List[str], user: dict = Depends(get_current_user))
 
 # ==================== AUTH ROUTES ====================
 
+class PasswordResetRequest(BaseModel):
+    email: EmailStr
+
+class PasswordResetConfirm(BaseModel):
+    token: str
+    new_password: str
+
 @api_router.post("/auth/register", response_model=TokenResponse)
-async def register(data: UserRegister):
+async def register(data: UserRegister, request: Request):
     # Check if email exists
     existing = await db.users.find_one({"email": data.email})
     if existing:
-        raise HTTPException(status_code=400, detail="Email already registered")
+        raise HTTPException(status_code=400, detail="E-Mail bereits registriert")
+    
+    # Validate password strength
+    is_valid, error_msg = validate_password(data.password)
+    if not is_valid:
+        raise HTTPException(status_code=400, detail=error_msg)
     
     user_id = str(uuid.uuid4())
     now = datetime.now(timezone.utc).isoformat()
@@ -400,7 +412,8 @@ async def register(data: UserRegister):
         "password": hash_password(data.password),
         "role": data.role,
         "name": data.name,
-        "created_at": now
+        "created_at": now,
+        "email_verified": False  # Email verification status
     }
     
     if data.role == UserRole.AUTHORITY:
