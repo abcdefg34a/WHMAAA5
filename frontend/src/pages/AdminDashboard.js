@@ -69,15 +69,26 @@ export const AdminDashboard = () => {
   const fetchData = async () => {
     setLoading(true);
     try {
-      const [statsRes, jobsRes, usersRes, pendingServicesRes, pendingAuthoritiesRes] = await Promise.all([
+      const params = new URLSearchParams();
+      params.append('page', currentPage.toString());
+      params.append('limit', itemsPerPage.toString());
+      if (searchQuery) params.append('search', searchQuery);
+      if (statusFilter && statusFilter !== 'all') params.append('status', statusFilter);
+      
+      const [statsRes, jobsRes, jobsCountRes, usersRes, pendingServicesRes, pendingAuthoritiesRes] = await Promise.all([
         axios.get(`${API}/admin/stats`),
-        axios.get(`${API}/admin/jobs`),
+        axios.get(`${API}/admin/jobs?${params.toString()}`),
+        axios.get(`${API}/admin/jobs/count?${new URLSearchParams({ 
+          ...(searchQuery && { search: searchQuery }), 
+          ...(statusFilter && statusFilter !== 'all' && { status: statusFilter }) 
+        }).toString()}`),
         axios.get(`${API}/admin/users`),
         axios.get(`${API}/admin/pending-services`),
         axios.get(`${API}/admin/pending-authorities`)
       ]);
       setStats(statsRes.data);
       setJobs(jobsRes.data);
+      setTotalJobs(jobsCountRes.data.total);
       setUsers(usersRes.data);
       setPendingServices(pendingServicesRes.data);
       setPendingAuthorities(pendingAuthoritiesRes.data);
