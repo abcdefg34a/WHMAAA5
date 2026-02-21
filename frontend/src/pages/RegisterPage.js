@@ -228,7 +228,6 @@ export const RegisterPage = () => {
                     onChange={(e) => setPassword(e.target.value)}
                     placeholder="••••••••"
                     required
-                    minLength={6}
                     className="pr-12"
                   />
                   <button
@@ -239,6 +238,30 @@ export const RegisterPage = () => {
                     {showPassword ? <EyeOff className="h-5 w-5" /> : <Eye className="h-5 w-5" />}
                   </button>
                 </div>
+                {/* Password Requirements */}
+                {password && (
+                  <div className="p-3 bg-slate-50 rounded-lg space-y-2 text-xs">
+                    <p className="font-medium text-slate-600">Passwort-Anforderungen:</p>
+                    <div className="grid grid-cols-2 gap-1">
+                      <div className={`flex items-center gap-1.5 ${passwordChecks.length ? 'text-green-600' : 'text-slate-400'}`}>
+                        {passwordChecks.length ? <CheckCircle className="h-3 w-3" /> : <div className="h-3 w-3 rounded-full border" />}
+                        Min. 8 Zeichen
+                      </div>
+                      <div className={`flex items-center gap-1.5 ${passwordChecks.uppercase ? 'text-green-600' : 'text-slate-400'}`}>
+                        {passwordChecks.uppercase ? <CheckCircle className="h-3 w-3" /> : <div className="h-3 w-3 rounded-full border" />}
+                        Großbuchstabe
+                      </div>
+                      <div className={`flex items-center gap-1.5 ${passwordChecks.lowercase ? 'text-green-600' : 'text-slate-400'}`}>
+                        {passwordChecks.lowercase ? <CheckCircle className="h-3 w-3" /> : <div className="h-3 w-3 rounded-full border" />}
+                        Kleinbuchstabe
+                      </div>
+                      <div className={`flex items-center gap-1.5 ${passwordChecks.number ? 'text-green-600' : 'text-slate-400'}`}>
+                        {passwordChecks.number ? <CheckCircle className="h-3 w-3" /> : <div className="h-3 w-3 rounded-full border" />}
+                        Zahl
+                      </div>
+                    </div>
+                  </div>
+                )}
               </div>
 
               {/* Authority-specific fields */}
