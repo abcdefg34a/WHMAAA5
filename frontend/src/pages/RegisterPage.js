@@ -79,6 +79,13 @@ export const RegisterPage = () => {
     setLoading(true);
     setError('');
 
+    // Validate password
+    if (!allPasswordChecksPass) {
+      setError('Bitte erfüllen Sie alle Passwort-Anforderungen');
+      setLoading(false);
+      return;
+    }
+
     try {
       const data = {
         email,
