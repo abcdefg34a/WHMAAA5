@@ -35,6 +35,11 @@ export const AdminDashboard = () => {
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState('all');
   
+  // Pagination state
+  const [currentPage, setCurrentPage] = useState(1);
+  const [totalJobs, setTotalJobs] = useState(0);
+  const itemsPerPage = 50;
+  
   // Approval dialog state
   const [selectedService, setSelectedService] = useState(null);
   const [selectedAuthority, setSelectedAuthority] = useState(null);
