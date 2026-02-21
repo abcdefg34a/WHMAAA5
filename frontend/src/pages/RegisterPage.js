@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate, Link, useSearchParams } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
-import { Car, Eye, EyeOff, ArrowLeft, Shield, Truck, Upload, Euro } from 'lucide-react';
+import { Car, Eye, EyeOff, ArrowLeft, Shield, Truck, Upload, Euro, CheckCircle } from 'lucide-react';
 import { Button } from '../components/ui/button';
 import { Input } from '../components/ui/input';
 import { Label } from '../components/ui/label';
@@ -39,6 +39,15 @@ export const RegisterPage = () => {
   // NEW: Business license
   const [businessLicense, setBusinessLicense] = useState('');
   const [businessLicenseFileName, setBusinessLicenseFileName] = useState('');
+
+  // Password validation
+  const passwordChecks = {
+    length: password.length >= 8,
+    uppercase: /[A-Z]/.test(password),
+    lowercase: /[a-z]/.test(password),
+    number: /\d/.test(password),
+  };
+  const allPasswordChecksPass = Object.values(passwordChecks).every(Boolean);
 
   useEffect(() => {
     const role = searchParams.get('role');
