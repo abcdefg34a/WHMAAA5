@@ -888,6 +888,15 @@ async def create_employee(data: CreateEmployeeRequest, user: dict = Depends(get_
     
     await db.users.insert_one(employee_doc)
     
+    # Audit log employee creation
+    await log_audit("EMPLOYEE_CREATED", user["id"], user["name"], {
+        "employee_id": employee_id,
+        "employee_email": data.email,
+        "employee_name": data.name,
+        "dienstnummer": dienstnummer,
+        "authority_id": user["id"]
+    })
+    
     return EmployeeResponse(
         id=employee_id,
         email=data.email,
