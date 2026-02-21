@@ -267,6 +267,29 @@ export const LandingPage = () => {
                         </div>
                       </div>
 
+                      {/* Interaktive Karte */}
+                      {searchResult.location_lat && searchResult.location_lng && (
+                        <div className="rounded-lg overflow-hidden border border-slate-200 mb-4" style={{ height: '250px' }}>
+                          <MapContainer 
+                            center={[searchResult.location_lat, searchResult.location_lng]} 
+                            zoom={15} 
+                            style={{ height: '100%', width: '100%' }}
+                            scrollWheelZoom={false}
+                          >
+                            <TileLayer
+                              attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
+                              url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+                            />
+                            <Marker position={[searchResult.location_lat, searchResult.location_lng]}>
+                              <Popup>
+                                <strong>{searchResult.license_plate}</strong><br />
+                                {searchResult.yard_address}
+                              </Popup>
+                            </Marker>
+                          </MapContainer>
+                        </div>
+                      )}
+
                       <a
                         href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(searchResult.yard_address)}`}
                         target="_blank"
