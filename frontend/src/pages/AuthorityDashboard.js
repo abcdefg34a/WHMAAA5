@@ -728,6 +728,17 @@ export const AuthorityDashboard = () => {
                     ))}
                   </div>
                 )}
+                
+                {/* Pagination */}
+                {!loading && jobs.length > 0 && (
+                  <Pagination 
+                    currentPage={currentPage}
+                    totalPages={Math.ceil(totalJobs / itemsPerPage)}
+                    totalItems={totalJobs}
+                    itemsPerPage={itemsPerPage}
+                    onPageChange={handlePageChange}
+                  />
+                )}
               </CardContent>
             </Card>
           </TabsContent>
