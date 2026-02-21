@@ -1036,7 +1036,23 @@ export const AdminDashboard = () => {
                           <Button 
                             variant="ghost" 
                             size="sm"
-                            onClick={() => window.open(`${API}/admin/backups/${backup.filename}`, '_blank')}
+                            onClick={async () => {
+                              try {
+                                const response = await axios.get(`${API}/admin/backups/${backup.filename}`, {
+                                  responseType: 'blob'
+                                });
+                                const url = window.URL.createObjectURL(new Blob([response.data]));
+                                const link = document.createElement('a');
+                                link.href = url;
+                                link.setAttribute('download', backup.filename);
+                                document.body.appendChild(link);
+                                link.click();
+                                link.remove();
+                                window.URL.revokeObjectURL(url);
+                              } catch (error) {
+                                toast.error('Download fehlgeschlagen');
+                              }
+                            }}
                           >
                             <Download className="h-4 w-4" />
                           </Button>
