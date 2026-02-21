@@ -55,9 +55,6 @@ export const AdminDashboard = () => {
   const [newPassword, setNewPassword] = useState('');
   const [actionLoading, setActionLoading] = useState(false);
 
-  useEffect(() => {
-    fetchData();
-  }, [currentPage]);
   // Audit logs state
   const [auditLogs, setAuditLogs] = useState([]);
   const [auditLoading, setAuditLoading] = useState(false);
@@ -65,6 +62,24 @@ export const AdminDashboard = () => {
   // Backup state
   const [backups, setBackups] = useState([]);
   const [backupLoading, setBackupLoading] = useState(false);
+
+  useEffect(() => {
+    fetchData();
+  }, [currentPage]);
+
+  // Load audit logs when switching to audit tab
+  useEffect(() => {
+    if (activeTab === 'audit' && auditLogs.length === 0) {
+      fetchAuditLogs();
+    }
+  }, [activeTab]);
+
+  // Load backups when switching to system tab
+  useEffect(() => {
+    if (activeTab === 'system' && backups.length === 0) {
+      fetchBackups();
+    }
+  }, [activeTab]);
 
   const fetchData = async () => {
     setLoading(true);
