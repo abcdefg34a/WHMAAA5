@@ -65,7 +65,8 @@ export const AdminDashboard = () => {
       setStats(statsRes.data);
       setJobs(jobsRes.data);
       setUsers(usersRes.data);
-      setPendingServices(pendingRes.data);
+      setPendingServices(pendingServicesRes.data);
+      setPendingAuthorities(pendingAuthoritiesRes.data);
     } catch (error) {
       console.error('Error fetching data:', error);
       toast.error('Fehler beim Laden der Daten');
