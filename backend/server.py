@@ -1510,11 +1510,19 @@ async def get_all_jobs(
     if status:
         query["status"] = status
     if search:
-        search_upper = search.upper()
+        # Full-text search across multiple fields
         query["$or"] = [
-            {"license_plate": {"$regex": search_upper, "$options": "i"}},
-            {"vin": {"$regex": search_upper, "$options": "i"}},
-            {"job_number": {"$regex": search_upper, "$options": "i"}}
+            {"license_plate": {"$regex": search, "$options": "i"}},
+            {"vin": {"$regex": search, "$options": "i"}},
+            {"job_number": {"$regex": search, "$options": "i"}},
+            {"tow_reason": {"$regex": search, "$options": "i"}},
+            {"notes": {"$regex": search, "$options": "i"}},
+            {"service_notes": {"$regex": search, "$options": "i"}},
+            {"location_address": {"$regex": search, "$options": "i"}},
+            {"created_by_name": {"$regex": search, "$options": "i"}},
+            {"assigned_service_name": {"$regex": search, "$options": "i"}},
+            {"owner_first_name": {"$regex": search, "$options": "i"}},
+            {"owner_last_name": {"$regex": search, "$options": "i"}}
         ]
     
     skip = (page - 1) * limit
