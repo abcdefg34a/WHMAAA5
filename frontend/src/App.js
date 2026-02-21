@@ -134,6 +134,10 @@ function AppRoutes() {
         } 
       />
 
+      {/* Legal Pages */}
+      <Route path="/datenschutz" element={<DatenschutzPage />} />
+      <Route path="/impressum" element={<ImpressumPage />} />
+
       {/* Fallback */}
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>
