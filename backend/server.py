@@ -818,6 +818,18 @@ async def get_pending_services(user: dict = Depends(get_current_user)):
     ).to_list(100)
     return [UserResponse(**s) for s in services]
 
+@api_router.get("/admin/pending-authorities", response_model=List[UserResponse])
+async def get_pending_authorities(user: dict = Depends(get_current_user)):
+    """Get all authorities waiting for approval"""
+    if user["role"] != UserRole.ADMIN:
+        raise HTTPException(status_code=403, detail="Admin only")
+    
+    authorities = await db.users.find(
+        {"role": UserRole.AUTHORITY, "approval_status": ApprovalStatus.PENDING, "is_main_authority": True},
+        {"_id": 0, "password": 0}
+    ).to_list(100)
+    return [UserResponse(**a) for a in authorities]
+
 @api_router.post("/admin/approve-service/{service_id}")
 async def approve_service(service_id: str, data: ApproveServiceRequest, user: dict = Depends(get_current_user)):
     if user["role"] != UserRole.ADMIN:
@@ -839,6 +851,29 @@ async def approve_service(service_id: str, data: ApproveServiceRequest, user: di
             {"$set": {"approval_status": ApprovalStatus.REJECTED, "rejection_reason": data.rejection_reason}}
         )
         return {"message": f"{service['company_name']} wurde abgelehnt"}
+
+@api_router.post("/admin/approve-authority/{authority_id}")
+async def approve_authority(authority_id: str, data: ApproveServiceRequest, user: dict = Depends(get_current_user)):
+    """Approve or reject an authority registration"""
+    if user["role"] != UserRole.ADMIN:
+        raise HTTPException(status_code=403, detail="Admin only")
+    
+    authority = await db.users.find_one({"id": authority_id, "role": UserRole.AUTHORITY})
+    if not authority:
+        raise HTTPException(status_code=404, detail="Behörde nicht gefunden")
+    
+    if data.approved:
+        await db.users.update_one(
+            {"id": authority_id},
+            {"$set": {"approval_status": ApprovalStatus.APPROVED, "rejection_reason": None}}
+        )
+        return {"message": f"{authority['authority_name']} wurde freigeschaltet"}
+    else:
+        await db.users.update_one(
+            {"id": authority_id},
+            {"$set": {"approval_status": ApprovalStatus.REJECTED, "rejection_reason": data.rejection_reason}}
+        )
+        return {"message": f"{authority['authority_name']} wurde abgelehnt"}
 
 # ==================== JOB ROUTES ====================
 
