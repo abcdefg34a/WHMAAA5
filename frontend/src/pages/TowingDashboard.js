@@ -172,6 +172,7 @@ export const TowingDashboard = () => {
     setFilterStatus('all');
     setFilterDateFrom('');
     setFilterDateTo('');
+    setCurrentPage(1);
   };
 
   const hasActiveFilters = filterStatus !== 'all' || filterDateFrom || filterDateTo;
