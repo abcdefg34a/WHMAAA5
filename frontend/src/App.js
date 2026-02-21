@@ -8,6 +8,8 @@ import { Toaster } from "./components/ui/sonner";
 import LandingPage from "./pages/LandingPage";
 import LoginPage from "./pages/LoginPage";
 import RegisterPage from "./pages/RegisterPage";
+import ForgotPasswordPage from "./pages/ForgotPasswordPage";
+import ResetPasswordPage from "./pages/ResetPasswordPage";
 import AuthorityDashboard from "./pages/AuthorityDashboard";
 import TowingDashboard from "./pages/TowingDashboard";
 import AdminDashboard from "./pages/AdminDashboard";
