@@ -465,7 +465,8 @@ class GoLiveFeatureTester:
         )
         
         if success and response:
-            total_logs = response.get('total')
+            # The endpoint returns 'count' not 'total'
+            total_logs = response.get('count') or response.get('total')
             print(f"   Total audit logs: {total_logs}")
             
             if isinstance(total_logs, int) and total_logs >= 0:
