@@ -85,17 +85,29 @@ export const AuthorityDashboard = () => {
     if (user?.is_main_authority) {
       fetchEmployees();
     }
-  }, [user]);
+  }, [user, currentPage]);
 
   const fetchJobs = async () => {
     try {
-      const response = await axios.get(`${API}/jobs`);
-      setJobs(response.data);
+      const params = new URLSearchParams();
+      params.append('page', currentPage.toString());
+      params.append('limit', itemsPerPage.toString());
+      
+      const [jobsRes, countRes] = await Promise.all([
+        axios.get(`${API}/jobs?${params.toString()}`),
+        axios.get(`${API}/jobs/count/total`)
+      ]);
+      setJobs(jobsRes.data);
+      setTotalJobs(countRes.data.total);
     } catch (error) {
       console.error('Error fetching jobs:', error);
     } finally {
       setLoading(false);
     }
+  };
+
+  const handlePageChange = (page) => {
+    setCurrentPage(page);
   };
 
   const fetchEmployees = async () => {
