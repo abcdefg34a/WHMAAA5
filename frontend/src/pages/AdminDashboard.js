@@ -57,7 +57,7 @@ export const AdminDashboard = () => {
 
   useEffect(() => {
     fetchData();
-  }, []);
+  }, [currentPage]);
   // Audit logs state
   const [auditLogs, setAuditLogs] = useState([]);
   const [auditLoading, setAuditLoading] = useState(false);
