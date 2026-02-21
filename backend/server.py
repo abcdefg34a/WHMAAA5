@@ -1206,8 +1206,52 @@ async def get_jobs(
             {"job_number": {"$regex": search_upper, "$options": "i"}}
         ]
     
-    jobs = await db.jobs.find(query, {"_id": 0}).sort("created_at", -1).to_list(1000)
+    # Pagination
+    skip = (page - 1) * limit
+    jobs = await db.jobs.find(query, {"_id": 0}).sort("created_at", -1).skip(skip).limit(limit).to_list(limit)
     return [JobResponse(**j) for j in jobs]
+
+@api_router.get("/jobs/count/total")
+async def get_jobs_count(
+    status: Optional[str] = None,
+    search: Optional[str] = None,
+    date_from: Optional[str] = None,
+    date_to: Optional[str] = None,
+    user: dict = Depends(get_current_user)
+):
+    """Get total count of jobs for pagination"""
+    query = {}
+    
+    # Filter by role
+    if user["role"] == UserRole.AUTHORITY:
+        if user.get("is_main_authority"):
+            query["authority_id"] = user["id"]
+        else:
+            query["created_by_id"] = user["id"]
+    elif user["role"] == UserRole.TOWING_SERVICE:
+        query["assigned_service_id"] = user["id"]
+    
+    if status:
+        query["status"] = status
+    
+    if date_from or date_to:
+        date_query = {}
+        if date_from:
+            date_query["$gte"] = date_from
+        if date_to:
+            date_query["$lte"] = date_to + "T23:59:59"
+        query["created_at"] = date_query
+    
+    if search:
+        search_upper = search.upper()
+        query["$or"] = [
+            {"license_plate": {"$regex": search_upper, "$options": "i"}},
+            {"vin": {"$regex": search_upper, "$options": "i"}},
+            {"job_number": {"$regex": search_upper, "$options": "i"}}
+        ]
+    
+    count = await db.jobs.count_documents(query)
+    return {"total": count}
 
 @api_router.get("/jobs/{job_id}", response_model=JobResponse)
 async def get_job(job_id: str, user: dict = Depends(get_current_user)):
