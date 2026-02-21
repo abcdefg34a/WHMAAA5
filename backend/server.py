@@ -1167,6 +1167,8 @@ async def get_jobs(
     search: Optional[str] = None,
     date_from: Optional[str] = None,
     date_to: Optional[str] = None,
+    page: int = 1,
+    limit: int = 50,
     user: dict = Depends(get_current_user)
 ):
     query = {}
