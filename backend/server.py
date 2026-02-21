@@ -1029,6 +1029,14 @@ async def create_job(data: JobCreate, user: dict = Depends(get_current_user)):
     # Get the authority ID (either main or from parent)
     authority_id = get_authority_id(user)
     
+    # Compress photos before storing
+    compressed_photos = []
+    for photo in data.photos:
+        if photo and photo.startswith('data:image'):
+            compressed_photos.append(compress_image_base64(photo))
+        else:
+            compressed_photos.append(photo)
+    
     job_doc = {
         "id": job_id,
         "job_number": generate_job_number(),
@@ -1038,7 +1046,7 @@ async def create_job(data: JobCreate, user: dict = Depends(get_current_user)):
         "location_address": data.location_address,
         "location_lat": data.location_lat,
         "location_lng": data.location_lng,
-        "photos": data.photos,
+        "photos": compressed_photos,
         "notes": data.notes,
         "status": JobStatus.ASSIGNED if data.assigned_service_id else JobStatus.PENDING,
         "created_by_id": user["id"],
@@ -1065,6 +1073,13 @@ async def create_job(data: JobCreate, user: dict = Depends(get_current_user)):
     
     await db.jobs.insert_one(job_doc)
     job_doc.pop("_id", None)
+    
+    # Log audit
+    await log_audit("JOB_CREATED", user["id"], user["name"], {
+        "job_id": job_id,
+        "job_number": job_doc["job_number"],
+        "license_plate": job_doc["license_plate"]
+    })
     
     return JobResponse(**job_doc)
 
