@@ -923,7 +923,7 @@ export const AdminDashboard = () => {
             <Button
               data-testid="save-password-btn"
               onClick={handleUpdatePassword}
-              disabled={actionLoading || newPassword.length < 6}
+              disabled={actionLoading || newPassword.length < 8}
               className="w-full bg-slate-900 hover:bg-slate-800"
             >
               {actionLoading ? <div className="loading-spinner mr-2"></div> : <Key className="h-4 w-4 mr-2" />}
@@ -959,6 +959,79 @@ export const AdminDashboard = () => {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      {/* Authority Approval Dialog */}
+      <Dialog open={authorityApprovalDialogOpen} onOpenChange={setAuthorityApprovalDialogOpen}>
+        <DialogContent className="max-w-lg">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Shield className="h-5 w-5 text-blue-500" />
+              Behörde prüfen
+            </DialogTitle>
+            <DialogDescription>
+              Prüfen Sie die Registrierungsanfrage und entscheiden Sie über die Freischaltung
+            </DialogDescription>
+          </DialogHeader>
+
+          {selectedAuthority && (
+            <div className="space-y-4">
+              <div className="p-4 bg-blue-50 rounded-lg">
+                <h3 className="font-bold text-lg">{selectedAuthority.authority_name}</h3>
+                <p className="text-sm text-slate-500">{selectedAuthority.email}</p>
+              </div>
+
+              <div className="grid grid-cols-2 gap-4 text-sm">
+                <div>
+                  <p className="text-slate-500">Ansprechpartner</p>
+                  <p className="font-medium">{selectedAuthority.name}</p>
+                </div>
+                <div>
+                  <p className="text-slate-500">Abteilung</p>
+                  <p className="font-medium">{selectedAuthority.department || '-'}</p>
+                </div>
+                <div>
+                  <p className="text-slate-500">Dienstnummer</p>
+                  <p className="font-mono font-medium">{selectedAuthority.dienstnummer}</p>
+                </div>
+                <div>
+                  <p className="text-slate-500">Registriert am</p>
+                  <p className="font-medium">{new Date(selectedAuthority.created_at).toLocaleDateString('de-DE')}</p>
+                </div>
+              </div>
+
+              <div className="space-y-2">
+                <Label>Ablehnungsgrund (optional)</Label>
+                <Textarea
+                  value={rejectionReason}
+                  onChange={(e) => setRejectionReason(e.target.value)}
+                  placeholder="Grund für die Ablehnung eingeben..."
+                  rows={3}
+                />
+              </div>
+
+              <div className="flex gap-3">
+                <Button
+                  onClick={() => handleAuthorityApproval(false)}
+                  disabled={approving}
+                  variant="outline"
+                  className="flex-1 text-red-600 border-red-200 hover:bg-red-50"
+                >
+                  <X className="h-4 w-4 mr-2" />
+                  Ablehnen
+                </Button>
+                <Button
+                  onClick={() => handleAuthorityApproval(true)}
+                  disabled={approving}
+                  className="flex-1 bg-green-600 hover:bg-green-700"
+                >
+                  <CheckCircle className="h-4 w-4 mr-2" />
+                  Freischalten
+                </Button>
+              </div>
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
     </div>
   );
 };
