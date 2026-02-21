@@ -377,6 +377,77 @@ def generate_reset_token() -> str:
     """Generate a secure password reset token"""
     return ''.join(random.choices(string.ascii_letters + string.digits, k=64))
 
+# ==================== IMAGE COMPRESSION ====================
+
+def compress_image_base64(base64_data: str, max_size: tuple = MAX_IMAGE_SIZE, quality: int = JPEG_QUALITY) -> str:
+    """
+    Compress a base64 encoded image.
+    Returns compressed base64 string.
+    """
+    try:
+        # Handle data URL format
+        if ',' in base64_data:
+            header, data = base64_data.split(',', 1)
+        else:
+            header = "data:image/jpeg;base64"
+            data = base64_data
+        
+        # Decode base64
+        image_data = base64.b64decode(data)
+        
+        # Open with Pillow
+        img = PILImage.open(BytesIO(image_data))
+        
+        # Convert RGBA to RGB if needed
+        if img.mode in ('RGBA', 'P'):
+            img = img.convert('RGB')
+        
+        # Resize if too large
+        if img.size[0] > max_size[0] or img.size[1] > max_size[1]:
+            img.thumbnail(max_size, PILImage.Resampling.LANCZOS)
+        
+        # Save compressed
+        output = BytesIO()
+        img.save(output, format='JPEG', quality=quality, optimize=True)
+        output.seek(0)
+        
+        # Encode back to base64
+        compressed_data = base64.b64encode(output.read()).decode()
+        
+        logger.info(f"Image compressed: {len(data)} -> {len(compressed_data)} bytes ({int((1-len(compressed_data)/len(data))*100)}% reduction)")
+        
+        return f"data:image/jpeg;base64,{compressed_data}"
+    except Exception as e:
+        logger.error(f"Image compression failed: {e}")
+        return base64_data  # Return original if compression fails
+
+# ==================== AUDIT LOGGING ====================
+
+async def log_audit(action: str, user_id: str, user_name: str, details: Dict[str, Any] = None):
+    """Log an audit event to both file and database"""
+    now = datetime.now(timezone.utc).isoformat()
+    
+    audit_entry = {
+        "id": str(uuid.uuid4()),
+        "timestamp": now,
+        "action": action,
+        "user_id": user_id,
+        "user_name": user_name,
+        "details": details or {},
+        "created_at": now
+    }
+    
+    # Log to file
+    audit_logger.info(json.dumps(audit_entry, ensure_ascii=False))
+    
+    # Log to database
+    try:
+        await db.audit_logs.insert_one(audit_entry)
+    except Exception as e:
+        logger.error(f"Failed to save audit log to DB: {e}")
+    
+    return audit_entry
+
 def create_token(user_id: str, role: str) -> str:
     payload = {
         "user_id": user_id,
