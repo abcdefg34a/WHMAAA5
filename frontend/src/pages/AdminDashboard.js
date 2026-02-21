@@ -1202,6 +1202,10 @@ export const AdminDashboard = () => {
                 </Button>
               </div>
             </div>
+          ) : (
+            <div className="py-8 text-center text-slate-500">
+              <p>Laden...</p>
+            </div>
           )}
         </DialogContent>
       </Dialog>
