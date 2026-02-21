@@ -1454,6 +1454,13 @@ async def admin_update_password(user_id: str, data: AdminUpdatePasswordRequest, 
     new_hashed = hash_password(data.new_password)
     await db.users.update_one({"id": user_id}, {"$set": {"password": new_hashed}})
     
+    # Audit log password change by admin
+    await log_audit("ADMIN_PASSWORD_CHANGE", user["id"], user["name"], {
+        "target_user_id": user_id,
+        "target_user_email": target_user.get("email"),
+        "target_user_name": target_user.get("name")
+    })
+    
     return {"message": f"Passwort für {target_user.get('name', target_user['email'])} wurde aktualisiert"}
 
 @api_router.patch("/admin/users/{user_id}/block")
