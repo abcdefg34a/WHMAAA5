@@ -452,10 +452,29 @@ async def register(data: UserRegister, request: Request):
     return TokenResponse(access_token=token, user=UserResponse(**user_doc))
 
 @api_router.post("/auth/login", response_model=TokenResponse)
-async def login(data: UserLogin):
+async def login(data: UserLogin, request: Request):
+    # Get client IP for rate limiting
+    client_ip = request.client.host if request.client else "unknown"
+    rate_limit_key = f"{client_ip}:{data.email}"
+    
+    # Check rate limit
+    is_allowed, seconds_remaining = check_rate_limit(rate_limit_key)
+    if not is_allowed:
+        minutes = seconds_remaining // 60
+        raise HTTPException(
+            status_code=429, 
+            detail=f"Zu viele Anmeldeversuche. Bitte warten Sie {minutes} Minuten."
+        )
+    
     user = await db.users.find_one({"email": data.email})
     if not user or not verify_password(data.password, user["password"]):
-        raise HTTPException(status_code=401, detail="Invalid credentials")
+        # Record failed attempt
+        record_login_attempt(rate_limit_key)
+        attempts_left = MAX_LOGIN_ATTEMPTS - len(login_attempts[rate_limit_key])
+        raise HTTPException(
+            status_code=401, 
+            detail=f"Ungültige Anmeldedaten. Noch {attempts_left} Versuche übrig."
+        )
     
     # Check if user is blocked
     if user.get("is_blocked"):
@@ -472,11 +491,98 @@ async def login(data: UserLogin):
             rejection_reason = user.get("rejection_reason", "")
             raise HTTPException(status_code=403, detail=f"Ihre Registrierung wurde abgelehnt: {rejection_reason}. Sie können sich erneut registrieren.")
     
+    # Clear rate limit on successful login
+    clear_login_attempts(rate_limit_key)
+    
     token = create_token(user["id"], user["role"])
     user.pop("password")
     user.pop("_id", None)
     
     return TokenResponse(access_token=token, user=UserResponse(**user))
+
+# ==================== PASSWORD RESET ====================
+
+@api_router.post("/auth/forgot-password")
+async def forgot_password(data: PasswordResetRequest):
+    """Request password reset - sends email with reset link"""
+    user = await db.users.find_one({"email": data.email})
+    
+    # Always return success to prevent email enumeration
+    if not user:
+        return {"message": "Falls ein Konto mit dieser E-Mail existiert, erhalten Sie einen Link zum Zurücksetzen."}
+    
+    # Generate reset token
+    reset_token = generate_reset_token()
+    expires_at = datetime.now(timezone.utc) + timedelta(hours=1)
+    
+    # Store reset token in database
+    await db.password_resets.delete_many({"user_id": user["id"]})  # Remove old tokens
+    await db.password_resets.insert_one({
+        "user_id": user["id"],
+        "email": user["email"],
+        "token": reset_token,
+        "expires_at": expires_at.isoformat(),
+        "created_at": datetime.now(timezone.utc).isoformat()
+    })
+    
+    # TODO: Send email with reset link when AWS SES is configured
+    # For now, log the reset link (REMOVE IN PRODUCTION)
+    reset_link = f"/reset-password?token={reset_token}"
+    logger.info(f"Password reset link for {data.email}: {reset_link}")
+    print(f"\n{'='*50}")
+    print(f"PASSWORD RESET LINK (DEV ONLY)")
+    print(f"Email: {data.email}")
+    print(f"Token: {reset_token}")
+    print(f"Link: {reset_link}")
+    print(f"{'='*50}\n")
+    
+    return {"message": "Falls ein Konto mit dieser E-Mail existiert, erhalten Sie einen Link zum Zurücksetzen."}
+
+@api_router.post("/auth/reset-password")
+async def reset_password(data: PasswordResetConfirm):
+    """Reset password using token from email"""
+    # Find valid reset token
+    reset_record = await db.password_resets.find_one({"token": data.token})
+    
+    if not reset_record:
+        raise HTTPException(status_code=400, detail="Ungültiger oder abgelaufener Link")
+    
+    # Check if token expired
+    expires_at = datetime.fromisoformat(reset_record["expires_at"].replace('Z', '+00:00'))
+    if datetime.now(timezone.utc) > expires_at:
+        await db.password_resets.delete_one({"token": data.token})
+        raise HTTPException(status_code=400, detail="Der Link ist abgelaufen. Bitte fordern Sie einen neuen an.")
+    
+    # Validate new password
+    is_valid, error_msg = validate_password(data.new_password)
+    if not is_valid:
+        raise HTTPException(status_code=400, detail=error_msg)
+    
+    # Update password
+    new_hashed = hash_password(data.new_password)
+    await db.users.update_one(
+        {"id": reset_record["user_id"]},
+        {"$set": {"password": new_hashed}}
+    )
+    
+    # Delete used token
+    await db.password_resets.delete_one({"token": data.token})
+    
+    return {"message": "Passwort erfolgreich geändert. Sie können sich jetzt anmelden."}
+
+@api_router.get("/auth/verify-reset-token/{token}")
+async def verify_reset_token(token: str):
+    """Verify if a reset token is valid"""
+    reset_record = await db.password_resets.find_one({"token": token})
+    
+    if not reset_record:
+        raise HTTPException(status_code=400, detail="Ungültiger Link")
+    
+    expires_at = datetime.fromisoformat(reset_record["expires_at"].replace('Z', '+00:00'))
+    if datetime.now(timezone.utc) > expires_at:
+        raise HTTPException(status_code=400, detail="Der Link ist abgelaufen")
+    
+    return {"valid": True, "email": reset_record["email"]}
 
 @api_router.get("/auth/me", response_model=UserResponse)
 async def get_me(user: dict = Depends(get_current_user)):
