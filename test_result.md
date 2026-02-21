@@ -188,13 +188,14 @@ metadata:
   run_ui: true
 
 test_plan:
-  current_focus: []
+  current_focus:
+    - "Audit Logging for all critical actions"
+    - "Pagination for jobs API"
+    - "Footer links for Legal Pages"
   stuck_tasks: []
   test_all: false
   test_priority: "high_first"
 
 agent_communication:
   - agent: "main"
-    message: "Implemented employee management system for authorities: 1) Main authority account can create employee accounts with auto-generated Dienstnummer. 2) Employees can login and create jobs. 3) Main account sees ALL jobs from their authority, employees see only their own. 4) Each job stores created_by_dienstnummer for traceability. 5) Admin dashboard shows Dienstnummer column. Please test the authority employee workflow."
-  - agent: "testing"
-    message: "✅ COMPREHENSIVE TESTING COMPLETED - Employee management system fully tested and working. All 9 test scenarios from review request passed: 1) Main authority registration with dienstnummer ✅ 2) Employee creation with unique dienstnummer ✅ 3) Employee job creation with dienstnummer tracking ✅ 4) Main authority sees all jobs ✅ 5) Employees see only own jobs ✅ 6) Employee blocking/unblocking ✅ 7) Employee password changes ✅ 8) Employee deletion ✅ 9) Blocked employee login prevention ✅. Fixed missing authority_id field in JobResponse model. All backend APIs working correctly. 79/79 tests passed (100% success rate)."
+    message: "Implemented Go-Live Feature Package: 1) Audit Logging - integrated log_audit into all critical endpoints (login, registration, password reset, user management, employee management, job status updates, approval actions). 2) Pagination - added page/limit params to /api/jobs and /api/admin/jobs, added count endpoints. 3) Legal Pages - added footer links to Datenschutz/Impressum in LandingPage.js. 4) Frontend Pagination - created Pagination component and integrated into all 3 dashboards. Please test: Login audit, job status update audit, pagination with page=1&limit=5."
