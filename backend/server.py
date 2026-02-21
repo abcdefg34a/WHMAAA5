@@ -582,6 +582,13 @@ async def register(data: UserRegister, request: Request):
     
     await db.users.insert_one(user_doc)
     
+    # Audit log new registration
+    await log_audit("USER_REGISTERED", user_id, data.name, {
+        "email": data.email,
+        "role": data.role,
+        "approval_required": data.role in [UserRole.TOWING_SERVICE, UserRole.AUTHORITY]
+    })
+    
     token = create_token(user_id, data.role)
     user_doc.pop("password")
     user_doc.pop("_id", None)
