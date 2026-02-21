@@ -94,7 +94,12 @@ export const LoginPage = () => {
               </div>
 
               <div className="space-y-2">
-                <Label htmlFor="password">Passwort</Label>
+                <div className="flex items-center justify-between">
+                  <Label htmlFor="password">Passwort</Label>
+                  <Link to="/forgot-password" className="text-sm text-orange-600 hover:text-orange-700">
+                    Passwort vergessen?
+                  </Link>
+                </div>
                 <div className="relative">
                   <Input
                     data-testid="login-password-input"
