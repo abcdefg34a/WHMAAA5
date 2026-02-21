@@ -17,6 +17,7 @@ import { RadioGroup, RadioGroupItem } from '../components/ui/radio-group';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../components/ui/select';
 import { MapContainer, TileLayer, Marker, Popup } from 'react-leaflet';
 import { toast } from 'sonner';
+import { Pagination } from '../components/Pagination';
 import 'leaflet/dist/leaflet.css';
 import L from 'leaflet';
 
