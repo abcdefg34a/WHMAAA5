@@ -301,11 +301,14 @@ class VehicleSearchResult(BaseModel):
     phone: Optional[str] = None
     email: Optional[str] = None
     opening_hours: Optional[str] = None
-    # NEW: Cost calculation
+    # Cost calculation
     tow_cost: Optional[float] = None
     daily_cost: Optional[float] = None
     days_in_yard: Optional[int] = None
     total_cost: Optional[float] = None
+    # Location coordinates for map
+    location_lat: Optional[float] = None
+    location_lng: Optional[float] = None
 
 class LinkServiceRequest(BaseModel):
     service_code: str
