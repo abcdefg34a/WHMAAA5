@@ -144,16 +144,30 @@ export const AdminDashboard = () => {
   };
 
   const handleSearch = async () => {
+    setCurrentPage(1); // Reset to first page on new search
     try {
       const params = new URLSearchParams();
+      params.append('page', '1');
+      params.append('limit', itemsPerPage.toString());
       if (searchQuery) params.append('search', searchQuery);
       if (statusFilter && statusFilter !== 'all') params.append('status', statusFilter);
       
-      const response = await axios.get(`${API}/admin/jobs?${params.toString()}`);
-      setJobs(response.data);
+      const [jobsRes, countRes] = await Promise.all([
+        axios.get(`${API}/admin/jobs?${params.toString()}`),
+        axios.get(`${API}/admin/jobs/count?${new URLSearchParams({ 
+          ...(searchQuery && { search: searchQuery }), 
+          ...(statusFilter && statusFilter !== 'all' && { status: statusFilter }) 
+        }).toString()}`)
+      ]);
+      setJobs(jobsRes.data);
+      setTotalJobs(countRes.data.total);
     } catch (error) {
       toast.error('Fehler bei der Suche');
     }
+  };
+
+  const handlePageChange = (page) => {
+    setCurrentPage(page);
   };
 
   const handleApproval = async (approved) => {
