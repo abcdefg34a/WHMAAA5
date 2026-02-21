@@ -987,6 +987,12 @@ async def update_employee_password(employee_id: str, data: AdminUpdatePasswordRe
     new_hashed = hash_password(data.new_password)
     await db.users.update_one({"id": employee_id}, {"$set": {"password": new_hashed}})
     
+    # Audit log employee password change
+    await log_audit("EMPLOYEE_PASSWORD_CHANGED", user["id"], user["name"], {
+        "employee_id": employee_id,
+        "employee_name": employee["name"]
+    })
+    
     return {"message": f"Passwort für {employee['name']} wurde aktualisiert"}
 
 # ==================== ADMIN APPROVAL ROUTES ====================
