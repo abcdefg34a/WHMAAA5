@@ -1083,8 +1083,13 @@ export const AdminDashboard = () => {
       </main>
 
       {/* Approval Dialog */}
-      <Dialog open={approvalDialogOpen} onOpenChange={setApprovalDialogOpen}>
-        <DialogContent className="max-w-2xl">
+      <Dialog open={approvalDialogOpen} onOpenChange={(open) => {
+        setApprovalDialogOpen(open);
+        if (!open) {
+          setRejectionReason('');
+        }
+      }}>
+        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>Abschleppdienst prüfen</DialogTitle>
             <DialogDescription>
@@ -1092,7 +1097,7 @@ export const AdminDashboard = () => {
             </DialogDescription>
           </DialogHeader>
 
-          {selectedService && (
+          {selectedService ? (
             <div className="space-y-6 py-4">
               <div className="grid sm:grid-cols-2 gap-4">
                 <div>
