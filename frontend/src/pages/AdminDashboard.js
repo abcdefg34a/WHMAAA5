@@ -4,13 +4,14 @@ import axios from 'axios';
 import { 
   Car, Search, LogOut, Users, Truck, Shield, Building2, 
   CheckCircle, Clock, Download, Filter, BarChart3, AlertCircle,
-  FileText, X, Eye, Lock, Unlock, Trash2, Key, MoreVertical
+  FileText, X, Eye, Lock, Unlock, Trash2, Key, MoreVertical,
+  History, Database, FileSpreadsheet
 } from 'lucide-react';
 import { Button } from '../components/ui/button';
 import { Input } from '../components/ui/input';
 import { Label } from '../components/ui/label';
 import { Textarea } from '../components/ui/textarea';
-import { Card, CardContent, CardHeader, CardTitle } from '../components/ui/card';
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '../components/ui/card';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../components/ui/select';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '../components/ui/tabs';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '../components/ui/dialog';
