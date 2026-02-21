@@ -89,6 +89,8 @@ export const TowingDashboard = () => {
   const fetchJobs = async () => {
     try {
       const params = new URLSearchParams();
+      params.append('page', currentPage.toString());
+      params.append('limit', itemsPerPage.toString());
       if (filterStatus && filterStatus !== 'all') {
         params.append('status', filterStatus);
       }
@@ -98,14 +100,33 @@ export const TowingDashboard = () => {
       if (filterDateTo) {
         params.append('date_to', filterDateTo);
       }
-      const url = `${API}/jobs${params.toString() ? '?' + params.toString() : ''}`;
-      const response = await axios.get(url);
-      setJobs(response.data);
+      
+      const countParams = new URLSearchParams();
+      if (filterStatus && filterStatus !== 'all') {
+        countParams.append('status', filterStatus);
+      }
+      if (filterDateFrom) {
+        countParams.append('date_from', filterDateFrom);
+      }
+      if (filterDateTo) {
+        countParams.append('date_to', filterDateTo);
+      }
+      
+      const [jobsRes, countRes] = await Promise.all([
+        axios.get(`${API}/jobs?${params.toString()}`),
+        axios.get(`${API}/jobs/count/total?${countParams.toString()}`)
+      ]);
+      setJobs(jobsRes.data);
+      setTotalJobs(countRes.data.total);
     } catch (error) {
       console.error('Error fetching jobs:', error);
     } finally {
       setLoading(false);
     }
+  };
+
+  const handlePageChange = (page) => {
+    setCurrentPage(page);
   };
 
   // Bulk selection handlers
