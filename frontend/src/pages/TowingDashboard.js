@@ -74,7 +74,7 @@ export const TowingDashboard = () => {
 
   useEffect(() => {
     fetchJobs();
-  }, [filterStatus, filterDateFrom, filterDateTo]);
+  }, [filterStatus, filterDateFrom, filterDateTo, currentPage]);
 
   useEffect(() => {
     setTowCost(user?.tow_cost || 0);
