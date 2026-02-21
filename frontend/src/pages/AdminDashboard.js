@@ -459,56 +459,122 @@ export const AdminDashboard = () => {
                   <div className="flex justify-center py-8">
                     <div className="loading-spinner"></div>
                   </div>
-                ) : pendingServices.length === 0 ? (
+                ) : (pendingServices.length === 0 && pendingAuthorities.length === 0) ? (
                   <div className="empty-state">
                     <CheckCircle className="empty-state-icon text-green-500" />
                     <p>Keine ausstehenden Freischaltungen</p>
                   </div>
                 ) : (
-                  <div className="space-y-4">
-                    {pendingServices.map(service => (
-                      <div 
-                        key={service.id} 
-                        className="border rounded-lg p-4 hover:shadow-md transition-shadow"
-                      >
-                        <div className="flex justify-between items-start">
-                          <div className="space-y-2">
-                            <div className="flex items-center gap-3">
-                              <Truck className="h-6 w-6 text-orange-500" />
-                              <div>
-                                <h3 className="font-bold text-lg">{service.company_name}</h3>
-                                <p className="text-sm text-slate-500">{service.email}</p>
+                  <div className="space-y-6">
+                    {/* Pending Authorities */}
+                    {pendingAuthorities.length > 0 && (
+                      <div>
+                        <h3 className="font-semibold text-lg mb-4 flex items-center gap-2">
+                          <Shield className="h-5 w-5 text-blue-500" />
+                          Behörden ({pendingAuthorities.length})
+                        </h3>
+                        <div className="space-y-4">
+                          {pendingAuthorities.map(authority => (
+                            <div 
+                              key={authority.id} 
+                              className="border border-blue-200 rounded-lg p-4 hover:shadow-md transition-shadow bg-blue-50"
+                            >
+                              <div className="flex justify-between items-start">
+                                <div className="space-y-2">
+                                  <div className="flex items-center gap-3">
+                                    <Shield className="h-6 w-6 text-blue-500" />
+                                    <div>
+                                      <h3 className="font-bold text-lg">{authority.authority_name}</h3>
+                                      <p className="text-sm text-slate-500">{authority.email}</p>
+                                    </div>
+                                  </div>
+                                  <div className="grid sm:grid-cols-2 gap-4 text-sm mt-4">
+                                    <div>
+                                      <p className="text-slate-500">Ansprechpartner</p>
+                                      <p className="font-medium">{authority.name}</p>
+                                    </div>
+                                    <div>
+                                      <p className="text-slate-500">Abteilung</p>
+                                      <p className="font-medium">{authority.department || '-'}</p>
+                                    </div>
+                                    <div>
+                                      <p className="text-slate-500">Dienstnummer</p>
+                                      <p className="font-mono font-medium">{authority.dienstnummer}</p>
+                                    </div>
+                                    <div>
+                                      <p className="text-slate-500">Registriert am</p>
+                                      <p className="font-medium">{new Date(authority.created_at).toLocaleDateString('de-DE')}</p>
+                                    </div>
+                                  </div>
+                                </div>
+                                <Button 
+                                  onClick={() => openAuthorityApprovalDialog(authority)}
+                                  className="bg-blue-600 hover:bg-blue-700"
+                                >
+                                  <Eye className="h-4 w-4 mr-2" />
+                                  Prüfen
+                                </Button>
                               </div>
                             </div>
-                            <div className="grid sm:grid-cols-2 gap-4 text-sm mt-4">
-                              <div>
-                                <p className="text-slate-500">Ansprechpartner</p>
-                                <p className="font-medium">{service.name}</p>
-                              </div>
-                              <div>
-                                <p className="text-slate-500">Telefon</p>
-                                <p className="font-medium">{service.phone}</p>
-                              </div>
-                              <div>
-                                <p className="text-slate-500">Hof-Adresse</p>
-                                <p className="font-medium">{service.yard_address}</p>
-                              </div>
-                              <div>
-                                <p className="text-slate-500">Öffnungszeiten</p>
-                                <p className="font-medium">{service.opening_hours}</p>
-                              </div>
-                            </div>
-                          </div>
-                          <Button 
-                            onClick={() => openApprovalDialog(service)}
-                            className="bg-slate-900 hover:bg-slate-800"
-                          >
-                            <Eye className="h-4 w-4 mr-2" />
-                            Prüfen
-                          </Button>
+                          ))}
                         </div>
                       </div>
-                    ))}
+                    )}
+
+                    {/* Pending Services */}
+                    {pendingServices.length > 0 && (
+                      <div>
+                        <h3 className="font-semibold text-lg mb-4 flex items-center gap-2">
+                          <Truck className="h-5 w-5 text-orange-500" />
+                          Abschleppdienste ({pendingServices.length})
+                        </h3>
+                        <div className="space-y-4">
+                          {pendingServices.map(service => (
+                            <div 
+                              key={service.id} 
+                              className="border border-orange-200 rounded-lg p-4 hover:shadow-md transition-shadow bg-orange-50"
+                            >
+                              <div className="flex justify-between items-start">
+                                <div className="space-y-2">
+                                  <div className="flex items-center gap-3">
+                                    <Truck className="h-6 w-6 text-orange-500" />
+                                    <div>
+                                      <h3 className="font-bold text-lg">{service.company_name}</h3>
+                                      <p className="text-sm text-slate-500">{service.email}</p>
+                                    </div>
+                                  </div>
+                                  <div className="grid sm:grid-cols-2 gap-4 text-sm mt-4">
+                                    <div>
+                                      <p className="text-slate-500">Ansprechpartner</p>
+                                      <p className="font-medium">{service.name}</p>
+                                    </div>
+                                    <div>
+                                      <p className="text-slate-500">Telefon</p>
+                                      <p className="font-medium">{service.phone}</p>
+                                    </div>
+                                    <div>
+                                      <p className="text-slate-500">Hof-Adresse</p>
+                                      <p className="font-medium">{service.yard_address}</p>
+                                    </div>
+                                    <div>
+                                      <p className="text-slate-500">Öffnungszeiten</p>
+                                      <p className="font-medium">{service.opening_hours}</p>
+                                    </div>
+                                  </div>
+                                </div>
+                                <Button 
+                                  onClick={() => openApprovalDialog(service)}
+                                  className="bg-orange-500 hover:bg-orange-600"
+                                >
+                                  <Eye className="h-4 w-4 mr-2" />
+                                  Prüfen
+                                </Button>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
                   </div>
                 )}
               </CardContent>
