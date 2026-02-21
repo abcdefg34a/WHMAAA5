@@ -464,7 +464,6 @@ export const AdminDashboard = () => {
               data-testid="tab-audit" 
               value="audit" 
               className="flex items-center gap-2"
-              onClick={fetchAuditLogs}
             >
               <History className="h-4 w-4" />
               Audit-Log
@@ -473,7 +472,6 @@ export const AdminDashboard = () => {
               data-testid="tab-system" 
               value="system" 
               className="flex items-center gap-2"
-              onClick={fetchBackups}
             >
               <Database className="h-4 w-4" />
               System
