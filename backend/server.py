@@ -965,6 +965,13 @@ async def delete_employee(employee_id: str, user: dict = Depends(get_current_use
     
     await db.users.delete_one({"id": employee_id})
     
+    # Audit log employee deletion
+    await log_audit("EMPLOYEE_DELETED", user["id"], user["name"], {
+        "employee_id": employee_id,
+        "employee_name": employee["name"],
+        "employee_email": employee.get("email")
+    })
+    
     return {"message": f"Mitarbeiter {employee['name']} wurde gelöscht"}
 
 @api_router.patch("/authority/employees/{employee_id}/password")
