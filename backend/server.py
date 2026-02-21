@@ -608,6 +608,12 @@ async def login(data: UserLogin, request: Request):
         # Record failed attempt
         record_login_attempt(rate_limit_key)
         attempts_left = MAX_LOGIN_ATTEMPTS - len(login_attempts[rate_limit_key])
+        # Audit log failed login attempt
+        await log_audit("LOGIN_FAILED", "unknown", data.email, {
+            "email": data.email,
+            "ip_address": client_ip,
+            "reason": "invalid_credentials"
+        })
         raise HTTPException(
             status_code=401, 
             detail=f"Ungültige Anmeldedaten. Noch {attempts_left} Versuche übrig."
@@ -634,6 +640,13 @@ async def login(data: UserLogin, request: Request):
     
     # Clear rate limit on successful login
     clear_login_attempts(rate_limit_key)
+    
+    # Audit log successful login
+    await log_audit("USER_LOGIN", user["id"], user.get("name", user["email"]), {
+        "email": user["email"],
+        "role": user["role"],
+        "ip_address": client_ip
+    })
     
     token = create_token(user["id"], user["role"])
     user.pop("password")
