@@ -585,6 +585,29 @@ export const TowingDashboard = () => {
           </CardContent>
         </Card>
 
+        {/* NEW: Create Job Card */}
+        <Card className="mb-6 border-green-200 bg-green-50">
+          <CardContent className="py-4">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-4">
+                <Car className="h-6 w-6 text-green-600" />
+                <div>
+                  <p className="text-sm text-green-700">Eigenen Auftrag erstellen</p>
+                  <p className="font-bold text-green-900">
+                    Erstellen Sie selbst einen Auftrag für eine verknüpfte Behörde
+                  </p>
+                </div>
+              </div>
+              <Button 
+                className="bg-green-600 hover:bg-green-700 text-white"
+                onClick={openCreateJobDialog}
+              >
+                + Neuer Auftrag
+              </Button>
+            </div>
+          </CardContent>
+        </Card>
+
         {/* Filter Section */}
         <Card className="mb-6">
           <CardContent className="py-4">
