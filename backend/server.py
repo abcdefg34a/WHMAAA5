@@ -1786,7 +1786,11 @@ async def search_vehicle(q: str):
         days_in_yard=days_in_yard,
         total_cost=total_cost,
         location_lat=job.get("location_lat"),
-        location_lng=job.get("location_lng")
+        location_lng=job.get("location_lng"),
+        # NEW: Additional info
+        tow_reason=job.get("tow_reason"),
+        location_address=job.get("location_address"),
+        created_by_authority=job.get("created_by_authority")
     )
 
 # ==================== ADMIN ROUTES ====================
