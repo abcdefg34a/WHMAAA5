@@ -926,22 +926,24 @@ export const AdminDashboard = () => {
                         </tr>
                       </thead>
                       <tbody>
-                        {auditLogs.map(log => (
-                          <tr key={log.id}>
-                            <td className="whitespace-nowrap text-sm">
-                              {new Date(log.timestamp).toLocaleString('de-DE')}
-                            </td>
-                            <td>
-                              <span className="px-2 py-1 bg-blue-100 text-blue-800 text-xs rounded font-medium">
-                                {log.action}
-                              </span>
-                            </td>
-                            <td className="text-sm">{log.user_name}</td>
-                            <td className="text-sm text-slate-500 max-w-xs truncate">
-                              {JSON.stringify(log.details)}
-                            </td>
-                          </tr>
-                        ))}
+                        {auditLogs.map(log => {
+                          return (
+                            <tr key={log.id}>
+                              <td className="whitespace-nowrap text-sm">
+                                {new Date(log.timestamp).toLocaleString('de-DE')}
+                              </td>
+                              <td>
+                                <span className="px-2 py-1 bg-blue-100 text-blue-800 text-xs rounded font-medium">
+                                  {log.action}
+                                </span>
+                              </td>
+                              <td className="text-sm">{log.user_name}</td>
+                              <td className="text-sm text-slate-500 max-w-xs truncate">
+                                {JSON.stringify(log.details)}
+                              </td>
+                            </tr>
+                          );
+                        })}
                       </tbody>
                     </table>
                   </div>
