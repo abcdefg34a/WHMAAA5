@@ -345,10 +345,9 @@ metadata:
 
 test_plan:
   current_focus:
-    - "Comprehensive frontend testing completed"
-    - "All login separation tests passed"
-    - "Accessibility fixes verified"
-  stuck_tasks: []
+    - "Portal Login Token Management Fix"
+  stuck_tasks:
+    - "Portal Login Token Management Fix"
   test_all: false
   test_priority: "high_first"
 
