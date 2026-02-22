@@ -198,6 +198,7 @@ export const PortalPage = () => {
                       onChange={(e) => setLoginEmail(e.target.value)}
                       placeholder="ihre@email.de"
                       required
+                      autoComplete="email"
                       className="h-12"
                     />
                   </div>
@@ -212,6 +213,7 @@ export const PortalPage = () => {
                         onChange={(e) => setLoginPassword(e.target.value)}
                         placeholder="••••••••"
                         required
+                        autoComplete="current-password"
                         className="h-12 pr-12"
                       />
                       <button
