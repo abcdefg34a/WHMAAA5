@@ -93,6 +93,16 @@ export const TowingDashboard = () => {
   const [weekendSurcharge, setWeekendSurcharge] = useState(user?.weekend_surcharge || '');
   const [heavyVehicleSurcharge, setHeavyVehicleSurcharge] = useState(user?.heavy_vehicle_surcharge || '');
 
+  // NEW: Empty Trip (Leerfahrt) Dialog state
+  const [emptyTripDialogOpen, setEmptyTripDialogOpen] = useState(false);
+  const [emptyTripReason, setEmptyTripReason] = useState('vehicle_gone'); // 'vehicle_gone' or 'driver_present'
+  const [emptyTripDriverFirstName, setEmptyTripDriverFirstName] = useState('');
+  const [emptyTripDriverLastName, setEmptyTripDriverLastName] = useState('');
+  const [emptyTripDriverAddress, setEmptyTripDriverAddress] = useState('');
+  const [emptyTripPaymentMethod, setEmptyTripPaymentMethod] = useState('cash');
+  const [emptyTripPaymentAmount, setEmptyTripPaymentAmount] = useState('');
+  const [submittingEmptyTrip, setSubmittingEmptyTrip] = useState(false);
+
   // Cost calculation state
   const [calculatedCosts, setCalculatedCosts] = useState(null);
   const [loadingCosts, setLoadingCosts] = useState(false);
