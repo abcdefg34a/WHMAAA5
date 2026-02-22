@@ -1968,6 +1968,84 @@ async def generate_pdf(job_id: str):
     story.append(line_table)
     story.append(Spacer(1, 10))
     
+    # ===== AUFTRAGSTYP =====
+    job_type = job.get('job_type', 'towing')
+    job_type_label = 'Sicherstellung (Polizeilich)' if job_type == 'sicherstellung' else 'Abschleppen (Falschparker)'
+    
+    story.append(Paragraph("Auftragsdetails", heading_style))
+    order_data = [
+        [Paragraph("<b>Auftragstyp</b>", cell_style), Paragraph(f"<b>{job_type_label}</b>", cell_style)],
+    ]
+    
+    # Sicherstellung-specific details
+    if job_type == 'sicherstellung':
+        # Reason mapping
+        reason_labels = {
+            'betriebsmittel': 'Auslaufende Betriebsmittel',
+            'gestohlen': 'Gestohlenes Fahrzeug / Fahndung',
+            'eigentumssicherung': 'Eigentumssicherung (wertvoll/ungesichert)',
+            'technische_maengel': 'Technische Mängel / Beweissicherung',
+            'strafrechtlich': 'Strafrechtliche Beschlagnahme'
+        }
+        sicherstellung_reason = job.get('sicherstellung_reason', '')
+        reason_text = reason_labels.get(sicherstellung_reason, sicherstellung_reason or '-')
+        order_data.append([
+            Paragraph("<b>Grund der Sicherstellung</b>", cell_style), 
+            Paragraph(reason_text, cell_style)
+        ])
+        
+        # Vehicle category
+        vehicle_cat = job.get('vehicle_category', '')
+        cat_label = 'PKW/Krad bis 3,5t' if vehicle_cat == 'under_3_5t' else 'Fahrzeuge ab 3,5t' if vehicle_cat == 'over_3_5t' else '-'
+        order_data.append([
+            Paragraph("<b>Fahrzeugkategorie</b>", cell_style), 
+            Paragraph(cat_label, cell_style)
+        ])
+        
+        # Ordering authority
+        authority_labels = {
+            'schutzpolizei': 'Schutzpolizei',
+            'kriminalpolizei': 'Kriminalpolizei',
+            'staatsanwaltschaft': 'Staatsanwaltschaft',
+            'sachverstaendiger': 'Technischer Sachverständiger'
+        }
+        ordering_auth = job.get('ordering_authority', '')
+        auth_text = authority_labels.get(ordering_auth, ordering_auth or '-')
+        order_data.append([
+            Paragraph("<b>Anordnende Stelle</b>", cell_style), 
+            Paragraph(auth_text, cell_style)
+        ])
+        
+        # Contact attempts
+        contact_attempts = job.get('contact_attempts')
+        if contact_attempts is not None:
+            contact_text = 'Ja' if contact_attempts else 'Nein'
+            if contact_attempts and job.get('contact_attempts_notes'):
+                contact_text += f" - {job['contact_attempts_notes']}"
+            order_data.append([
+                Paragraph("<b>Telefonische Kontaktversuche</b>", cell_style), 
+                Paragraph(wrap_text(contact_text, 50), cell_style)
+            ])
+        
+        # Estimated vehicle value
+        if job.get('estimated_vehicle_value'):
+            order_data.append([
+                Paragraph("<b>Geschätzter Fahrzeugwert</b>", cell_style), 
+                Paragraph(f"{job['estimated_vehicle_value']:,.2f} €", cell_style)
+            ])
+    
+    order_table = Table(order_data, colWidths=[4.5*cm, 12.5*cm])
+    order_table.setStyle(TableStyle([
+        ('BACKGROUND', (0, 0), (0, -1), colors.HexColor('#fef3c7') if job_type == 'sicherstellung' else colors.HexColor('#f8fafc')),
+        ('VALIGN', (0, 0), (-1, -1), 'TOP'),
+        ('TOPPADDING', (0, 0), (-1, -1), 6),
+        ('BOTTOMPADDING', (0, 0), (-1, -1), 6),
+        ('LEFTPADDING', (0, 0), (-1, -1), 8),
+        ('RIGHTPADDING', (0, 0), (-1, -1), 8),
+        ('GRID', (0, 0), (-1, -1), 0.5, colors.HexColor('#e2e8f0')),
+    ]))
+    story.append(order_table)
+    
     # ===== FAHRZEUGDATEN =====
     story.append(Paragraph("Fahrzeugdaten", heading_style))
     vehicle_data = [
