@@ -348,9 +348,9 @@ metadata:
 
 test_plan:
   current_focus:
-    - "Portal Login Token Management Fix"
+    []
   stuck_tasks:
-    - "Portal Login Token Management Fix"
+    []
   test_all: false
   test_priority: "high_first"
 
