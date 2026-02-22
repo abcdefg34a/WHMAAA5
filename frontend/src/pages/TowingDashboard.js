@@ -2548,6 +2548,13 @@ export const TowingDashboard = () => {
       {/* Photo Lightbox Dialog */}
       <Dialog open={lightboxOpen} onOpenChange={setLightboxOpen}>
         <DialogContent className="max-w-4xl p-0 bg-black/95 border-none">
+          {/* Accessibility: Visually hidden title for screen readers */}
+          <VisuallyHidden>
+            <DialogTitle>Fotoansicht</DialogTitle>
+          </VisuallyHidden>
+          <VisuallyHidden>
+            <DialogDescription>Vollbildansicht des ausgewählten Fotos. Verwenden Sie die Pfeiltasten zur Navigation zwischen Fotos.</DialogDescription>
+          </VisuallyHidden>
           <div className="relative">
             {/* Close Button */}
             <button
