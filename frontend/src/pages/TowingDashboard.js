@@ -508,6 +508,59 @@ export const TowingDashboard = () => {
     }
   };
 
+  // NEW: Open company info dialog
+  const openCompanyInfoDialog = () => {
+    setCompanyName(user?.company_name || '');
+    setCompanyPhone(user?.phone || '');
+    setCompanyEmail(user?.email || '');
+    setCompanyYardAddress(user?.yard_address || '');
+    setCompanyYardLat(user?.yard_lat || null);
+    setCompanyYardLng(user?.yard_lng || null);
+    setCompanyOpeningHours(user?.opening_hours || '');
+    setCompanyInfoDialogOpen(true);
+  };
+
+  // NEW: Get current location for yard
+  const handleGetYardLocation = () => {
+    if (navigator.geolocation) {
+      navigator.geolocation.getCurrentPosition(
+        (pos) => {
+          setCompanyYardLat(pos.coords.latitude);
+          setCompanyYardLng(pos.coords.longitude);
+          toast.success('Hof-Standort erfasst!');
+        },
+        (error) => {
+          toast.error('Standort konnte nicht ermittelt werden');
+        }
+      );
+    } else {
+      toast.error('Geolocation wird nicht unterstützt');
+    }
+  };
+
+  // NEW: Save company info
+  const handleSaveCompanyInfo = async () => {
+    setSavingCompanyInfo(true);
+    try {
+      const response = await axios.patch(`${API}/towing/company-info`, {
+        company_name: companyName || null,
+        phone: companyPhone || null,
+        email: companyEmail || null,
+        yard_address: companyYardAddress || null,
+        yard_lat: companyYardLat || null,
+        yard_lng: companyYardLng || null,
+        opening_hours: companyOpeningHours || null
+      });
+      updateUser(response.data);
+      toast.success('Firmendaten gespeichert!');
+      setCompanyInfoDialogOpen(false);
+    } catch (error) {
+      toast.error('Fehler beim Speichern');
+    } finally {
+      setSavingCompanyInfo(false);
+    }
+  };
+
   const fetchCalculatedCosts = async (jobId) => {
     setLoadingCosts(true);
     try {
