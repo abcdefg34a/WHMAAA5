@@ -1485,12 +1485,18 @@ async def update_job(job_id: str, data: JobUpdate, user: dict = Depends(get_curr
         update_data["status"] = data.status
         if data.status == JobStatus.ON_SITE:
             update_data["on_site_at"] = now
+            # Set accepted_at when service first accepts the job
+            if not job.get("accepted_at"):
+                update_data["accepted_at"] = now
         elif data.status == JobStatus.TOWED:
             update_data["towed_at"] = now
         elif data.status == JobStatus.IN_YARD:
             update_data["in_yard_at"] = now
         elif data.status == JobStatus.RELEASED:
             update_data["released_at"] = now
+    
+    if data.is_empty_trip is not None:
+        update_data["is_empty_trip"] = data.is_empty_trip
     
     if data.photos:
         update_data["photos"] = data.photos
