@@ -1181,8 +1181,8 @@ async def create_job(data: JobCreate, user: dict = Depends(get_current_user)):
         "created_by_id": user["id"],
         "created_by_name": user["name"],
         "created_by_authority": user.get("authority_name"),
-        "created_by_dienstnummer": user.get("dienstnummer"),  # Track Dienstnummer
-        "authority_id": authority_id,  # Main authority ID for grouping
+        "created_by_dienstnummer": user.get("dienstnummer"),
+        "authority_id": authority_id,
         "assigned_service_id": data.assigned_service_id,
         "assigned_service_name": assigned_service_name,
         "service_notes": None,
@@ -1197,7 +1197,18 @@ async def create_job(data: JobCreate, user: dict = Depends(get_current_user)):
         "on_site_at": None,
         "towed_at": None,
         "in_yard_at": None,
-        "released_at": None
+        "released_at": None,
+        "accepted_at": None,
+        # NEW: Job type and Sicherstellung fields
+        "job_type": data.job_type or "towing",
+        "sicherstellung_reason": data.sicherstellung_reason,
+        "vehicle_category": data.vehicle_category,
+        "ordering_authority": data.ordering_authority,
+        "contact_attempts": data.contact_attempts,
+        "contact_attempts_notes": data.contact_attempts_notes,
+        "estimated_vehicle_value": data.estimated_vehicle_value,
+        "is_empty_trip": False,
+        "calculated_costs": None
     }
     
     await db.jobs.insert_one(job_doc)
