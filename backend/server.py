@@ -1256,6 +1256,37 @@ async def get_pending_authorities(user: dict = Depends(get_current_user)):
     ).to_list(100)
     return [UserResponse(**a) for a in authorities]
 
+# NEW: Sync authority-service links (ensures bidirectional linking)
+@api_router.post("/admin/sync-links")
+async def sync_authority_service_links(user: dict = Depends(get_current_user)):
+    """Synchronize bidirectional links between authorities and towing services"""
+    if user["role"] != UserRole.ADMIN:
+        raise HTTPException(status_code=403, detail="Admin only")
+    
+    # Find all authorities with linked services
+    authorities = await db.users.find(
+        {"role": UserRole.AUTHORITY, "linked_services": {"$exists": True, "$ne": []}},
+        {"_id": 0}
+    ).to_list(1000)
+    
+    updated_count = 0
+    for auth in authorities:
+        linked_services = auth.get("linked_services", [])
+        for service_id in linked_services:
+            # Add authority to service's linked_authorities
+            result = await db.users.update_one(
+                {"id": service_id, "role": UserRole.TOWING_SERVICE},
+                {"$addToSet": {"linked_authorities": auth["id"]}}
+            )
+            if result.modified_count > 0:
+                updated_count += 1
+    
+    await log_audit("LINKS_SYNCHRONIZED", user["id"], user["name"], {
+        "updated_count": updated_count
+    })
+    
+    return {"message": f"Synchronisierung abgeschlossen. {updated_count} Verknüpfungen aktualisiert."}
+
 @api_router.post("/admin/approve-service/{service_id}")
 async def approve_service(service_id: str, data: ApproveServiceRequest, user: dict = Depends(get_current_user)):
     if user["role"] != UserRole.ADMIN:
