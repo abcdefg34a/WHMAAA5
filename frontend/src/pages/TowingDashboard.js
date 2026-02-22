@@ -1138,14 +1138,38 @@ export const TowingDashboard = () => {
                       </Button>
                     )}
                     {selectedJob.status === 'on_site' && (
-                      <Button
-                        data-testid="status-towed-btn"
-                        onClick={() => handleStatusUpdate(selectedJob.id, 'towed')}
-                        className="bg-red-500 hover:bg-red-600"
-                      >
-                        <Truck className="h-4 w-4 mr-2" />
-                        Abgeschleppt
-                      </Button>
+                      <div className="flex gap-2">
+                        <Button
+                          data-testid="status-towed-btn"
+                          onClick={() => handleStatusUpdate(selectedJob.id, 'towed')}
+                          className="bg-red-500 hover:bg-red-600"
+                        >
+                          <Truck className="h-4 w-4 mr-2" />
+                          Abgeschleppt
+                        </Button>
+                        <Button
+                          data-testid="status-empty-trip-btn"
+                          onClick={async () => {
+                            try {
+                              await axios.patch(`${API}/jobs/${selectedJob.id}`, { 
+                                status: 'released',
+                                is_empty_trip: true,
+                                service_notes: 'Leerfahrt - Fahrzeug war nicht mehr vor Ort'
+                              });
+                              toast.success('Als Leerfahrt markiert');
+                              fetchJobs();
+                              setJobDetailOpen(false);
+                            } catch (error) {
+                              toast.error('Fehler beim Aktualisieren');
+                            }
+                          }}
+                          variant="outline"
+                          className="border-orange-500 text-orange-600 hover:bg-orange-50"
+                        >
+                          <X className="h-4 w-4 mr-2" />
+                          Leerfahrt
+                        </Button>
+                      </div>
                     )}
                     {selectedJob.status === 'towed' && (
                       <Button
