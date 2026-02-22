@@ -333,8 +333,9 @@ metadata:
 
 test_plan:
   current_focus:
-    - "Accessibility fixes verification - Lightbox dialog"
-    - "Database indexes verification"
+    - "Comprehensive frontend testing completed"
+    - "All login separation tests passed"
+    - "Accessibility fixes verified"
   stuck_tasks: []
   test_all: false
   test_priority: "high_first"
