@@ -1719,6 +1719,181 @@ export const TowingDashboard = () => {
         </DialogContent>
       </Dialog>
 
+      {/* NEW: Empty Trip (Leerfahrt) Dialog */}
+      <Dialog open={emptyTripDialogOpen} onOpenChange={setEmptyTripDialogOpen}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <X className="h-5 w-5 text-orange-600" />
+              Leerfahrt erfassen
+            </DialogTitle>
+            <DialogDescription>
+              {selectedJob?.license_plate} - {selectedJob?.job_number}
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-6 py-4">
+            {/* Reason Selection */}
+            <div className="space-y-3">
+              <Label className="font-medium">Grund der Leerfahrt *</Label>
+              <div className="space-y-2">
+                <label className={`flex items-center gap-3 p-3 border rounded-lg cursor-pointer transition-colors ${emptyTripReason === 'vehicle_gone' ? 'border-orange-500 bg-orange-50' : 'border-slate-200 hover:bg-slate-50'}`}>
+                  <input
+                    type="radio"
+                    name="emptyTripReason"
+                    value="vehicle_gone"
+                    checked={emptyTripReason === 'vehicle_gone'}
+                    onChange={(e) => setEmptyTripReason(e.target.value)}
+                    className="w-4 h-4"
+                  />
+                  <div>
+                    <span className="font-medium">Fahrzeug nicht mehr vor Ort</span>
+                    <span className="text-xs text-slate-500 block">Auto war bei Ankunft bereits weg</span>
+                  </div>
+                </label>
+                <label className={`flex items-center gap-3 p-3 border rounded-lg cursor-pointer transition-colors ${emptyTripReason === 'driver_present' ? 'border-orange-500 bg-orange-50' : 'border-slate-200 hover:bg-slate-50'}`}>
+                  <input
+                    type="radio"
+                    name="emptyTripReason"
+                    value="driver_present"
+                    checked={emptyTripReason === 'driver_present'}
+                    onChange={(e) => setEmptyTripReason(e.target.value)}
+                    className="w-4 h-4"
+                  />
+                  <div>
+                    <span className="font-medium">Fahrer vor Ort angetroffen</span>
+                    <span className="text-xs text-slate-500 block">Halter/Fahrer konnte Fahrzeug selbst entfernen</span>
+                  </div>
+                </label>
+              </div>
+            </div>
+
+            {/* Driver Info - only if driver present */}
+            {emptyTripReason === 'driver_present' && (
+              <div className="space-y-4 p-4 bg-slate-50 border rounded-lg">
+                <h4 className="font-medium text-slate-700">Fahrer-/Halterdaten</h4>
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="space-y-2">
+                    <Label htmlFor="emptyTripFirstName">Vorname *</Label>
+                    <Input
+                      id="emptyTripFirstName"
+                      value={emptyTripDriverFirstName}
+                      onChange={(e) => setEmptyTripDriverFirstName(e.target.value)}
+                      placeholder="Max"
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="emptyTripLastName">Nachname *</Label>
+                    <Input
+                      id="emptyTripLastName"
+                      value={emptyTripDriverLastName}
+                      onChange={(e) => setEmptyTripDriverLastName(e.target.value)}
+                      placeholder="Mustermann"
+                    />
+                  </div>
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="emptyTripAddress">Adresse</Label>
+                  <Input
+                    id="emptyTripAddress"
+                    value={emptyTripDriverAddress}
+                    onChange={(e) => setEmptyTripDriverAddress(e.target.value)}
+                    placeholder="Musterstraße 1, 12345 Berlin"
+                  />
+                </div>
+              </div>
+            )}
+
+            {/* Payment Section */}
+            <div className="space-y-4 p-4 bg-orange-50 border border-orange-200 rounded-lg">
+              <h4 className="font-medium text-orange-800">Leerfahrt-Kosten</h4>
+              
+              {/* Show configured empty trip fee */}
+              {user?.empty_trip_fee > 0 && (
+                <div className="flex justify-between items-center text-sm">
+                  <span className="text-orange-700">Ihr Leerfahrt-Preis:</span>
+                  <span className="font-bold text-orange-900">{user.empty_trip_fee.toFixed(2)} €</span>
+                </div>
+              )}
+
+              <div className="space-y-2">
+                <Label>Zahlungsart *</Label>
+                <RadioGroup value={emptyTripPaymentMethod} onValueChange={setEmptyTripPaymentMethod}>
+                  <div className="flex items-center space-x-4">
+                    <div className="flex items-center space-x-2">
+                      <RadioGroupItem value="cash" id="emptyTripCash" />
+                      <Label htmlFor="emptyTripCash" className="cursor-pointer">Bar</Label>
+                    </div>
+                    <div className="flex items-center space-x-2">
+                      <RadioGroupItem value="card" id="emptyTripCard" />
+                      <Label htmlFor="emptyTripCard" className="cursor-pointer">Karte</Label>
+                    </div>
+                    <div className="flex items-center space-x-2">
+                      <RadioGroupItem value="invoice" id="emptyTripInvoice" />
+                      <Label htmlFor="emptyTripInvoice" className="cursor-pointer">Rechnung</Label>
+                    </div>
+                  </div>
+                </RadioGroup>
+              </div>
+
+              <div className="space-y-2">
+                <div className="flex justify-between items-center">
+                  <Label htmlFor="emptyTripAmount">Betrag (€) *</Label>
+                  {user?.empty_trip_fee > 0 && emptyTripPaymentAmount !== user.empty_trip_fee.toString() && (
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => setEmptyTripPaymentAmount(user.empty_trip_fee.toString())}
+                      className="text-xs text-orange-600"
+                    >
+                      Standard übernehmen
+                    </Button>
+                  )}
+                </div>
+                <Input
+                  id="emptyTripAmount"
+                  type="number"
+                  step="0.01"
+                  value={emptyTripPaymentAmount}
+                  onChange={(e) => setEmptyTripPaymentAmount(e.target.value)}
+                  placeholder="Betrag eingeben..."
+                  className="text-lg font-bold"
+                />
+              </div>
+            </div>
+
+            {/* Submit Buttons */}
+            <div className="flex gap-3 pt-2">
+              <Button
+                variant="outline"
+                onClick={() => setEmptyTripDialogOpen(false)}
+                className="flex-1"
+              >
+                Abbrechen
+              </Button>
+              <Button
+                onClick={handleEmptyTripSubmit}
+                disabled={submittingEmptyTrip}
+                className="flex-1 bg-orange-600 hover:bg-orange-700"
+              >
+                {submittingEmptyTrip ? (
+                  <>
+                    <div className="loading-spinner h-4 w-4 mr-2"></div>
+                    Verarbeite...
+                  </>
+                ) : (
+                  <>
+                    <FileText className="h-4 w-4 mr-2" />
+                    Leerfahrt & PDF
+                  </>
+                )}
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+
       {/* NEW: Create Job Dialog - Same layout as Authority Dashboard */}
       <Dialog open={createJobDialogOpen} onOpenChange={setCreateJobDialogOpen}>
         <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
