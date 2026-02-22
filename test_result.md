@@ -247,6 +247,18 @@ frontend:
         agent: "main"
         comment: "Added footer links to /datenschutz and /impressum pages in LandingPage.js"
 
+  - task: "Towing service job creation UI"
+    implemented: true
+    working: "NA"
+    file: "/app/frontend/src/pages/TowingDashboard.js"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: true
+    status_history:
+      - working: "NA"
+        agent: "main"
+        comment: "NEW: Added 'Neuen Auftrag erstellen' button and full job creation dialog in TowingDashboard.js. Towing service can select linked authority and create jobs with all standard fields including Sicherstellung details."
+
   - task: "Pagination Component"
     implemented: true
     working: "NA"
