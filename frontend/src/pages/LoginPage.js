@@ -136,9 +136,9 @@ export const LoginPage = () => {
             </form>
 
             <div className="mt-6 text-center text-sm text-slate-600">
-              Noch kein Konto?{' '}
-              <Link to="/register" className="text-orange-600 hover:text-orange-700 font-medium">
-                Jetzt registrieren
+              Behörde oder Abschleppdienst?{' '}
+              <Link to="/portal" className="text-orange-600 hover:text-orange-700 font-medium">
+                Zum Portal
               </Link>
             </div>
           </CardContent>
