@@ -902,6 +902,30 @@ async def unlink_service(service_id: str, user: dict = Depends(get_current_user)
     
     return {"message": "Service unlinked successfully"}
 
+# NEW: Get linked authorities for towing service
+@api_router.get("/towing/linked-authorities")
+async def get_linked_authorities(user: dict = Depends(get_current_user)):
+    """Get all authorities that have linked this towing service"""
+    if user["role"] != UserRole.TOWING_SERVICE:
+        raise HTTPException(status_code=403, detail="Nur Abschleppdienste können ihre verknüpften Behörden abrufen")
+    
+    linked_authority_ids = user.get("linked_authorities", [])
+    if not linked_authority_ids:
+        return []
+    
+    # Fetch authority details
+    authorities = await db.users.find(
+        {
+            "id": {"$in": linked_authority_ids}, 
+            "role": UserRole.AUTHORITY,
+            "is_main_authority": True,
+            "approval_status": ApprovalStatus.APPROVED
+        },
+        {"_id": 0, "password": 0, "business_license": 0}
+    ).to_list(length=100)
+    
+    return [UserResponse(**a) for a in authorities]
+
 # NEW: Update costs endpoint for towing service
 @api_router.patch("/services/costs")
 async def update_costs(data: UpdateCostsRequest, user: dict = Depends(get_current_user)):
