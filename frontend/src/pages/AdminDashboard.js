@@ -58,10 +58,6 @@ export const AdminDashboard = () => {
   // Audit logs state
   const [auditLogs, setAuditLogs] = useState([]);
   const [auditLoading, setAuditLoading] = useState(false);
-  
-  // Backup state
-  const [backups, setBackups] = useState([]);
-  const [backupLoading, setBackupLoading] = useState(false);
 
   useEffect(() => {
     fetchData();
@@ -74,10 +70,10 @@ export const AdminDashboard = () => {
     }
   }, [activeTab]);
 
-  // Load backups when switching to system tab
+  // Load audit logs when switching to system tab (for count display)
   useEffect(() => {
-    if (activeTab === 'system' && backups.length === 0) {
-      fetchBackups();
+    if (activeTab === 'system' && auditLogs.length === 0) {
+      fetchAuditLogs();
     }
   }, [activeTab]);
 
