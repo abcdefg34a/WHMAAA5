@@ -2959,6 +2959,33 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+@app.on_event("startup")
+async def startup_event():
+    """Create database indexes for improved query performance"""
+    try:
+        # Indexes for jobs collection
+        await db.jobs.create_index("license_plate")
+        await db.jobs.create_index("status")
+        await db.jobs.create_index("created_at")
+        await db.jobs.create_index("authority_id")
+        await db.jobs.create_index("assigned_service_id")
+        await db.jobs.create_index("job_number")
+        await db.jobs.create_index([("license_plate", 1), ("status", 1)])  # Compound index
+        
+        # Indexes for users collection
+        await db.users.create_index("email", unique=True)
+        await db.users.create_index("role")
+        await db.users.create_index("linked_authorities")
+        
+        # Indexes for audit_logs collection
+        await db.audit_logs.create_index("timestamp")
+        await db.audit_logs.create_index("action")
+        await db.audit_logs.create_index("user_id")
+        
+        logger.info("Database indexes created successfully")
+    except Exception as e:
+        logger.error(f"Error creating database indexes: {e}")
+
 @app.on_event("shutdown")
 async def shutdown_db_client():
     client.close()
