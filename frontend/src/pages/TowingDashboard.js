@@ -1179,7 +1179,7 @@ export const TowingDashboard = () => {
                         </div>
                         <Button
                           variant="outline"
-                          onClick={() => downloadPDF(job.id)}
+                          onClick={() => downloadPDF(job.id, job.job_number)}
                           className="flex items-center gap-2"
                         >
                           <Download className="h-4 w-4" />
