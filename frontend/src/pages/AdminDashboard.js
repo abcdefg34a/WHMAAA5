@@ -997,116 +997,49 @@ export const AdminDashboard = () => {
             </Card>
           </TabsContent>
 
-          {/* System Tab */}
+          {/* System Tab - Vereinfacht */}
           <TabsContent value="system">
-            <div className="grid md:grid-cols-2 gap-6">
-              {/* Backup Section */}
-              <Card>
-                <CardHeader>
-                  <CardTitle className="flex items-center gap-2">
-                    <Database className="h-5 w-5" />
-                    Datenbank-Backups
-                  </CardTitle>
-                  <CardDescription>
-                    Erstellen und verwalten Sie Datensicherungen
-                  </CardDescription>
-                </CardHeader>
-                <CardContent>
-                  <Button onClick={handleCreateBackup} className="w-full mb-4">
-                    <Database className="h-4 w-4 mr-2" />
-                    Backup jetzt erstellen
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <BarChart3 className="h-5 w-5" />
+                  System-Übersicht
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-6">
+                {/* Statistiken */}
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                  <div className="p-4 bg-slate-50 rounded-lg text-center">
+                    <p className="text-2xl font-bold text-slate-900">{stats?.total_jobs || 0}</p>
+                    <p className="text-sm text-slate-500">Aufträge gesamt</p>
+                  </div>
+                  <div className="p-4 bg-slate-50 rounded-lg text-center">
+                    <p className="text-2xl font-bold text-slate-900">{stats?.in_yard_jobs || 0}</p>
+                    <p className="text-sm text-slate-500">Im Hof</p>
+                  </div>
+                  <div className="p-4 bg-slate-50 rounded-lg text-center">
+                    <p className="text-2xl font-bold text-slate-900">{users.length}</p>
+                    <p className="text-sm text-slate-500">Benutzer</p>
+                  </div>
+                  <div className="p-4 bg-slate-50 rounded-lg text-center">
+                    <p className="text-2xl font-bold text-slate-900">{auditLogs.length}+</p>
+                    <p className="text-sm text-slate-500">Audit-Einträge</p>
+                  </div>
+                </div>
+                
+                {/* Export */}
+                <div className="pt-4 border-t">
+                  <h4 className="font-semibold mb-3">Daten exportieren</h4>
+                  <p className="text-sm text-slate-500 mb-4">
+                    Exportieren Sie alle Aufträge als Excel-Datei für Ihre Buchhaltung oder Berichte.
+                  </p>
+                  <Button onClick={handleExportExcel} className="bg-green-600 hover:bg-green-700">
+                    <FileSpreadsheet className="h-4 w-4 mr-2" />
+                    Alle Aufträge exportieren (Excel)
                   </Button>
-                  
-                  {backupLoading ? (
-                    <div className="flex justify-center py-4">
-                      <div className="loading-spinner"></div>
-                    </div>
-                  ) : backups.length === 0 ? (
-                    <p className="text-center text-slate-500 py-4">Keine Backups vorhanden</p>
-                  ) : (
-                    <div className="space-y-2 max-h-64 overflow-y-auto">
-                      {backups.map(backup => (
-                        <div key={backup.filename} className="flex items-center justify-between p-3 bg-slate-50 rounded-lg">
-                          <div>
-                            <p className="font-mono text-sm">{backup.filename}</p>
-                            <p className="text-xs text-slate-500">
-                              {new Date(backup.created_at).toLocaleString('de-DE')} • {(backup.size / 1024).toFixed(1)} KB
-                            </p>
-                          </div>
-                          <Button 
-                            variant="ghost" 
-                            size="sm"
-                            onClick={async () => {
-                              try {
-                                const response = await axios.get(`${API}/admin/backups/${backup.filename}`, {
-                                  responseType: 'blob'
-                                });
-                                const url = window.URL.createObjectURL(new Blob([response.data]));
-                                const link = document.createElement('a');
-                                link.href = url;
-                                link.setAttribute('download', backup.filename);
-                                document.body.appendChild(link);
-                                link.click();
-                                link.remove();
-                                window.URL.revokeObjectURL(url);
-                              } catch (error) {
-                                toast.error('Download fehlgeschlagen');
-                              }
-                            }}
-                          >
-                            <Download className="h-4 w-4" />
-                          </Button>
-                        </div>
-                      ))}
-                    </div>
-                  )}
-                </CardContent>
-              </Card>
-
-              {/* System Info */}
-              <Card>
-                <CardHeader>
-                  <CardTitle className="flex items-center gap-2">
-                    <BarChart3 className="h-5 w-5" />
-                    System-Informationen
-                  </CardTitle>
-                </CardHeader>
-                <CardContent className="space-y-4">
-                  <div className="grid grid-cols-2 gap-4">
-                    <div className="p-4 bg-slate-50 rounded-lg">
-                      <p className="text-sm text-slate-500">Version</p>
-                      <p className="font-bold">1.0.0</p>
-                    </div>
-                    <div className="p-4 bg-slate-50 rounded-lg">
-                      <p className="text-sm text-slate-500">Aufträge gesamt</p>
-                      <p className="font-bold">{stats?.total_jobs || 0}</p>
-                    </div>
-                    <div className="p-4 bg-slate-50 rounded-lg">
-                      <p className="text-sm text-slate-500">Benutzer</p>
-                      <p className="font-bold">{users.length}</p>
-                    </div>
-                    <div className="p-4 bg-slate-50 rounded-lg">
-                      <p className="text-sm text-slate-500">Audit-Einträge</p>
-                      <p className="font-bold">{auditLogs.length}+</p>
-                    </div>
-                  </div>
-                  
-                  <div className="pt-4 border-t">
-                    <h4 className="font-semibold mb-3">Export-Funktionen</h4>
-                    <div className="flex gap-2">
-                      <Button variant="outline" size="sm" onClick={handleExportCSV}>
-                        <Download className="h-4 w-4 mr-2" />
-                        Alle Aufträge (CSV)
-                      </Button>
-                      <Button variant="outline" size="sm" onClick={handleExportExcel}>
-                        <FileSpreadsheet className="h-4 w-4 mr-2" />
-                        Alle Aufträge (Excel)
-                      </Button>
-                    </div>
-                  </div>
-                </CardContent>
-              </Card>
-            </div>
+                </div>
+              </CardContent>
+            </Card>
           </TabsContent>
         </Tabs>
       </main>
