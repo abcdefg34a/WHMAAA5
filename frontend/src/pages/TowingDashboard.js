@@ -4,7 +4,7 @@ import axios from 'axios';
 import { 
   Car, MapPin, Camera, LogOut, FileText, Copy, CheckCircle,
   Clock, Truck, Phone, Building2, Download, X, Settings, Euro,
-  Filter, CheckSquare, Square, ChevronDown, Calendar
+  Filter, CheckSquare, Square, ChevronDown, Calendar, Plus
 } from 'lucide-react';
 import { Button } from '../components/ui/button';
 import { Input } from '../components/ui/input';
@@ -15,7 +15,7 @@ import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } f
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '../components/ui/tabs';
 import { RadioGroup, RadioGroupItem } from '../components/ui/radio-group';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../components/ui/select';
-import { MapContainer, TileLayer, Marker, Popup } from 'react-leaflet';
+import { MapContainer, TileLayer, Marker, Popup, useMapEvents } from 'react-leaflet';
 import { toast } from 'sonner';
 import { Pagination } from '../components/Pagination';
 import 'leaflet/dist/leaflet.css';
@@ -30,6 +30,17 @@ L.Icon.Default.mergeOptions({
 });
 
 const API = `${process.env.REACT_APP_BACKEND_URL}/api`;
+
+// Location Picker Component for Map
+const LocationPicker = ({ position, setPosition }) => {
+  useMapEvents({
+    click(e) {
+      setPosition([e.latlng.lat, e.latlng.lng]);
+    },
+  });
+
+  return position ? <Marker position={position} /> : null;
+};
 
 export const TowingDashboard = () => {
   const { user, logout, updateUser } = useAuth();
