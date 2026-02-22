@@ -178,6 +178,8 @@ class UserResponse(BaseModel):
     phone: Optional[str] = None
     address: Optional[str] = None
     yard_address: Optional[str] = None
+    yard_lat: Optional[float] = None  # NEW: Yard coordinates
+    yard_lng: Optional[float] = None  # NEW: Yard coordinates
     opening_hours: Optional[str] = None
     service_code: Optional[str] = None
     linked_services: Optional[List[str]] = None
