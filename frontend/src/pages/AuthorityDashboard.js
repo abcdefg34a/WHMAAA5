@@ -825,6 +825,90 @@ export const AuthorityDashboard = () => {
 
           {/* Jobs Tab */}
           <TabsContent value="jobs">
+            {/* Filter Section */}
+            <Card className="mb-6">
+              <CardContent className="py-4">
+                <div className="flex flex-wrap items-center gap-4">
+                  <Button
+                    variant={filterOpen ? "default" : "outline"}
+                    size="sm"
+                    onClick={() => setFilterOpen(!filterOpen)}
+                    className="flex items-center gap-2"
+                  >
+                    <Filter className="h-4 w-4" />
+                    Filter
+                    {hasActiveFilters && (
+                      <span className="bg-orange-500 text-white text-xs px-1.5 py-0.5 rounded-full">!</span>
+                    )}
+                  </Button>
+                  
+                  {hasActiveFilters && (
+                    <Button variant="ghost" size="sm" onClick={clearFilters}>
+                      Filter zurücksetzen
+                    </Button>
+                  )}
+
+                  <span className="text-sm text-slate-500 ml-auto">
+                    {totalJobs} Auftrag{totalJobs !== 1 ? 'e' : ''} gefunden
+                  </span>
+                </div>
+
+                {filterOpen && (
+                  <div className="mt-4 pt-4 border-t grid sm:grid-cols-4 gap-4">
+                    <div className="space-y-2">
+                      <Label className="text-sm text-slate-500">Status</Label>
+                      <Select value={filterStatus} onValueChange={(val) => { setFilterStatus(val); setCurrentPage(1); }}>
+                        <SelectTrigger>
+                          <SelectValue placeholder="Alle Status" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="all">Alle Status</SelectItem>
+                          <SelectItem value="pending">Ausstehend</SelectItem>
+                          <SelectItem value="assigned">Zugewiesen</SelectItem>
+                          <SelectItem value="on_site">Vor Ort</SelectItem>
+                          <SelectItem value="towed">Abgeschleppt</SelectItem>
+                          <SelectItem value="in_yard">Im Hof</SelectItem>
+                          <SelectItem value="released">Abgeholt</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <div className="space-y-2">
+                      <Label className="text-sm text-slate-500">Abschleppdienst</Label>
+                      <Select value={filterService} onValueChange={(val) => { setFilterService(val); setCurrentPage(1); }}>
+                        <SelectTrigger>
+                          <SelectValue placeholder="Alle Dienste" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="all">Alle Abschleppdienste</SelectItem>
+                          {linkedServices.map(service => (
+                            <SelectItem key={service.id} value={service.id}>
+                              {service.company_name}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <div className="space-y-2">
+                      <Label className="text-sm text-slate-500">Datum von</Label>
+                      <Input
+                        type="date"
+                        value={filterDateFrom}
+                        onChange={(e) => { setFilterDateFrom(e.target.value); setCurrentPage(1); }}
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label className="text-sm text-slate-500">Datum bis</Label>
+                      <Input
+                        type="date"
+                        value={filterDateTo}
+                        onChange={(e) => { setFilterDateTo(e.target.value); setCurrentPage(1); }}
+                      />
+                    </div>
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+
             <Card>
               <CardHeader>
                 <CardTitle>Meine Aufträge</CardTitle>
