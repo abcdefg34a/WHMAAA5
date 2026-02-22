@@ -336,7 +336,7 @@ class NewFeaturesAPITester:
             print("❌ No authority token available")
             return False
         
-        test_email = "test-employee@test.de"
+        test_email = self.unique_employee_email
         
         # Step 1: Create first employee with email "test-employee@test.de"
         employee_data_1 = {
