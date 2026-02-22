@@ -181,6 +181,7 @@ class UserResponse(BaseModel):
     opening_hours: Optional[str] = None
     service_code: Optional[str] = None
     linked_services: Optional[List[str]] = None
+    linked_authorities: Optional[List[str]] = None  # NEW: Authorities that linked this service
     created_at: str
     # Pricing fields
     tow_cost: Optional[float] = None
