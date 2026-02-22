@@ -93,6 +93,17 @@ export const TowingDashboard = () => {
   const [weekendSurcharge, setWeekendSurcharge] = useState(user?.weekend_surcharge || '');
   const [heavyVehicleSurcharge, setHeavyVehicleSurcharge] = useState(user?.heavy_vehicle_surcharge || '');
 
+  // NEW: Company Info Dialog state
+  const [companyInfoDialogOpen, setCompanyInfoDialogOpen] = useState(false);
+  const [companyName, setCompanyName] = useState(user?.company_name || '');
+  const [companyPhone, setCompanyPhone] = useState(user?.phone || '');
+  const [companyEmail, setCompanyEmail] = useState(user?.email || '');
+  const [companyYardAddress, setCompanyYardAddress] = useState(user?.yard_address || '');
+  const [companyYardLat, setCompanyYardLat] = useState(user?.yard_lat || null);
+  const [companyYardLng, setCompanyYardLng] = useState(user?.yard_lng || null);
+  const [companyOpeningHours, setCompanyOpeningHours] = useState(user?.opening_hours || '');
+  const [savingCompanyInfo, setSavingCompanyInfo] = useState(false);
+
   // NEW: Empty Trip (Leerfahrt) Dialog state
   const [emptyTripDialogOpen, setEmptyTripDialogOpen] = useState(false);
   const [emptyTripReason, setEmptyTripReason] = useState('vehicle_gone'); // 'vehicle_gone' or 'driver_present'
