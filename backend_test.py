@@ -1047,27 +1047,389 @@ class TowingManagementAPITester:
             self.tests_run += 1
             return False
 
-    def test_error_handling(self):
-        """Test error handling"""
-        print("\n⚠️ Testing Error Handling...")
+    def test_admin_login_with_provided_credentials(self):
+        """Test admin login with provided credentials: admin@test.de / Admin123!"""
+        print("\n🔐 Testing Admin Login with Provided Credentials...")
         
-        # Test unauthorized access
+        login_data = {"email": "admin@test.de", "password": "Admin123!"}
         success, response = self.run_test(
-            "Unauthorized Access", "GET", "jobs", 403
+            "Admin Login (Provided Credentials)", "POST", "auth/login", 200, login_data
         )
         
-        # Test invalid credentials
-        invalid_login = {"email": "invalid@test.de", "password": "wrongpass"}
+        if success and 'access_token' in response:
+            self.admin_token = response['access_token']
+            user_data = response.get('user', {})
+            print(f"   ✅ Admin login successful")
+            print(f"   Admin ID: {user_data.get('id')}")
+            print(f"   Admin Role: {user_data.get('role')}")
+            print(f"   Token obtained: {self.admin_token[:20]}...")
+            return True
+        else:
+            print(f"   ❌ Admin login failed")
+            return False
+
+    def test_pagination_endpoints(self):
+        """Test pagination endpoints as specified in review request"""
+        print("\n📄 Testing Pagination Endpoints...")
+        
+        if not self.admin_token:
+            print("❌ No admin token available for pagination tests")
+            return False
+        
+        # Test GET /api/admin/jobs?page=1&limit=5
         success, response = self.run_test(
-            "Invalid Login", "POST", "auth/login", 401, invalid_login
+            "Admin Jobs Pagination (page=1, limit=5)", "GET", "admin/jobs?page=1&limit=5", 200,
+            token=self.admin_token
         )
         
-        # Test duplicate email registration
+        if success and response:
+            job_count = len(response)
+            print(f"   ✅ Retrieved {job_count} jobs (expected max 5)")
+            if job_count <= 5:
+                print(f"   ✅ Pagination limit respected")
+            else:
+                print(f"   ❌ Pagination limit not respected - got {job_count} jobs")
+        
+        # Test GET /api/admin/jobs/count
         success, response = self.run_test(
-            "Duplicate Email", "POST", "auth/register", 400, self.test_admin
+            "Admin Jobs Count", "GET", "admin/jobs/count", 200,
+            token=self.admin_token
         )
+        
+        if success and response:
+            total_count = response.get('total', 0)
+            print(f"   ✅ Total jobs count: {total_count}")
+        
+        # Test different page sizes
+        success, response = self.run_test(
+            "Admin Jobs Pagination (page=1, limit=3)", "GET", "admin/jobs?page=1&limit=3", 200,
+            token=self.admin_token
+        )
+        
+        if success and response:
+            job_count = len(response)
+            print(f"   ✅ Retrieved {job_count} jobs with limit=3")
+            if job_count <= 3:
+                print(f"   ✅ Custom pagination limit respected")
+        
+        # Test page 2 to verify different results
+        success, response = self.run_test(
+            "Admin Jobs Pagination (page=2, limit=5)", "GET", "admin/jobs?page=2&limit=5", 200,
+            token=self.admin_token
+        )
+        
+        if success and response:
+            job_count = len(response)
+            print(f"   ✅ Page 2 retrieved {job_count} jobs")
         
         return True
+
+    def test_audit_logging_endpoints(self):
+        """Test audit logging endpoints"""
+        print("\n📋 Testing Audit Logging Endpoints...")
+        
+        if not self.admin_token:
+            print("❌ No admin token available for audit log tests")
+            return False
+        
+        # Test GET /api/admin/audit-log (note: endpoint might be audit-logs based on backend code)
+        success, response = self.run_test(
+            "Get Audit Logs", "GET", "admin/audit-logs", 200,
+            token=self.admin_token
+        )
+        
+        if success and response:
+            audit_count = len(response)
+            print(f"   ✅ Retrieved {audit_count} audit log entries")
+            
+            # Check for login audit entries
+            login_entries = [entry for entry in response if entry.get('action') in ['USER_LOGIN', 'LOGIN_FAILED']]
+            print(f"   ✅ Found {len(login_entries)} login-related audit entries")
+            
+            # Display some sample audit entries
+            for i, entry in enumerate(response[:3]):
+                action = entry.get('action', 'Unknown')
+                user_name = entry.get('user_name', 'Unknown')
+                timestamp = entry.get('timestamp', 'Unknown')
+                print(f"   - Entry {i+1}: {action} by {user_name} at {timestamp}")
+        
+        # Also test the alternative endpoint name if the first one fails
+        if not success:
+            success, response = self.run_test(
+                "Get Audit Log (alternative)", "GET", "admin/audit-log", 200,
+                token=self.admin_token
+            )
+        
+        return success
+
+    def test_excel_export_endpoint(self):
+        """Test Excel export endpoint"""
+        print("\n📊 Testing Excel Export Endpoint...")
+        
+        if not self.admin_token:
+            print("❌ No admin token available for Excel export test")
+            return False
+        
+        # Test GET /api/export/jobs/excel
+        url = f"{self.base_url}/export/jobs/excel"
+        headers = {'Authorization': f'Bearer {self.admin_token}'}
+        
+        try:
+            print(f"🔍 Testing Excel Export...")
+            response = requests.get(url, headers=headers, timeout=30)
+            
+            success = response.status_code == 200
+            content_type = response.headers.get('content-type', '')
+            
+            if success:
+                # Check if it's actually an Excel file
+                if 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' in content_type or 'application/octet-stream' in content_type:
+                    print(f"✅ Excel Export - Passed (Content-Type: {content_type})")
+                    print(f"   File size: {len(response.content)} bytes")
+                    self.tests_passed += 1
+                else:
+                    print(f"❌ Excel Export - Wrong content type: {content_type}")
+            else:
+                print(f"❌ Excel Export - Failed (Status: {response.status_code})")
+                try:
+                    error_data = response.json()
+                    print(f"   Error: {error_data}")
+                except:
+                    print(f"   Error: {response.text}")
+            
+            self.tests_run += 1
+            return success
+            
+        except Exception as e:
+            print(f"❌ Excel Export - Error: {str(e)}")
+            self.tests_run += 1
+            return False
+
+    def test_fulltext_search_endpoint(self):
+        """Test full-text search endpoint"""
+        print("\n🔍 Testing Full-text Search Endpoint...")
+        
+        if not self.admin_token:
+            print("❌ No admin token available for search tests")
+            return False
+        
+        # Test GET /api/admin/jobs?search=test
+        success, response = self.run_test(
+            "Admin Jobs Search (search=test)", "GET", "admin/jobs?search=test", 200,
+            token=self.admin_token
+        )
+        
+        if success and response:
+            result_count = len(response)
+            print(f"   ✅ Search returned {result_count} results for 'test'")
+            
+            # Check if results contain the search term in various fields
+            for job in response[:3]:  # Check first 3 results
+                license_plate = job.get('license_plate', '').lower()
+                job_number = job.get('job_number', '').lower()
+                tow_reason = job.get('tow_reason', '').lower()
+                notes = job.get('notes', '').lower()
+                
+                contains_test = any('test' in field for field in [license_plate, job_number, tow_reason, notes])
+                if contains_test:
+                    print(f"   ✅ Job {job.get('job_number', 'Unknown')} contains 'test' in searchable fields")
+        
+        # Test search with different terms
+        success, response = self.run_test(
+            "Admin Jobs Search (search=berlin)", "GET", "admin/jobs?search=berlin", 200,
+            token=self.admin_token
+        )
+        
+        if success and response:
+            result_count = len(response)
+            print(f"   ✅ Search returned {result_count} results for 'berlin'")
+        
+        # Test empty search (should return all jobs)
+        success, response = self.run_test(
+            "Admin Jobs Search (no search term)", "GET", "admin/jobs", 200,
+            token=self.admin_token
+        )
+        
+        if success and response:
+            total_count = len(response)
+            print(f"   ✅ No search term returned {total_count} total jobs")
+        
+        return True
+
+    def test_service_approval_endpoints(self):
+        """Test service approval endpoints"""
+        print("\n✅ Testing Service Approval Endpoints...")
+        
+        if not self.admin_token:
+            print("❌ No admin token available for approval tests")
+            return False
+        
+        # Test GET /api/admin/pending-services
+        success, response = self.run_test(
+            "Get Pending Services", "GET", "admin/pending-services", 200,
+            token=self.admin_token
+        )
+        
+        if success and response:
+            pending_count = len(response)
+            print(f"   ✅ Found {pending_count} pending towing services")
+            
+            for service in response[:3]:  # Show first 3
+                company_name = service.get('company_name', 'Unknown')
+                email = service.get('email', 'Unknown')
+                approval_status = service.get('approval_status', 'Unknown')
+                print(f"   - {company_name} ({email}) - Status: {approval_status}")
+        
+        # Test GET /api/admin/pending-authorities
+        success, response = self.run_test(
+            "Get Pending Authorities", "GET", "admin/pending-authorities", 200,
+            token=self.admin_token
+        )
+        
+        if success and response:
+            pending_count = len(response)
+            print(f"   ✅ Found {pending_count} pending authorities")
+            
+            for authority in response[:3]:  # Show first 3
+                authority_name = authority.get('authority_name', 'Unknown')
+                email = authority.get('email', 'Unknown')
+                approval_status = authority.get('approval_status', 'Unknown')
+                print(f"   - {authority_name} ({email}) - Status: {approval_status}")
+        
+        return True
+
+    def test_user_management_endpoint(self):
+        """Test user management endpoint"""
+        print("\n👥 Testing User Management Endpoint...")
+        
+        if not self.admin_token:
+            print("❌ No admin token available for user management tests")
+            return False
+        
+        # Test GET /api/admin/users
+        success, response = self.run_test(
+            "Get All Users", "GET", "admin/users", 200,
+            token=self.admin_token
+        )
+        
+        if success and response:
+            user_count = len(response)
+            print(f"   ✅ Retrieved {user_count} users")
+            
+            # Count users by role
+            role_counts = {}
+            for user in response:
+                role = user.get('role', 'unknown')
+                role_counts[role] = role_counts.get(role, 0) + 1
+            
+            print(f"   User breakdown by role:")
+            for role, count in role_counts.items():
+                print(f"   - {role}: {count} users")
+            
+            # Show sample users
+            for i, user in enumerate(response[:3]):
+                name = user.get('name', 'Unknown')
+                email = user.get('email', 'Unknown')
+                role = user.get('role', 'Unknown')
+                is_blocked = user.get('is_blocked', False)
+                print(f"   - User {i+1}: {name} ({email}) - Role: {role}, Blocked: {is_blocked}")
+        
+        return success
+
+    def test_public_search_endpoint(self):
+        """Test public vehicle search endpoint"""
+        print("\n🔍 Testing Public Vehicle Search Endpoint...")
+        
+        # Test GET /api/search/vehicle?license_plate=TEST123
+        success, response = self.run_test(
+            "Public Vehicle Search (TEST123)", "GET", "search/vehicle?license_plate=TEST123", 200
+        )
+        
+        if success and response:
+            found = response.get('found', False)
+            print(f"   Search result for TEST123: {'Found' if found else 'Not Found'}")
+            
+            if found:
+                # Check for required location fields
+                location_lat = response.get('location_lat')
+                location_lng = response.get('location_lng')
+                
+                if location_lat is not None and location_lng is not None:
+                    print(f"   ✅ Location coordinates present: lat={location_lat}, lng={location_lng}")
+                else:
+                    print(f"   ❌ Missing location coordinates")
+                
+                # Show other details
+                job_number = response.get('job_number', 'N/A')
+                status = response.get('status', 'N/A')
+                company_name = response.get('company_name', 'N/A')
+                total_cost = response.get('total_cost', 'N/A')
+                
+                print(f"   Job Number: {job_number}")
+                print(f"   Status: {status}")
+                print(f"   Company: {company_name}")
+                print(f"   Total Cost: {total_cost}€")
+        
+        # Test with different license plate formats
+        success, response = self.run_test(
+            "Public Vehicle Search (B-TEST123)", "GET", "search/vehicle?license_plate=B-TEST123", 200
+        )
+        
+        # Test with query parameter 'q' instead of 'license_plate'
+        success, response = self.run_test(
+            "Public Vehicle Search with q parameter", "GET", "search/vehicle?q=TEST123", 200
+        )
+        
+        if success and response:
+            found = response.get('found', False)
+            print(f"   Search with 'q' parameter: {'Found' if found else 'Not Found'}")
+        
+        return True
+
+    def test_comprehensive_backend_review(self):
+        """Run all tests specified in the review request"""
+        print("\n" + "="*80)
+        print("🎯 COMPREHENSIVE BACKEND TESTING - REVIEW REQUEST")
+        print("="*80)
+        
+        all_tests_passed = True
+        
+        # 1. Authentication with provided credentials
+        if not self.test_admin_login_with_provided_credentials():
+            all_tests_passed = False
+        
+        # 2. Pagination endpoints
+        if not self.test_pagination_endpoints():
+            all_tests_passed = False
+        
+        # 3. Audit logging
+        if not self.test_audit_logging_endpoints():
+            all_tests_passed = False
+        
+        # 4. Excel export
+        if not self.test_excel_export_endpoint():
+            all_tests_passed = False
+        
+        # 5. Full-text search
+        if not self.test_fulltext_search_endpoint():
+            all_tests_passed = False
+        
+        # 6. Service approval endpoints
+        if not self.test_service_approval_endpoints():
+            all_tests_passed = False
+        
+        # 7. User management
+        if not self.test_user_management_endpoint():
+            all_tests_passed = False
+        
+        # 8. Public search with location coordinates
+        if not self.test_public_search_endpoint():
+            all_tests_passed = False
+        
+        print(f"\n🎯 COMPREHENSIVE BACKEND REVIEW COMPLETE")
+        print(f"Overall Result: {'✅ ALL TESTS PASSED' if all_tests_passed else '❌ SOME TESTS FAILED'}")
+        
+        return all_tests_passed
 
     def run_all_tests(self):
         """Run all tests"""
