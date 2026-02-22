@@ -1514,20 +1514,7 @@ export const TowingDashboard = () => {
                         </Button>
                         <Button
                           data-testid="status-empty-trip-btn"
-                          onClick={async () => {
-                            try {
-                              await axios.patch(`${API}/jobs/${selectedJob.id}`, { 
-                                status: 'released',
-                                is_empty_trip: true,
-                                service_notes: 'Leerfahrt - Fahrzeug war nicht mehr vor Ort'
-                              });
-                              toast.success('Als Leerfahrt markiert');
-                              fetchJobs();
-                              setJobDetailOpen(false);
-                            } catch (error) {
-                              toast.error('Fehler beim Aktualisieren');
-                            }
-                          }}
+                          onClick={openEmptyTripDialog}
                           variant="outline"
                           className="border-orange-500 text-orange-600 hover:bg-orange-50"
                         >
