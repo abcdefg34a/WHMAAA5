@@ -78,6 +78,12 @@ export const TowingDashboard = () => {
   const [servicePhotos, setServicePhotos] = useState([]);
   const fileInputRef = useRef(null);
 
+  // Photo lightbox state
+  const [lightboxOpen, setLightboxOpen] = useState(false);
+  const [lightboxPhoto, setLightboxPhoto] = useState(null);
+  const [lightboxIndex, setLightboxIndex] = useState(0);
+  const [lightboxPhotos, setLightboxPhotos] = useState([]);
+
   // Settings state (costs)
   const [towCost, setTowCost] = useState(user?.tow_cost || 0);
   const [dailyCost, setDailyCost] = useState(user?.daily_cost || 0);
