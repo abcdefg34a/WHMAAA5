@@ -426,68 +426,6 @@ export const LandingPage = () => {
         </div>
       </section>
 
-      {/* For Professionals */}
-      <section className="py-16 px-4 bg-slate-50">
-        <div className="max-w-7xl mx-auto">
-          <h2 className="text-3xl font-bold text-center text-slate-900 mb-4" style={{ fontFamily: 'Chivo, sans-serif' }}>
-            Für Behörden & Abschleppdienste
-          </h2>
-          <p className="text-center text-slate-600 mb-12 max-w-2xl mx-auto">
-            Digitalisieren Sie Ihren Abschleppprozess mit unserer professionellen Plattform.
-          </p>
-          <div className="grid md:grid-cols-3 gap-6">
-            <Card className="card-hover">
-              <CardContent className="p-6">
-                <Shield className="h-10 w-10 text-orange-500 mb-4" />
-                <h3 className="font-bold text-lg mb-2">Behörden</h3>
-                <p className="text-slate-600 mb-4">
-                  Erfassen Sie Fahrzeuge vor Ort mit Fotos, Standort und allen relevanten Daten.
-                </p>
-                <Button 
-                  variant="outline"
-                  onClick={() => navigate('/register?role=authority')}
-                  className="w-full"
-                >
-                  Mehr erfahren <ChevronRight className="h-4 w-4 ml-1" />
-                </Button>
-              </CardContent>
-            </Card>
-            <Card className="card-hover">
-              <CardContent className="p-6">
-                <Truck className="h-10 w-10 text-orange-500 mb-4" />
-                <h3 className="font-bold text-lg mb-2">Abschleppdienste</h3>
-                <p className="text-slate-600 mb-4">
-                  Empfangen Sie Aufträge digital und verwalten Sie Ihren Fuhrpark effizient.
-                </p>
-                <Button 
-                  variant="outline"
-                  onClick={() => navigate('/register?role=towing_service')}
-                  className="w-full"
-                >
-                  Registrieren <ChevronRight className="h-4 w-4 ml-1" />
-                </Button>
-              </CardContent>
-            </Card>
-            <Card className="card-hover">
-              <CardContent className="p-6">
-                <Users className="h-10 w-10 text-orange-500 mb-4" />
-                <h3 className="font-bold text-lg mb-2">Transparenz</h3>
-                <p className="text-slate-600 mb-4">
-                  Bürger können ihr abgeschlepptes Fahrzeug einfach online finden.
-                </p>
-                <Button 
-                  variant="outline"
-                  onClick={() => window.scrollTo({ top: 0, behavior: 'smooth' })}
-                  className="w-full"
-                >
-                  Jetzt suchen <ChevronRight className="h-4 w-4 ml-1" />
-                </Button>
-              </CardContent>
-            </Card>
-          </div>
-        </div>
-      </section>
-
       {/* Footer */}
       <footer className="bg-slate-900 text-white py-12 px-4">
         <div className="max-w-7xl mx-auto">
