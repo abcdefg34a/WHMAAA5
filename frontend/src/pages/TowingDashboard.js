@@ -647,6 +647,8 @@ export const TowingDashboard = () => {
   const openJobDetail = (job) => {
     setSelectedJob(job);
     setServiceNotes(job.service_notes || '');
+    // WICHTIG: Lade die vorhandenen Service-Fotos des Jobs, oder setze auf leer
+    setServicePhotos(job.service_photos || []);
     setJobDetailOpen(true);
   };
 
