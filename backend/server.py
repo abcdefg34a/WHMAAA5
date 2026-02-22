@@ -640,6 +640,14 @@ async def register(data: UserRegister, request: Request):
         "approval_required": data.role in [UserRole.TOWING_SERVICE, UserRole.AUTHORITY]
     })
     
+    # For towing services and authorities: Don't return token, they need approval first
+    if data.role in [UserRole.TOWING_SERVICE, UserRole.AUTHORITY]:
+        raise HTTPException(
+            status_code=202,  # Accepted but not complete
+            detail="Registrierung erfolgreich! Ihr Konto muss erst von einem Administrator freigeschaltet werden. Sie erhalten eine Benachrichtigung, sobald Ihr Konto aktiviert wurde."
+        )
+    
+    # For admin and other roles: Return token immediately
     token = create_token(user_id, data.role)
     user_doc.pop("password")
     user_doc.pop("_id", None)
