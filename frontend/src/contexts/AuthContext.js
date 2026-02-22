@@ -19,6 +19,22 @@ axios.interceptors.request.use(
   }
 );
 
+// Setup axios interceptor to handle 401 errors (auto-logout)
+axios.interceptors.response.use(
+  (response) => response,
+  (error) => {
+    if (error.response?.status === 401) {
+      // Token is invalid or expired - clear it
+      localStorage.removeItem('token');
+      // Redirect to login if not already there
+      if (window.location.pathname !== '/login' && window.location.pathname !== '/register') {
+        window.location.href = '/login';
+      }
+    }
+    return Promise.reject(error);
+  }
+);
+
 export const AuthProvider = ({ children }) => {
   const [user, setUser] = useState(null);
   const [token, setToken] = useState(localStorage.getItem('token'));
