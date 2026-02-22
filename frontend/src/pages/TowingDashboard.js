@@ -265,19 +265,59 @@ export const TowingDashboard = () => {
       notes: '',
       job_type: 'towing',
       sicherstellung_reason: '',
-      vehicle_category: '',
+      vehicle_category: 'under_3_5t',
       ordering_authority: '',
       contact_attempts: false,
       contact_attempts_notes: '',
       estimated_vehicle_value: ''
     });
     setNewJobPhotos([]);
+    setNewJobPosition(null);
     setCreateJobDialogOpen(true);
+  };
+
+  // NEW: Get current location for new job
+  const handleGetNewJobLocation = () => {
+    if (navigator.geolocation) {
+      navigator.geolocation.getCurrentPosition(
+        (pos) => {
+          const newPos = [pos.coords.latitude, pos.coords.longitude];
+          setNewJobPosition(newPos);
+          setNewJobData(prev => ({
+            ...prev,
+            location_lat: pos.coords.latitude,
+            location_lng: pos.coords.longitude,
+            location_address: `${pos.coords.latitude.toFixed(6)}, ${pos.coords.longitude.toFixed(6)}`
+          }));
+          toast.success('Standort erfasst!');
+        },
+        (error) => {
+          toast.error('Standort konnte nicht ermittelt werden');
+        }
+      );
+    } else {
+      toast.error('Geolocation wird nicht unterstützt');
+    }
+  };
+
+  // NEW: Handle map click for new job
+  const handleNewJobMapClick = (pos) => {
+    setNewJobPosition(pos);
+    setNewJobData(prev => ({
+      ...prev,
+      location_lat: pos[0],
+      location_lng: pos[1],
+      location_address: `${pos[0].toFixed(6)}, ${pos[1].toFixed(6)}`
+    }));
   };
 
   // NEW: Handle new job photo upload
   const handleNewJobPhotoUpload = (e) => {
     const files = Array.from(e.target.files);
+    if (newJobPhotos.length + files.length > 5) {
+      toast.error('Maximal 5 Fotos erlaubt');
+      return;
+    }
     files.forEach(file => {
       const reader = new FileReader();
       reader.onloadend = () => {
