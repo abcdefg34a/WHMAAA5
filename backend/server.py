@@ -865,9 +865,16 @@ async def link_service(data: LinkServiceRequest, user: dict = Depends(get_curren
     if service["id"] in linked:
         raise HTTPException(status_code=400, detail="Service already linked")
     
+    # Add service to authority's linked_services
     await db.users.update_one(
         {"id": user["id"]},
         {"$push": {"linked_services": service["id"]}}
+    )
+    
+    # NEW: Also add authority to service's linked_authorities (bidirectional link)
+    await db.users.update_one(
+        {"id": service["id"]},
+        {"$addToSet": {"linked_authorities": user["id"]}}
     )
     
     return {"message": "Service linked successfully", "service_name": service["company_name"]}
