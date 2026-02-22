@@ -101,7 +101,7 @@ export const AuthorityDashboard = () => {
     if (user?.is_main_authority) {
       fetchEmployees();
     }
-  }, [user, currentPage]);
+  }, [user, currentPage, filterStatus, filterDateFrom, filterDateTo, filterService]);
 
   const fetchJobs = async () => {
     try {
@@ -109,9 +109,38 @@ export const AuthorityDashboard = () => {
       params.append('page', currentPage.toString());
       params.append('limit', itemsPerPage.toString());
       
+      // Add filter params
+      if (filterStatus && filterStatus !== 'all') {
+        params.append('status', filterStatus);
+      }
+      if (filterDateFrom) {
+        params.append('date_from', filterDateFrom);
+      }
+      if (filterDateTo) {
+        params.append('date_to', filterDateTo);
+      }
+      if (filterService && filterService !== 'all') {
+        params.append('service_id', filterService);
+      }
+
+      // Count params
+      const countParams = new URLSearchParams();
+      if (filterStatus && filterStatus !== 'all') {
+        countParams.append('status', filterStatus);
+      }
+      if (filterDateFrom) {
+        countParams.append('date_from', filterDateFrom);
+      }
+      if (filterDateTo) {
+        countParams.append('date_to', filterDateTo);
+      }
+      if (filterService && filterService !== 'all') {
+        countParams.append('service_id', filterService);
+      }
+      
       const [jobsRes, countRes] = await Promise.all([
         axios.get(`${API}/jobs?${params.toString()}`),
-        axios.get(`${API}/jobs/count/total`)
+        axios.get(`${API}/jobs/count/total${countParams.toString() ? '?' + countParams.toString() : ''}`)
       ]);
       setJobs(jobsRes.data);
       setTotalJobs(countRes.data.total);
@@ -120,6 +149,18 @@ export const AuthorityDashboard = () => {
     } finally {
       setLoading(false);
     }
+  };
+
+  // NEW: Check if filters are active
+  const hasActiveFilters = filterStatus !== 'all' || filterDateFrom || filterDateTo || filterService !== 'all';
+
+  // NEW: Clear all filters
+  const clearFilters = () => {
+    setFilterStatus('all');
+    setFilterDateFrom('');
+    setFilterDateTo('');
+    setFilterService('all');
+    setCurrentPage(1);
   };
 
   const handlePageChange = (page) => {
