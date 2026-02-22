@@ -1385,7 +1385,14 @@ export const TowingDashboard = () => {
       </Dialog>
 
       {/* Job Detail Dialog */}
-      <Dialog open={jobDetailOpen} onOpenChange={setJobDetailOpen}>
+      <Dialog open={jobDetailOpen} onOpenChange={(open) => {
+        setJobDetailOpen(open);
+        if (!open) {
+          // Reset service photos when dialog closes
+          setServicePhotos([]);
+          setServiceNotes('');
+        }
+      }}>
         <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
           {selectedJob && (
             <>
