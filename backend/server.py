@@ -293,6 +293,16 @@ class JobUpdate(BaseModel):
     # NEW: Empty trip flag
     is_empty_trip: Optional[bool] = None
 
+# NEW: Model for editing job vehicle data (Kennzeichen, FIN, etc.)
+class JobEditData(BaseModel):
+    license_plate: Optional[str] = None
+    vin: Optional[str] = None
+    tow_reason: Optional[str] = None
+    notes: Optional[str] = None
+    location_address: Optional[str] = None
+    location_lat: Optional[float] = None
+    location_lng: Optional[float] = None
+
 class BulkStatusUpdate(BaseModel):
     job_ids: List[str]
     status: str
