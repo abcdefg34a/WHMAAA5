@@ -1325,21 +1325,53 @@ async def approve_authority(authority_id: str, data: ApproveServiceRequest, user
 
 @api_router.post("/jobs", response_model=JobResponse)
 async def create_job(data: JobCreate, user: dict = Depends(get_current_user)):
-    if user["role"] not in [UserRole.AUTHORITY, UserRole.ADMIN]:
-        raise HTTPException(status_code=403, detail="Only authorities can create jobs")
+    # Allow authorities, admins, and towing services to create jobs
+    if user["role"] not in [UserRole.AUTHORITY, UserRole.ADMIN, UserRole.TOWING_SERVICE]:
+        raise HTTPException(status_code=403, detail="Keine Berechtigung zum Erstellen von Aufträgen")
     
     job_id = str(uuid.uuid4())
     now = datetime.now(timezone.utc).isoformat()
     
-    # Get assigned service name if provided
-    assigned_service_name = None
-    if data.assigned_service_id:
-        service = await db.users.find_one({"id": data.assigned_service_id})
-        if service:
-            assigned_service_name = service.get("company_name")
-    
-    # Get the authority ID (either main or from parent)
-    authority_id = get_authority_id(user)
+    # Handle towing service creating job for an authority
+    if user["role"] == UserRole.TOWING_SERVICE:
+        if not data.for_authority_id:
+            raise HTTPException(status_code=400, detail="Abschleppdienste müssen eine Behörde angeben")
+        
+        # Verify the authority is linked to this towing service
+        linked_authorities = user.get("linked_authorities", [])
+        if data.for_authority_id not in linked_authorities:
+            raise HTTPException(status_code=403, detail="Sie können nur Aufträge für verknüpfte Behörden erstellen")
+        
+        # Get authority details
+        authority = await db.users.find_one({"id": data.for_authority_id, "role": UserRole.AUTHORITY})
+        if not authority:
+            raise HTTPException(status_code=404, detail="Behörde nicht gefunden")
+        
+        authority_id = data.for_authority_id
+        authority_name = authority.get("authority_name")
+        created_by_authority = authority_name
+        created_by_dienstnummer = None  # Service doesn't have Dienstnummer
+        # Job is auto-assigned to this towing service
+        assigned_service_id = user["id"]
+        assigned_service_name = user.get("company_name")
+        # For service-created jobs, start in "assigned" status (already accepted)
+        initial_status = JobStatus.ASSIGNED
+    else:
+        # Authority or Admin creating job
+        # Get assigned service name if provided
+        assigned_service_name = None
+        assigned_service_id = data.assigned_service_id
+        if assigned_service_id:
+            service = await db.users.find_one({"id": assigned_service_id})
+            if service:
+                assigned_service_name = service.get("company_name")
+        
+        # Get the authority ID (either main or from parent)
+        authority_id = get_authority_id(user)
+        authority_name = user.get("authority_name")
+        created_by_authority = authority_name
+        created_by_dienstnummer = user.get("dienstnummer")
+        initial_status = JobStatus.ASSIGNED if assigned_service_id else JobStatus.PENDING
     
     # Compress photos before storing
     compressed_photos = []
@@ -1360,13 +1392,13 @@ async def create_job(data: JobCreate, user: dict = Depends(get_current_user)):
         "location_lng": data.location_lng,
         "photos": compressed_photos,
         "notes": data.notes,
-        "status": JobStatus.ASSIGNED if data.assigned_service_id else JobStatus.PENDING,
+        "status": initial_status,
         "created_by_id": user["id"],
         "created_by_name": user["name"],
-        "created_by_authority": user.get("authority_name"),
-        "created_by_dienstnummer": user.get("dienstnummer"),
+        "created_by_authority": created_by_authority,
+        "created_by_dienstnummer": created_by_dienstnummer,
         "authority_id": authority_id,
-        "assigned_service_id": data.assigned_service_id,
+        "assigned_service_id": assigned_service_id,
         "assigned_service_name": assigned_service_name,
         "service_notes": None,
         "service_photos": [],
@@ -1381,7 +1413,7 @@ async def create_job(data: JobCreate, user: dict = Depends(get_current_user)):
         "towed_at": None,
         "in_yard_at": None,
         "released_at": None,
-        "accepted_at": None,
+        "accepted_at": now if user["role"] == UserRole.TOWING_SERVICE else None,  # Auto-accepted for service-created jobs
         # NEW: Job type and Sicherstellung fields
         "job_type": data.job_type or "towing",
         "sicherstellung_reason": data.sicherstellung_reason,
@@ -1391,7 +1423,9 @@ async def create_job(data: JobCreate, user: dict = Depends(get_current_user)):
         "contact_attempts_notes": data.contact_attempts_notes,
         "estimated_vehicle_value": data.estimated_vehicle_value,
         "is_empty_trip": False,
-        "calculated_costs": None
+        "calculated_costs": None,
+        # NEW: Track if job was created by towing service
+        "created_by_service": user["role"] == UserRole.TOWING_SERVICE
     }
     
     await db.jobs.insert_one(job_doc)
