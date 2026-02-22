@@ -1781,6 +1781,8 @@ async def search_vehicle(q: str):
         towed_at=job.get("towed_at"),
         in_yard_at=job.get("in_yard_at"),
         yard_address=service.get("yard_address") if service else None,
+        yard_lat=service.get("yard_lat") if service else None,  # NEW: Yard coordinates
+        yard_lng=service.get("yard_lng") if service else None,  # NEW: Yard coordinates
         company_name=service.get("company_name") if service else None,
         phone=service.get("phone") if service else None,
         email=service.get("email") if service else None,
@@ -1789,7 +1791,7 @@ async def search_vehicle(q: str):
         daily_cost=daily_cost,
         days_in_yard=days_in_yard,
         total_cost=total_cost,
-        location_lat=job.get("location_lat"),
+        location_lat=job.get("location_lat"),  # Keep for reference where car was towed from
         location_lng=job.get("location_lng"),
         # NEW: Additional info
         tow_reason=job.get("tow_reason"),
