@@ -115,15 +115,23 @@ export const RegisterPage = () => {
 
       await register(data);
       
+      // This code will only run for roles that don't need approval (e.g., admin)
       if (activeTab === 'authority') {
         navigate('/authority');
       } else if (activeTab === 'towing_service') {
-        // Towing service needs approval
-        toast.info('Ihre Registrierung wird von einem Administrator geprüft. Sie werden per E-Mail benachrichtigt.');
-        navigate('/login');
+        navigate('/towing');
       }
     } catch (err) {
-      setError(err.response?.data?.detail || 'Registrierung fehlgeschlagen');
+      // Check if it's a 202 "Accepted" response (needs approval)
+      if (err.response?.status === 202) {
+        toast.success('Registrierung erfolgreich!', {
+          description: 'Ihr Konto muss erst von einem Administrator freigeschaltet werden. Sie werden benachrichtigt, sobald Ihr Konto aktiviert wurde.',
+          duration: 8000
+        });
+        navigate('/login');
+      } else {
+        setError(err.response?.data?.detail || 'Registrierung fehlgeschlagen');
+      }
     } finally {
       setLoading(false);
     }
