@@ -24,12 +24,12 @@ class TowingJobCreationTester:
         
         self.towing_credentials = {
             "email": "abschlepp@test.de", 
-            "password": "abschlepp123"
+            "password": "Abschlepp123"
         }
         
         self.authority_credentials = {
             "email": "behoerde@test.de",
-            "password": "behoerde123"
+            "password": "Behoerde123"
         }
 
     def run_test(self, name: str, method: str, endpoint: str, expected_status: int, 
