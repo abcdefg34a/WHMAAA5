@@ -656,6 +656,26 @@ export const TowingDashboard = () => {
     });
   };
 
+  // Photo Lightbox functions
+  const openLightbox = (photos, index) => {
+    setLightboxPhotos(photos);
+    setLightboxIndex(index);
+    setLightboxPhoto(photos[index]);
+    setLightboxOpen(true);
+  };
+
+  const nextPhoto = () => {
+    const newIndex = (lightboxIndex + 1) % lightboxPhotos.length;
+    setLightboxIndex(newIndex);
+    setLightboxPhoto(lightboxPhotos[newIndex]);
+  };
+
+  const prevPhoto = () => {
+    const newIndex = (lightboxIndex - 1 + lightboxPhotos.length) % lightboxPhotos.length;
+    setLightboxIndex(newIndex);
+    setLightboxPhoto(lightboxPhotos[newIndex]);
+  };
+
   const openJobDetail = (job) => {
     setSelectedJob(job);
     setServiceNotes(job.service_notes || '');
