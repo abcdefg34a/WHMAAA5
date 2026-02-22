@@ -117,6 +117,18 @@ backend:
         agent: "testing"
         comment: "✅ PASSED - Admin login successful with provided credentials (admin@test.de / Admin123!). Token obtained and verified. Admin role confirmed. Authentication working correctly."
 
+  - task: "Towing service job creation with linked authorities"
+    implemented: true
+    working: "NA"
+    file: "/app/backend/server.py"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: true
+    status_history:
+      - working: "NA"
+        agent: "main"
+        comment: "NEW: Added bidirectional linking between authorities and services. New endpoints: GET /api/towing/linked-authorities, POST /api/admin/sync-links. Modified POST /api/jobs to allow towing services to create jobs for linked authorities."
+
   - task: "Pagination endpoints"
     implemented: true
     working: true
