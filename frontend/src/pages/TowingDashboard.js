@@ -2665,6 +2665,96 @@ export const TowingDashboard = () => {
           </div>
         </DialogContent>
       </Dialog>
+
+      {/* Edit Job Data Dialog */}
+      <Dialog open={editJobDialogOpen} onOpenChange={setEditJobDialogOpen}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Edit className="h-5 w-5" />
+              Daten bearbeiten
+            </DialogTitle>
+            <DialogDescription>
+              Korrigieren Sie Kennzeichen, FIN oder andere Angaben
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-4">
+            <div className="space-y-2">
+              <Label htmlFor="edit-license-plate">Kennzeichen</Label>
+              <Input
+                id="edit-license-plate"
+                value={editJobData.license_plate}
+                onChange={(e) => setEditJobData(prev => ({...prev, license_plate: e.target.value.toUpperCase()}))}
+                placeholder="z.B. B-AB 1234"
+                className="text-lg font-mono"
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="edit-vin">Fahrzeug-Identnummer (FIN)</Label>
+              <Input
+                id="edit-vin"
+                value={editJobData.vin}
+                onChange={(e) => setEditJobData(prev => ({...prev, vin: e.target.value.toUpperCase()}))}
+                placeholder="17-stellige FIN"
+                className="font-mono"
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="edit-tow-reason">Abschleppgrund</Label>
+              <Select 
+                value={editJobData.tow_reason}
+                onValueChange={(value) => setEditJobData(prev => ({...prev, tow_reason: value}))}
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder="Grund auswählen..." />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="Parken im Parkverbot">Parken im Parkverbot</SelectItem>
+                  <SelectItem value="Parken in Feuerwehrzufahrt">Parken in Feuerwehrzufahrt</SelectItem>
+                  <SelectItem value="Parken auf Gehweg">Parken auf Gehweg</SelectItem>
+                  <SelectItem value="Parken in Halteverbotszone">Parken in Halteverbotszone</SelectItem>
+                  <SelectItem value="Parken auf Behindertenparkplatz">Parken auf Behindertenparkplatz</SelectItem>
+                  <SelectItem value="Unfall/Panne">Unfall/Panne</SelectItem>
+                  <SelectItem value="Polizeiliche Anordnung">Polizeiliche Anordnung</SelectItem>
+                  <SelectItem value="Sonstiges">Sonstiges</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="edit-notes">Bemerkungen</Label>
+              <Textarea
+                id="edit-notes"
+                value={editJobData.notes}
+                onChange={(e) => setEditJobData(prev => ({...prev, notes: e.target.value}))}
+                placeholder="Zusätzliche Informationen..."
+                rows={3}
+              />
+            </div>
+          </div>
+          <div className="flex justify-end gap-3">
+            <Button variant="outline" onClick={() => setEditJobDialogOpen(false)}>
+              Abbrechen
+            </Button>
+            <Button 
+              onClick={handleSaveJobData}
+              disabled={editingJobData}
+              className="bg-blue-600 hover:bg-blue-700"
+            >
+              {editingJobData ? (
+                <>
+                  <div className="loading-spinner mr-2"></div>
+                  Speichert...
+                </>
+              ) : (
+                <>
+                  <Save className="h-4 w-4 mr-2" />
+                  Speichern
+                </>
+              )}
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 };
