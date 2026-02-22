@@ -15,6 +15,9 @@ class NewFeaturesAPITester:
         self.tests_passed = 0
         self.test_results = []
         
+        # Generate unique identifiers for this test run
+        timestamp = datetime.now().strftime('%H%M%S')
+        
         # Test credentials from review request
         self.authority_creds = {
             "email": "behoerde@test.de",
@@ -25,6 +28,10 @@ class NewFeaturesAPITester:
             "email": "abschlepp@test.de", 
             "password": "Abschlepp123"
         }
+        
+        # Unique test data for this run
+        self.unique_license_plate = f"DUP-TEST{timestamp}"
+        self.unique_employee_email = f"test-employee-{timestamp}@test.de"
 
     def run_test(self, name: str, method: str, endpoint: str, expected_status: int, 
                  data: Optional[Dict] = None, token: Optional[str] = None) -> tuple[bool, Dict]:
