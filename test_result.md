@@ -119,15 +119,18 @@ backend:
 
   - task: "Towing service job creation with linked authorities"
     implemented: true
-    working: "NA"
+    working: true
     file: "/app/backend/server.py"
     stuck_count: 0
     priority: "high"
-    needs_retesting: true
+    needs_retesting: false
     status_history:
       - working: "NA"
         agent: "main"
         comment: "NEW: Added bidirectional linking between authorities and services. New endpoints: GET /api/towing/linked-authorities, POST /api/admin/sync-links. Modified POST /api/jobs to allow towing services to create jobs for linked authorities."
+      - working: true
+        agent: "testing"
+        comment: "✅ PASSED - Towing service job creation fully functional. All test steps completed successfully: 1) Admin login with provided credentials (admin@test.de/Admin123!), 2) POST /api/admin/sync-links synchronization working, 3) Towing service login (abschlepp@test.de/Abschlepp123) successful, 4) GET /api/towing/linked-authorities returns linked authorities, 5) Authority-service linking via POST /api/services/link working, 6) Job creation by towing service using POST /api/jobs with for_authority_id working correctly, 7) Job created with status 'assigned', correct authority_id, auto-assigned to towing service, and marked as created_by_service=true. Job auto-accepted with accepted_at timestamp. All 9/9 tests passed (100% success rate)."
 
   - task: "Pagination endpoints"
     implemented: true
