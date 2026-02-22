@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import axios from 'axios';
-import { Search, Car, MapPin, Clock, Phone, Building2, ChevronRight, Shield, Truck, Users, Euro, Calendar } from 'lucide-react';
+import { Search, Car, MapPin, Clock, Phone, Building2, ChevronRight, Shield, Truck, Users, Euro, Calendar, FileText } from 'lucide-react';
 import { Button } from '../components/ui/button';
 import { Card, CardContent } from '../components/ui/card';
 import { MapContainer, TileLayer, Marker, Popup } from 'react-leaflet';
