@@ -2072,7 +2072,13 @@ async def generate_pdf(job_id: str):
     story = []
     
     # ===== HEADER =====
-    story.append(Paragraph("ABSCHLEPPPROTOKOLL", title_style))
+    # Check if this is an empty trip
+    is_empty_trip = job.get('is_empty_trip', False)
+    
+    if is_empty_trip:
+        story.append(Paragraph("LEERFAHRT-PROTOKOLL", title_style))
+    else:
+        story.append(Paragraph("ABSCHLEPPPROTOKOLL", title_style))
     story.append(Paragraph(f"Auftragsnummer: {job['job_number']}", subtitle_style))
     
     # Horizontal line
@@ -2083,6 +2089,60 @@ async def generate_pdf(job_id: str):
     ]))
     story.append(line_table)
     story.append(Spacer(1, 10))
+    
+    # ===== EMPTY TRIP DETAILS (if applicable) =====
+    if is_empty_trip:
+        story.append(Paragraph("Leerfahrt-Details", heading_style))
+        
+        # Parse service notes for empty trip reason
+        service_notes = job.get('service_notes', '')
+        empty_trip_reason = 'Fahrzeug war nicht mehr vor Ort'
+        if 'Fahrer vor Ort angetroffen' in service_notes:
+            empty_trip_reason = 'Fahrer vor Ort angetroffen'
+        
+        empty_data = [
+            [Paragraph("<b>Status</b>", cell_style), Paragraph("<b>LEERFAHRT</b>", cell_style)],
+            [Paragraph("<b>Grund</b>", cell_style), Paragraph(empty_trip_reason, cell_style)],
+        ]
+        
+        # Add driver info if present
+        if job.get('owner_first_name') and job.get('owner_last_name'):
+            empty_data.append([
+                Paragraph("<b>Angetroffene Person</b>", cell_style), 
+                Paragraph(f"{job['owner_first_name']} {job['owner_last_name']}", cell_style)
+            ])
+            if job.get('owner_address'):
+                empty_data.append([
+                    Paragraph("<b>Adresse</b>", cell_style), 
+                    Paragraph(job['owner_address'], cell_style)
+                ])
+        
+        # Payment info
+        if job.get('payment_amount'):
+            payment_method_labels = {'cash': 'Bar', 'card': 'Karte', 'invoice': 'Rechnung'}
+            payment_method = payment_method_labels.get(job.get('payment_method', ''), job.get('payment_method', '-'))
+            empty_data.append([
+                Paragraph("<b>Leerfahrt-Kosten</b>", cell_style), 
+                Paragraph(f"{job['payment_amount']:.2f} €", cell_style)
+            ])
+            empty_data.append([
+                Paragraph("<b>Zahlungsart</b>", cell_style), 
+                Paragraph(payment_method, cell_style)
+            ])
+        
+        empty_table = Table(empty_data, colWidths=[5*cm, 12*cm])
+        empty_table.setStyle(TableStyle([
+            ('BACKGROUND', (0, 0), (0, -1), colors.HexColor('#fff7ed')),
+            ('BACKGROUND', (1, 0), (1, 0), colors.HexColor('#fed7aa')),
+            ('GRID', (0, 0), (-1, -1), 0.5, colors.HexColor('#fdba74')),
+            ('VALIGN', (0, 0), (-1, -1), 'TOP'),
+            ('TOPPADDING', (0, 0), (-1, -1), 6),
+            ('BOTTOMPADDING', (0, 0), (-1, -1), 6),
+            ('LEFTPADDING', (0, 0), (-1, -1), 8),
+            ('RIGHTPADDING', (0, 0), (-1, -1), 8),
+        ]))
+        story.append(empty_table)
+        story.append(Spacer(1, 15))
     
     # ===== AUFTRAGSTYP =====
     job_type = job.get('job_type', 'towing')
