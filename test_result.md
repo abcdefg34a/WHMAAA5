@@ -305,12 +305,10 @@ metadata:
   run_ui: true
 
 test_plan:
-  current_focus:
-    - "Towing service job creation with linked authorities"
-    - "Towing service job creation UI"
+  current_focus: []
   stuck_tasks: []
-  test_all: false
-  test_priority: "high_first"
+  test_all: true
+  test_priority: "completed"
 
 agent_communication:
   - agent: "main"
