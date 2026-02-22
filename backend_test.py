@@ -1386,6 +1386,211 @@ class TowingManagementAPITester:
         
         return True
 
+    def test_time_based_cost_calculation(self):
+        """Test time-based cost calculation functionality as requested in review"""
+        print("\n⏰ Testing Time-Based Cost Calculation...")
+        
+        # Step 1: Login as Abschleppdienst with provided credentials
+        login_data = {"email": "abschlepp@test.de", "password": "Abschlepp123"}
+        success, response = self.run_test(
+            "Towing Service Login (abschlepp@test.de)", "POST", "auth/login", 200, login_data
+        )
+        
+        if not success or 'access_token' not in response:
+            print("❌ Failed to login as towing service - cannot continue time-based tests")
+            return False
+        
+        towing_token = response['access_token']
+        towing_user = response.get('user', {})
+        towing_service_id = towing_user.get('id')
+        
+        print(f"   ✅ Towing service login successful")
+        print(f"   Service ID: {towing_service_id}")
+        print(f"   Company: {towing_user.get('company_name', 'Unknown')}")
+        
+        # Step 2: Check current pricing settings via GET /api/auth/me
+        success, response = self.run_test(
+            "Check Current Pricing Settings", "GET", "auth/me", 200, token=towing_token
+        )
+        
+        if success and response:
+            time_based_enabled = response.get('time_based_enabled')
+            first_half_hour = response.get('first_half_hour')
+            additional_half_hour = response.get('additional_half_hour')
+            
+            print(f"   Current pricing settings:")
+            print(f"   - time_based_enabled: {time_based_enabled}")
+            print(f"   - first_half_hour: {first_half_hour}")
+            print(f"   - additional_half_hour: {additional_half_hour}")
+        
+        # Step 3: Activate time-based calculation with PATCH /api/services/pricing-settings
+        pricing_data = {
+            "time_based_enabled": True,
+            "first_half_hour": 137.00,
+            "additional_half_hour": 93.00
+        }
+        
+        success, response = self.run_test(
+            "Activate Time-Based Pricing", "PATCH", "services/pricing-settings", 200,
+            pricing_data, towing_token
+        )
+        
+        if success and response:
+            updated_time_based = response.get('time_based_enabled')
+            updated_first_hh = response.get('first_half_hour')
+            updated_add_hh = response.get('additional_half_hour')
+            
+            print(f"   ✅ Time-based pricing activated:")
+            print(f"   - time_based_enabled: {updated_time_based}")
+            print(f"   - first_half_hour: {updated_first_hh}€")
+            print(f"   - additional_half_hour: {updated_add_hh}€")
+            
+            if updated_time_based and updated_first_hh == 137.00 and updated_add_hh == 93.00:
+                print(f"   ✅ Pricing settings correctly updated")
+            else:
+                print(f"   ❌ Pricing settings not correctly updated")
+                return False
+        else:
+            print("   ❌ Failed to activate time-based pricing")
+            return False
+        
+        # Step 4: Find a job with "in_yard" status
+        success, response = self.run_test(
+            "Get Jobs for Towing Service", "GET", "jobs", 200, token=towing_token
+        )
+        
+        in_yard_job = None
+        if success and response:
+            # Look for a job with in_yard status
+            for job in response:
+                if job.get('status') == 'in_yard' and job.get('accepted_at') and job.get('in_yard_at'):
+                    in_yard_job = job
+                    break
+            
+            if not in_yard_job:
+                # If no in_yard job exists, try to create one and update it to in_yard
+                print("   No in_yard job found, creating test job...")
+                
+                # Create a test job
+                job_data = {
+                    "license_plate": "B-TIME001",
+                    "vin": "WVWZZZ3CZWE999001",
+                    "tow_reason": "Time-based cost test job",
+                    "location_address": "Zeitstraße 1, 12345 Berlin",
+                    "location_lat": 52.520008,
+                    "location_lng": 13.404954,
+                    "notes": "Job for time-based cost calculation test"
+                }
+                
+                # First login as authority to create job
+                auth_login = {"email": "behoerde@test.de", "password": "Behoerde123"}
+                auth_success, auth_response = self.run_test(
+                    "Authority Login for Job Creation", "POST", "auth/login", 200, auth_login
+                )
+                
+                if auth_success and 'access_token' in auth_response:
+                    auth_token = auth_response['access_token']
+                    job_data["assigned_service_id"] = towing_service_id
+                    
+                    create_success, create_response = self.run_test(
+                        "Create Test Job for Time-Based Calculation", "POST", "jobs", 200,
+                        job_data, auth_token
+                    )
+                    
+                    if create_success and create_response:
+                        test_job_id = create_response['id']
+                        print(f"   ✅ Created test job: {test_job_id}")
+                        
+                        # Update job to on_site status first (to set accepted_at)
+                        update_data = {"status": "on_site"}
+                        self.run_test(
+                            "Update Job to On Site", "PATCH", f"jobs/{test_job_id}", 200,
+                            update_data, towing_token
+                        )
+                        
+                        # Update job to towed status
+                        update_data = {"status": "towed"}
+                        self.run_test(
+                            "Update Job to Towed", "PATCH", f"jobs/{test_job_id}", 200,
+                            update_data, towing_token
+                        )
+                        
+                        # Update job to in_yard status
+                        update_data = {"status": "in_yard"}
+                        update_success, update_response = self.run_test(
+                            "Update Job to In Yard", "PATCH", f"jobs/{test_job_id}", 200,
+                            update_data, towing_token
+                        )
+                        
+                        if update_success:
+                            # Get the updated job
+                            job_success, job_response = self.run_test(
+                                "Get Updated Job", "GET", f"jobs/{test_job_id}", 200, token=towing_token
+                            )
+                            
+                            if job_success and job_response:
+                                in_yard_job = job_response
+                                print(f"   ✅ Job updated to in_yard status")
+        
+        if not in_yard_job:
+            print("   ❌ No job with in_yard status found or created")
+            return False
+        
+        job_id = in_yard_job['id']
+        job_number = in_yard_job.get('job_number', 'Unknown')
+        accepted_at = in_yard_job.get('accepted_at')
+        in_yard_at = in_yard_job.get('in_yard_at')
+        
+        print(f"   ✅ Found in_yard job: {job_number} (ID: {job_id})")
+        print(f"   - accepted_at: {accepted_at}")
+        print(f"   - in_yard_at: {in_yard_at}")
+        
+        # Step 5: Call GET /api/jobs/{job_id}/calculate-costs
+        success, response = self.run_test(
+            "Calculate Time-Based Costs", "GET", f"jobs/{job_id}/calculate-costs", 200,
+            token=towing_token
+        )
+        
+        if success and response:
+            total_cost = response.get('total', 0)
+            breakdown = response.get('breakdown', [])
+            
+            print(f"   ✅ Cost calculation successful:")
+            print(f"   - Total cost: {total_cost}€")
+            print(f"   - Breakdown items: {len(breakdown)}")
+            
+            # Check if time-based pricing is used in breakdown
+            time_based_items = []
+            for item in breakdown:
+                label = item.get('label', '')
+                amount = item.get('amount', 0)
+                print(f"     * {label}: {amount}€")
+                
+                if 'halbe stunde' in label.lower() or 'erste' in label.lower() or 'weitere' in label.lower():
+                    time_based_items.append(item)
+            
+            # Verify time-based calculation
+            if len(time_based_items) > 0:
+                print(f"   ✅ Time-based pricing detected in breakdown:")
+                for item in time_based_items:
+                    print(f"     ✅ {item.get('label')}: {item.get('amount')}€")
+                
+                # Check for expected pricing structure
+                first_hh_found = any('erste' in item.get('label', '').lower() for item in time_based_items)
+                if first_hh_found:
+                    print(f"   ✅ 'Erste halbe Stunde' found in breakdown")
+                else:
+                    print(f"   ❌ 'Erste halbe Stunde' not found in breakdown")
+                
+                return True
+            else:
+                print(f"   ❌ No time-based pricing items found in breakdown")
+                print(f"   Expected: 'Erste halbe Stunde' and potentially 'weitere halbe Stunde'")
+                return False
+        else:
+            print("   ❌ Failed to calculate costs")
+            return False
+
     def test_comprehensive_backend_review(self):
         """Run all tests specified in the review request"""
         print("\n" + "="*80)
@@ -1393,6 +1598,10 @@ class TowingManagementAPITester:
         print("="*80)
         
         all_tests_passed = True
+        
+        # NEW: Time-based cost calculation test (as requested in review)
+        if not self.test_time_based_cost_calculation():
+            all_tests_passed = False
         
         # 1. Authentication with provided credentials
         if not self.test_admin_login_with_provided_credentials():
