@@ -1593,6 +1593,324 @@ export const TowingDashboard = () => {
           </div>
         </DialogContent>
       </Dialog>
+
+      {/* NEW: Create Job Dialog */}
+      <Dialog open={createJobDialogOpen} onOpenChange={setCreateJobDialogOpen}>
+        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Car className="h-5 w-5 text-green-600" />
+              Neuen Auftrag erstellen
+            </DialogTitle>
+            <DialogDescription>
+              Erstellen Sie einen Auftrag für eine Behörde, mit der Sie verknüpft sind
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-6 py-4">
+            {/* Authority Selection */}
+            <div className="space-y-2">
+              <Label className="text-sm font-medium">Behörde auswählen *</Label>
+              {loadingAuthorities ? (
+                <div className="flex items-center gap-2 text-slate-500">
+                  <div className="loading-spinner h-4 w-4"></div>
+                  Lade verknüpfte Behörden...
+                </div>
+              ) : linkedAuthorities.length === 0 ? (
+                <div className="p-4 bg-yellow-50 border border-yellow-200 rounded-lg text-yellow-800">
+                  <p className="font-medium">Keine verknüpften Behörden</p>
+                  <p className="text-sm mt-1">
+                    Um Aufträge erstellen zu können, muss eine Behörde Sie zuerst über Ihren Verknüpfungscode hinzufügen.
+                  </p>
+                </div>
+              ) : (
+                <Select 
+                  value={newJobData.for_authority_id} 
+                  onValueChange={(value) => setNewJobData(prev => ({...prev, for_authority_id: value}))}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="Behörde auswählen..." />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {linkedAuthorities.map(auth => (
+                      <SelectItem key={auth.id} value={auth.id}>
+                        {auth.authority_name} ({auth.department || 'Keine Abteilung'})
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              )}
+            </div>
+
+            {/* Job Type */}
+            <div className="space-y-2">
+              <Label className="text-sm font-medium">Auftragsart</Label>
+              <Select 
+                value={newJobData.job_type} 
+                onValueChange={(value) => setNewJobData(prev => ({...prev, job_type: value}))}
+              >
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="towing">Normaler Abschleppauftrag</SelectItem>
+                  <SelectItem value="sicherstellung">Sicherstellung (Polizei)</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+
+            {/* Vehicle Info */}
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label htmlFor="newLicensePlate">Kennzeichen *</Label>
+                <Input
+                  id="newLicensePlate"
+                  value={newJobData.license_plate}
+                  onChange={(e) => setNewJobData(prev => ({...prev, license_plate: e.target.value.toUpperCase()}))}
+                  placeholder="B-AB 1234"
+                  className="uppercase"
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="newVin">FIN (optional)</Label>
+                <Input
+                  id="newVin"
+                  value={newJobData.vin}
+                  onChange={(e) => setNewJobData(prev => ({...prev, vin: e.target.value.toUpperCase()}))}
+                  placeholder="WDB1234567890"
+                  className="uppercase"
+                />
+              </div>
+            </div>
+
+            {/* Tow Reason */}
+            <div className="space-y-2">
+              <Label htmlFor="newTowReason">Abschleppgrund *</Label>
+              <Select 
+                value={newJobData.tow_reason}
+                onValueChange={(value) => setNewJobData(prev => ({...prev, tow_reason: value}))}
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder="Grund auswählen..." />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="Falschparken">Falschparken</SelectItem>
+                  <SelectItem value="Unfall">Unfall</SelectItem>
+                  <SelectItem value="Panne">Panne</SelectItem>
+                  <SelectItem value="Sicherstellung">Sicherstellung</SelectItem>
+                  <SelectItem value="Polizeiliche Anordnung">Polizeiliche Anordnung</SelectItem>
+                  <SelectItem value="Sonstiges">Sonstiges</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+
+            {/* Location */}
+            <div className="space-y-2">
+              <Label htmlFor="newLocationAddress">Standort/Adresse *</Label>
+              <Input
+                id="newLocationAddress"
+                value={newJobData.location_address}
+                onChange={(e) => setNewJobData(prev => ({...prev, location_address: e.target.value}))}
+                placeholder="Musterstraße 1, 12345 Berlin"
+              />
+            </div>
+
+            {/* Coordinates */}
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label htmlFor="newLat">Breitengrad</Label>
+                <Input
+                  id="newLat"
+                  type="number"
+                  step="0.0001"
+                  value={newJobData.location_lat}
+                  onChange={(e) => setNewJobData(prev => ({...prev, location_lat: parseFloat(e.target.value) || 0}))}
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="newLng">Längengrad</Label>
+                <Input
+                  id="newLng"
+                  type="number"
+                  step="0.0001"
+                  value={newJobData.location_lng}
+                  onChange={(e) => setNewJobData(prev => ({...prev, location_lng: parseFloat(e.target.value) || 0}))}
+                />
+              </div>
+            </div>
+
+            {/* Sicherstellung Fields */}
+            {newJobData.job_type === 'sicherstellung' && (
+              <div className="p-4 bg-red-50 border border-red-200 rounded-lg space-y-4">
+                <h4 className="font-medium text-red-800">Sicherstellungs-Details</h4>
+                
+                <div className="space-y-2">
+                  <Label>Sicherstellungsgrund</Label>
+                  <Select 
+                    value={newJobData.sicherstellung_reason}
+                    onValueChange={(value) => setNewJobData(prev => ({...prev, sicherstellung_reason: value}))}
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder="Grund auswählen..." />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="stolen">Gestohlenes Fahrzeug</SelectItem>
+                      <SelectItem value="evidence">Beweismittel</SelectItem>
+                      <SelectItem value="danger">Gefahr im Verzug</SelectItem>
+                      <SelectItem value="abandoned">Herrenlos / Verlassen</SelectItem>
+                      <SelectItem value="court_order">Gerichtliche Anordnung</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                <div className="space-y-2">
+                  <Label>Fahrzeugkategorie</Label>
+                  <Select 
+                    value={newJobData.vehicle_category}
+                    onValueChange={(value) => setNewJobData(prev => ({...prev, vehicle_category: value}))}
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder="Kategorie auswählen..." />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="under_3_5t">Unter 3,5t</SelectItem>
+                      <SelectItem value="over_3_5t">Über 3,5t</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                <div className="space-y-2">
+                  <Label>Anordnende Stelle</Label>
+                  <Select 
+                    value={newJobData.ordering_authority}
+                    onValueChange={(value) => setNewJobData(prev => ({...prev, ordering_authority: value}))}
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder="Stelle auswählen..." />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="police">Polizei</SelectItem>
+                      <SelectItem value="prosecutor">Staatsanwaltschaft</SelectItem>
+                      <SelectItem value="customs">Zoll</SelectItem>
+                      <SelectItem value="court">Gericht</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="newVehicleValue">Geschätzter Fahrzeugwert (€)</Label>
+                  <Input
+                    id="newVehicleValue"
+                    type="number"
+                    value={newJobData.estimated_vehicle_value}
+                    onChange={(e) => setNewJobData(prev => ({...prev, estimated_vehicle_value: e.target.value}))}
+                    placeholder="z.B. 5000"
+                  />
+                </div>
+
+                <div className="space-y-2">
+                  <div className="flex items-center gap-2">
+                    <input
+                      type="checkbox"
+                      id="newContactAttempts"
+                      checked={newJobData.contact_attempts}
+                      onChange={(e) => setNewJobData(prev => ({...prev, contact_attempts: e.target.checked}))}
+                      className="h-4 w-4"
+                    />
+                    <Label htmlFor="newContactAttempts">Kontaktversuche unternommen</Label>
+                  </div>
+                  {newJobData.contact_attempts && (
+                    <Textarea
+                      value={newJobData.contact_attempts_notes}
+                      onChange={(e) => setNewJobData(prev => ({...prev, contact_attempts_notes: e.target.value}))}
+                      placeholder="Details zu den Kontaktversuchen..."
+                      rows={2}
+                    />
+                  )}
+                </div>
+              </div>
+            )}
+
+            {/* Notes */}
+            <div className="space-y-2">
+              <Label htmlFor="newNotes">Notizen</Label>
+              <Textarea
+                id="newNotes"
+                value={newJobData.notes}
+                onChange={(e) => setNewJobData(prev => ({...prev, notes: e.target.value}))}
+                placeholder="Zusätzliche Informationen..."
+                rows={3}
+              />
+            </div>
+
+            {/* Photos */}
+            <div className="space-y-2">
+              <Label>Fotos</Label>
+              <div className="flex flex-wrap gap-2">
+                {newJobPhotos.map((photo, index) => (
+                  <div key={index} className="relative">
+                    <img 
+                      src={photo} 
+                      alt={`Foto ${index + 1}`} 
+                      className="w-20 h-20 object-cover rounded border"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => removeNewJobPhoto(index)}
+                      className="absolute -top-2 -right-2 bg-red-500 text-white rounded-full p-1"
+                    >
+                      <X className="h-3 w-3" />
+                    </button>
+                  </div>
+                ))}
+                <button
+                  type="button"
+                  onClick={() => newJobFileInputRef.current?.click()}
+                  className="w-20 h-20 border-2 border-dashed border-slate-300 rounded flex items-center justify-center hover:border-slate-400"
+                >
+                  <Camera className="h-6 w-6 text-slate-400" />
+                </button>
+                <input
+                  type="file"
+                  ref={newJobFileInputRef}
+                  onChange={handleNewJobPhotoUpload}
+                  accept="image/*"
+                  multiple
+                  className="hidden"
+                />
+              </div>
+            </div>
+
+            {/* Submit Button */}
+            <div className="flex gap-3 pt-4 border-t">
+              <Button
+                variant="outline"
+                onClick={() => setCreateJobDialogOpen(false)}
+                className="flex-1"
+              >
+                Abbrechen
+              </Button>
+              <Button
+                onClick={handleCreateJob}
+                disabled={creatingJob || linkedAuthorities.length === 0}
+                className="flex-1 bg-green-600 hover:bg-green-700"
+              >
+                {creatingJob ? (
+                  <>
+                    <div className="loading-spinner h-4 w-4 mr-2"></div>
+                    Erstelle...
+                  </>
+                ) : (
+                  <>
+                    <CheckCircle className="h-4 w-4 mr-2" />
+                    Auftrag erstellen
+                  </>
+                )}
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 };
