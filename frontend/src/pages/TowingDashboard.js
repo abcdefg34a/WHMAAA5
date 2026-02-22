@@ -72,6 +72,20 @@ export const TowingDashboard = () => {
   const [dailyCost, setDailyCost] = useState(user?.daily_cost || 0);
   const [savingCosts, setSavingCosts] = useState(false);
 
+  // NEW: Extended pricing settings
+  const [timeBasedEnabled, setTimeBasedEnabled] = useState(user?.time_based_enabled || false);
+  const [firstHalfHour, setFirstHalfHour] = useState(user?.first_half_hour || '');
+  const [additionalHalfHour, setAdditionalHalfHour] = useState(user?.additional_half_hour || '');
+  const [processingFee, setProcessingFee] = useState(user?.processing_fee || '');
+  const [emptyTripFee, setEmptyTripFee] = useState(user?.empty_trip_fee || '');
+  const [nightSurcharge, setNightSurcharge] = useState(user?.night_surcharge || '');
+  const [weekendSurcharge, setWeekendSurcharge] = useState(user?.weekend_surcharge || '');
+  const [heavyVehicleSurcharge, setHeavyVehicleSurcharge] = useState(user?.heavy_vehicle_surcharge || '');
+
+  // Cost calculation state
+  const [calculatedCosts, setCalculatedCosts] = useState(null);
+  const [loadingCosts, setLoadingCosts] = useState(false);
+
   useEffect(() => {
     fetchJobs();
   }, [filterStatus, filterDateFrom, filterDateTo, currentPage]);
