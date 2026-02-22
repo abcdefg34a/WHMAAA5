@@ -1586,15 +1586,29 @@ export const TowingDashboard = () => {
                   </div>
                 </div>
 
-                {/* Photos */}
+                {/* Photos from Authority */}
                 {selectedJob.photos && selectedJob.photos.length > 0 && (
                   <div>
-                    <Label className="text-slate-500 mb-2 block">Fotos</Label>
-                    <div className="photo-grid">
+                    <Label className="text-slate-500 mb-2 block">Fotos der Behörde ({selectedJob.photos.length})</Label>
+                    <div className="grid grid-cols-4 gap-2">
                       {selectedJob.photos.map((photo, idx) => (
-                        <img key={idx} src={photo} alt={`Foto ${idx + 1}`} />
+                        <div 
+                          key={idx} 
+                          className="relative aspect-square cursor-pointer hover:opacity-80 transition-opacity rounded-lg overflow-hidden border-2 border-slate-200 hover:border-orange-500"
+                          onClick={() => openLightbox(selectedJob.photos, idx)}
+                        >
+                          <img 
+                            src={photo} 
+                            alt={`Foto ${idx + 1}`} 
+                            className="w-full h-full object-cover"
+                          />
+                          <div className="absolute inset-0 flex items-center justify-center bg-black/0 hover:bg-black/30 transition-colors">
+                            <Search className="h-6 w-6 text-white opacity-0 hover:opacity-100" />
+                          </div>
+                        </div>
                       ))}
                     </div>
+                    <p className="text-xs text-slate-400 mt-1">Klicken zum Vergrößern</p>
                   </div>
                 )}
 
