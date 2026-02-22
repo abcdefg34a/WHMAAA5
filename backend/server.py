@@ -893,6 +893,139 @@ async def update_costs(data: UpdateCostsRequest, user: dict = Depends(get_curren
     updated_user = await db.users.find_one({"id": user["id"]}, {"_id": 0, "password": 0})
     return UserResponse(**updated_user)
 
+# NEW: Extended pricing settings endpoint
+@api_router.patch("/services/pricing-settings")
+async def update_pricing_settings(data: PricingSettingsRequest, user: dict = Depends(get_current_user)):
+    """Update extended pricing settings for towing service"""
+    if user["role"] != UserRole.TOWING_SERVICE:
+        raise HTTPException(status_code=403, detail="Only towing services can update pricing")
+    
+    update_data = {}
+    if data.time_based_enabled is not None:
+        update_data["time_based_enabled"] = data.time_based_enabled
+    if data.first_half_hour is not None:
+        update_data["first_half_hour"] = data.first_half_hour
+    if data.additional_half_hour is not None:
+        update_data["additional_half_hour"] = data.additional_half_hour
+    if data.tow_cost is not None:
+        update_data["tow_cost"] = data.tow_cost
+    if data.daily_cost is not None:
+        update_data["daily_cost"] = data.daily_cost
+    if data.processing_fee is not None:
+        update_data["processing_fee"] = data.processing_fee
+    if data.empty_trip_fee is not None:
+        update_data["empty_trip_fee"] = data.empty_trip_fee
+    if data.night_surcharge is not None:
+        update_data["night_surcharge"] = data.night_surcharge
+    if data.weekend_surcharge is not None:
+        update_data["weekend_surcharge"] = data.weekend_surcharge
+    if data.heavy_vehicle_surcharge is not None:
+        update_data["heavy_vehicle_surcharge"] = data.heavy_vehicle_surcharge
+    
+    if update_data:
+        await db.users.update_one({"id": user["id"]}, {"$set": update_data})
+    
+    updated_user = await db.users.find_one({"id": user["id"]}, {"_id": 0, "password": 0})
+    
+    # Audit log
+    await log_audit("PRICING_UPDATED", user["id"], user.get("company_name", user["name"]), {
+        "settings": update_data
+    })
+    
+    return UserResponse(**updated_user)
+
+# NEW: Calculate job costs based on service pricing
+@api_router.get("/jobs/{job_id}/calculate-costs")
+async def calculate_job_costs(job_id: str, user: dict = Depends(get_current_user)):
+    """Calculate costs for a job based on the towing service's pricing settings"""
+    job = await db.jobs.find_one({"id": job_id})
+    if not job:
+        raise HTTPException(status_code=404, detail="Auftrag nicht gefunden")
+    
+    service = await db.users.find_one({"id": job.get("assigned_service_id")})
+    if not service:
+        return {"total": 0, "breakdown": []}
+    
+    breakdown = []
+    total = 0.0
+    
+    # Check if time-based pricing is enabled
+    if service.get("time_based_enabled") and job.get("accepted_at") and job.get("in_yard_at"):
+        accepted = datetime.fromisoformat(job["accepted_at"].replace("Z", "+00:00"))
+        in_yard = datetime.fromisoformat(job["in_yard_at"].replace("Z", "+00:00"))
+        duration_minutes = (in_yard - accepted).total_seconds() / 60
+        half_hours = max(1, int((duration_minutes + 29) / 30))  # Round up
+        
+        first_hh = service.get("first_half_hour", 0) or 0
+        add_hh = service.get("additional_half_hour", 0) or 0
+        
+        if first_hh > 0:
+            breakdown.append({"label": "Erste halbe Stunde", "amount": first_hh})
+            total += first_hh
+        
+        if half_hours > 1 and add_hh > 0:
+            additional = (half_hours - 1) * add_hh
+            breakdown.append({"label": f"{half_hours - 1} × weitere halbe Stunde", "amount": additional})
+            total += additional
+    else:
+        # Standard pricing
+        tow_cost = service.get("tow_cost", 0) or 0
+        if tow_cost > 0:
+            breakdown.append({"label": "Anfahrt/Abschleppen", "amount": tow_cost})
+            total += tow_cost
+    
+    # Daily costs (if in yard)
+    if job.get("in_yard_at"):
+        daily_cost = service.get("daily_cost", 0) or 0
+        if daily_cost > 0:
+            in_yard_date = datetime.fromisoformat(job["in_yard_at"].replace("Z", "+00:00"))
+            now = datetime.now(timezone.utc)
+            days = max(1, (now - in_yard_date).days + 1)
+            daily_total = days * daily_cost
+            breakdown.append({"label": f"Standkosten ({days} Tag{'e' if days > 1 else ''})", "amount": daily_total})
+            total += daily_total
+    
+    # Processing fee
+    processing_fee = service.get("processing_fee", 0) or 0
+    if processing_fee > 0:
+        breakdown.append({"label": "Bearbeitungsgebühr", "amount": processing_fee})
+        total += processing_fee
+    
+    # Empty trip fee
+    if job.get("is_empty_trip"):
+        empty_fee = service.get("empty_trip_fee", 0) or 0
+        if empty_fee > 0:
+            breakdown.append({"label": "Leerfahrt", "amount": empty_fee})
+            total += empty_fee
+    
+    # Heavy vehicle surcharge
+    if job.get("vehicle_category") == "over_3_5t":
+        heavy_surcharge = service.get("heavy_vehicle_surcharge", 0) or 0
+        if heavy_surcharge > 0:
+            breakdown.append({"label": "Schwerlastzuschlag (ab 3,5t)", "amount": heavy_surcharge})
+            total += heavy_surcharge
+    
+    # Night surcharge (check if towed at night: 22:00 - 06:00)
+    if job.get("towed_at"):
+        towed_time = datetime.fromisoformat(job["towed_at"].replace("Z", "+00:00"))
+        hour = towed_time.hour
+        if hour >= 22 or hour < 6:
+            night_surcharge = service.get("night_surcharge", 0) or 0
+            if night_surcharge > 0:
+                breakdown.append({"label": "Nachtzuschlag", "amount": night_surcharge})
+                total += night_surcharge
+    
+    # Weekend surcharge (Saturday/Sunday)
+    if job.get("towed_at"):
+        towed_time = datetime.fromisoformat(job["towed_at"].replace("Z", "+00:00"))
+        if towed_time.weekday() >= 5:  # Saturday = 5, Sunday = 6
+            weekend_surcharge = service.get("weekend_surcharge", 0) or 0
+            if weekend_surcharge > 0:
+                breakdown.append({"label": "Wochenendzuschlag", "amount": weekend_surcharge})
+                total += weekend_surcharge
+    
+    return {"total": round(total, 2), "breakdown": breakdown}
+
 # ==================== AUTHORITY EMPLOYEE MANAGEMENT ====================
 
 def get_authority_id(user: dict) -> str:
