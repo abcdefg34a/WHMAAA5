@@ -298,8 +298,8 @@ class JobResponse(BaseModel):
     created_by_id: str
     created_by_name: str
     created_by_authority: Optional[str] = None
-    created_by_dienstnummer: Optional[str] = None  # NEW: Track who created the job
-    authority_id: Optional[str] = None  # NEW: Authority ID for grouping
+    created_by_dienstnummer: Optional[str] = None
+    authority_id: Optional[str] = None
     assigned_service_id: Optional[str] = None
     assigned_service_name: Optional[str] = None
     service_notes: Optional[str] = None
@@ -315,6 +315,18 @@ class JobResponse(BaseModel):
     towed_at: Optional[str] = None
     in_yard_at: Optional[str] = None
     released_at: Optional[str] = None
+    accepted_at: Optional[str] = None  # NEW: When job was accepted
+    # NEW: Job type and Sicherstellung fields
+    job_type: Optional[str] = "towing"
+    sicherstellung_reason: Optional[str] = None
+    vehicle_category: Optional[str] = None
+    ordering_authority: Optional[str] = None
+    contact_attempts: Optional[bool] = None
+    contact_attempts_notes: Optional[str] = None
+    estimated_vehicle_value: Optional[float] = None
+    is_empty_trip: Optional[bool] = None
+    # NEW: Calculated costs breakdown
+    calculated_costs: Optional[dict] = None
 
 class VehicleSearchResult(BaseModel):
     found: bool
