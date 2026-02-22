@@ -152,6 +152,17 @@ export const TowingDashboard = () => {
   const [newJobPhotos, setNewJobPhotos] = useState([]);
   const newJobFileInputRef = useRef(null);
 
+  // NEW: Edit Job Data Dialog state
+  const [editJobDialogOpen, setEditJobDialogOpen] = useState(false);
+  const [editingJobData, setEditingJobData] = useState(false);
+  const [editJobData, setEditJobData] = useState({
+    license_plate: '',
+    vin: '',
+    tow_reason: '',
+    notes: '',
+    location_address: ''
+  });
+
   useEffect(() => {
     fetchJobs();
   }, [filterStatus, filterDateFrom, filterDateTo, currentPage]);
