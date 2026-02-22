@@ -89,29 +89,66 @@ export const LandingPage = () => {
             Finden Sie Ihr Fahrzeug in Sekunden. Geben Sie Ihr Kennzeichen oder Ihre FIN ein.
           </p>
 
-          {/* Search Form */}
+          {/* Search Form - German License Plate Format */}
           <form onSubmit={handleSearch} className="max-w-xl mx-auto">
-            <div className="relative">
-              <input
-                data-testid="vehicle-search-input"
-                type="text"
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value.toUpperCase())}
-                placeholder="Kennzeichen oder FIN eingeben"
-                className="license-plate-input w-full pr-16"
-              />
+            <div className="bg-white rounded-lg p-4 shadow-lg">
+              {/* License Plate Visual Format */}
+              <div className="flex items-center justify-center mb-3">
+                <div className="flex items-center bg-white border-2 border-slate-300 rounded-md overflow-hidden">
+                  {/* EU Field */}
+                  <div className="bg-blue-700 text-white px-2 py-3 flex flex-col items-center">
+                    <div className="text-xs">★★★</div>
+                    <div className="font-bold text-sm">D</div>
+                  </div>
+                  {/* Input Field */}
+                  <input
+                    data-testid="vehicle-search-input"
+                    type="text"
+                    value={searchQuery}
+                    onChange={(e) => setSearchQuery(e.target.value.toUpperCase())}
+                    placeholder="B AB 1234"
+                    className="text-2xl font-bold text-center py-3 px-4 w-64 border-0 outline-none tracking-wider"
+                    style={{ fontFamily: 'monospace' }}
+                  />
+                </div>
+              </div>
+              
+              {/* Format Examples */}
+              <p className="text-xs text-slate-500 text-center mb-3">
+                Format: <span className="font-mono bg-slate-100 px-1 rounded">B AB 1234</span> oder <span className="font-mono bg-slate-100 px-1 rounded">HH XY 999E</span> oder <span className="font-mono bg-slate-100 px-1 rounded">M A 1H</span>
+              </p>
+              
+              {/* Search Button */}
               <button
                 data-testid="vehicle-search-btn"
                 type="submit"
                 disabled={searching}
-                className="absolute right-2 top-1/2 -translate-y-1/2 bg-orange-500 hover:bg-orange-600 text-white p-3 rounded transition-colors"
+                className="w-full bg-orange-500 hover:bg-orange-600 text-white py-3 px-6 rounded-lg font-semibold flex items-center justify-center gap-2 transition-colors"
               >
                 {searching ? (
-                  <div className="loading-spinner"></div>
+                  <>
+                    <div className="loading-spinner"></div>
+                    Suche läuft...
+                  </>
                 ) : (
-                  <Search className="h-6 w-6" />
+                  <>
+                    <Search className="h-5 w-5" />
+                    Fahrzeug suchen
+                  </>
                 )}
               </button>
+            </div>
+            
+            {/* Pickup Hint */}
+            <div className="mt-4 bg-amber-500/90 text-white px-4 py-3 rounded-lg text-sm">
+              <p className="font-semibold flex items-center gap-2">
+                <FileText className="h-4 w-4" />
+                Bei Treffer zur Abholung mitbringen:
+              </p>
+              <ul className="mt-1 ml-6 list-disc text-amber-100">
+                <li>Personalausweis oder Reisepass</li>
+                <li>Fahrzeugpapiere (Zulassungsbescheinigung Teil I)</li>
+              </ul>
             </div>
           </form>
 
