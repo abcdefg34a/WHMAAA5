@@ -302,8 +302,14 @@ export const AuthorityDashboard = () => {
   const handleSubmitJob = async (e) => {
     e.preventDefault();
     
-    if (!licensePlate || !towReason || !position) {
-      toast.error('Bitte füllen Sie alle Pflichtfelder aus');
+    // Validierung: Kennzeichen und Grund sind Pflicht, Position ODER Adresse
+    if (!licensePlate || !towReason) {
+      toast.error('Bitte füllen Sie Kennzeichen und Abschleppgrund aus');
+      return;
+    }
+
+    if (!position && !locationAddress) {
+      toast.error('Bitte geben Sie einen Standort ein oder erfassen Sie GPS-Koordinaten');
       return;
     }
 
@@ -313,15 +319,19 @@ export const AuthorityDashboard = () => {
       return;
     }
 
+    // Wenn keine Position, verwende Standardkoordinaten (Berlin Mitte)
+    const lat = position ? position[0] : 52.52;
+    const lng = position ? position[1] : 13.405;
+
     setSubmitting(true);
     try {
       const jobData = {
         license_plate: licensePlate.toUpperCase(),
         vin: vin || null,
         tow_reason: towReason,
-        location_address: locationAddress,
-        location_lat: position[0],
-        location_lng: position[1],
+        location_address: locationAddress || `${lat.toFixed(6)}, ${lng.toFixed(6)}`,
+        location_lat: lat,
+        location_lng: lng,
         photos: photos,
         notes: notes || null,
         assigned_service_id: selectedServiceId || null,
