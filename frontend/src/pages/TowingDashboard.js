@@ -1485,6 +1485,21 @@ export const TowingDashboard = () => {
                 </DialogDescription>
               </DialogHeader>
 
+              {/* Edit Button - only show if job is not released */}
+              {selectedJob.status !== 'released' && (
+                <div className="flex justify-end -mt-2">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => openEditJobDialog(selectedJob)}
+                    className="text-blue-600 border-blue-200 hover:bg-blue-50"
+                  >
+                    <Edit className="h-4 w-4 mr-2" />
+                    Daten bearbeiten
+                  </Button>
+                </div>
+              )}
+
               <div className="space-y-6 py-4">
                 {/* Sicherstellung Details - prominent display */}
                 {selectedJob.job_type === 'sicherstellung' && (
