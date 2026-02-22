@@ -52,7 +52,7 @@ export const PortalPage = () => {
       // Portal is ONLY for authority and towing_service - reject admins
       if (user.role === 'admin') {
         setLoginError('Administratoren nutzen bitte die Admin-Anmeldeseite unter /login');
-        localStorage.removeItem('token');
+        logout(); // Properly clear token and user state
         return;
       }
       
