@@ -63,13 +63,7 @@ export const LandingPage = () => {
                 AbschleppPortal
               </span>
             </div>
-            <Button
-              data-testid="login-btn"
-              onClick={() => navigate('/login')}
-              className="bg-slate-900 text-white hover:bg-slate-800"
-            >
-              Anmelden
-            </Button>
+            {/* Login button removed - access only via /portal */}
           </div>
         </div>
       </header>
