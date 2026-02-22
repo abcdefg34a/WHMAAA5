@@ -62,10 +62,10 @@ export const LoginPage = () => {
               </div>
             </div>
             <CardTitle className="text-2xl" style={{ fontFamily: 'Chivo, sans-serif' }}>
-              Anmelden
+              Admin-Anmeldung
             </CardTitle>
             <CardDescription>
-              Melden Sie sich mit Ihren Zugangsdaten an
+              Nur für Administratoren - Behörden und Abschleppdienste nutzen bitte das <a href="/portal" className="text-orange-600 hover:text-orange-700">Portal</a>
             </CardDescription>
           </CardHeader>
           <CardContent>
