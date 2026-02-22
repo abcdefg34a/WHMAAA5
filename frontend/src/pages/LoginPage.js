@@ -9,7 +9,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../co
 
 export const LoginPage = () => {
   const navigate = useNavigate();
-  const { login } = useAuth();
+  const { login, logout } = useAuth();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
@@ -26,8 +26,7 @@ export const LoginPage = () => {
       // Admin-only login page - reject non-admin users
       if (user.role !== 'admin') {
         setError('Diese Anmeldeseite ist nur für Administratoren. Bitte nutzen Sie das Portal unter /portal für Behörden und Abschleppdienste.');
-        // Log them out since they used wrong login
-        localStorage.removeItem('token');
+        logout(); // Properly clear token and user state
         return;
       }
       navigate('/admin');
