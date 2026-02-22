@@ -144,7 +144,7 @@ class NewFeaturesAPITester:
         
         license_plate = self.unique_license_plate
         
-        # Step 1: Create first job with license plate "DUP-TEST 123"
+        # Step 1: Create first job with unique license plate
         job_data_1 = {
             "license_plate": license_plate,
             "vin": "WVWZZZ3CZWE111111",
@@ -156,7 +156,7 @@ class NewFeaturesAPITester:
         }
         
         success, response = self.run_test(
-            "Create First Job (DUP-TEST 123)", "POST", "jobs", 200,
+            f"Create First Job ({license_plate})", "POST", "jobs", 200,
             job_data_1, self.authority_token
         )
         
