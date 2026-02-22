@@ -108,6 +108,7 @@ export const LoginPage = () => {
                     onChange={(e) => setPassword(e.target.value)}
                     placeholder="••••••••"
                     required
+                    autoComplete="current-password"
                     className="h-12 pr-12"
                   />
                   <button
