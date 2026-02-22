@@ -1,11 +1,126 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Car, Shield, Truck, UserPlus, LogIn, ArrowLeft } from 'lucide-react';
+import { useAuth } from '../contexts/AuthContext';
+import { Car, Shield, Truck, UserPlus, LogIn, ArrowLeft, Eye, EyeOff, Building2, Phone, MapPin, User } from 'lucide-react';
 import { Button } from '../components/ui/button';
+import { Input } from '../components/ui/input';
+import { Label } from '../components/ui/label';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../components/ui/card';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '../components/ui/tabs';
+import { toast } from 'sonner';
+import axios from 'axios';
+
+const API_URL = process.env.REACT_APP_BACKEND_URL;
 
 export const PortalPage = () => {
   const navigate = useNavigate();
+  const { login } = useAuth();
+  
+  // Login state
+  const [loginEmail, setLoginEmail] = useState('');
+  const [loginPassword, setLoginPassword] = useState('');
+  const [showLoginPassword, setShowLoginPassword] = useState(false);
+  const [loginLoading, setLoginLoading] = useState(false);
+  const [loginError, setLoginError] = useState('');
+
+  // Register state
+  const [registerRole, setRegisterRole] = useState('authority');
+  const [registerData, setRegisterData] = useState({
+    name: '',
+    email: '',
+    password: '',
+    confirmPassword: '',
+    // Authority fields
+    authority_name: '',
+    // Towing service fields
+    company_name: '',
+    address: '',
+    phone: ''
+  });
+  const [showRegisterPassword, setShowRegisterPassword] = useState(false);
+  const [registerLoading, setRegisterLoading] = useState(false);
+  const [registerError, setRegisterError] = useState('');
+
+  const handleLogin = async (e) => {
+    e.preventDefault();
+    setLoginLoading(true);
+    setLoginError('');
+
+    try {
+      const user = await login(loginEmail, loginPassword);
+      
+      // Portal is ONLY for authority and towing_service - reject admins
+      if (user.role === 'admin') {
+        setLoginError('Administratoren nutzen bitte die Admin-Anmeldeseite unter /login');
+        localStorage.removeItem('token');
+        return;
+      }
+      
+      // Redirect based on role
+      if (user.role === 'authority') {
+        navigate('/authority');
+      } else if (user.role === 'towing_service') {
+        navigate('/towing');
+      }
+    } catch (err) {
+      setLoginError(err.response?.data?.detail || 'Anmeldung fehlgeschlagen');
+    } finally {
+      setLoginLoading(false);
+    }
+  };
+
+  const handleRegister = async (e) => {
+    e.preventDefault();
+    setRegisterLoading(true);
+    setRegisterError('');
+
+    if (registerData.password !== registerData.confirmPassword) {
+      setRegisterError('Passwörter stimmen nicht überein');
+      setRegisterLoading(false);
+      return;
+    }
+
+    if (registerData.password.length < 8) {
+      setRegisterError('Passwort muss mindestens 8 Zeichen haben');
+      setRegisterLoading(false);
+      return;
+    }
+
+    try {
+      const payload = {
+        name: registerData.name,
+        email: registerData.email,
+        password: registerData.password,
+        role: registerRole
+      };
+
+      if (registerRole === 'authority') {
+        payload.authority_name = registerData.authority_name;
+      } else {
+        payload.company_name = registerData.company_name;
+        payload.address = registerData.address;
+        payload.phone = registerData.phone;
+      }
+
+      await axios.post(`${API_URL}/api/auth/register`, payload);
+      toast.success('Registrierung erfolgreich! Ein Administrator wird Ihren Account freischalten.');
+      // Reset form
+      setRegisterData({
+        name: '',
+        email: '',
+        password: '',
+        confirmPassword: '',
+        authority_name: '',
+        company_name: '',
+        address: '',
+        phone: ''
+      });
+    } catch (err) {
+      setRegisterError(err.response?.data?.detail || 'Registrierung fehlgeschlagen');
+    } finally {
+      setRegisterLoading(false);
+    }
+  };
 
   return (
     <div className="min-h-screen bg-slate-100">
@@ -35,113 +150,340 @@ export const PortalPage = () => {
       </header>
 
       {/* Main Content */}
-      <main className="max-w-4xl mx-auto px-4 py-12">
-        <div className="text-center mb-10">
+      <main className="max-w-2xl mx-auto px-4 py-12">
+        <div className="text-center mb-8">
           <h1 className="text-3xl font-bold text-slate-900 mb-3" style={{ fontFamily: 'Chivo, sans-serif' }}>
-            Internes Portal
+            Portal für Behörden & Abschleppdienste
           </h1>
           <p className="text-slate-600">
-            Zugang für Behörden und Abschleppdienste
+            Melden Sie sich an oder erstellen Sie einen neuen Account
           </p>
         </div>
 
-        <div className="grid md:grid-cols-2 gap-6 mb-8">
-          {/* Login Card */}
-          <Card className="hover:shadow-lg transition-shadow">
-            <CardHeader>
-              <div className="flex items-center gap-3">
-                <div className="p-3 bg-blue-100 rounded-lg">
-                  <LogIn className="h-6 w-6 text-blue-600" />
-                </div>
-                <div>
-                  <CardTitle>Anmelden</CardTitle>
-                  <CardDescription>Bereits registriert?</CardDescription>
-                </div>
-              </div>
-            </CardHeader>
-            <CardContent>
-              <p className="text-slate-600 mb-4">
-                Melden Sie sich mit Ihren bestehenden Zugangsdaten an.
-              </p>
-              <Button 
-                className="w-full bg-blue-600 hover:bg-blue-700"
-                onClick={() => navigate('/login')}
-              >
-                <LogIn className="h-4 w-4 mr-2" />
-                Zum Login
-              </Button>
-            </CardContent>
-          </Card>
-
-          {/* Register Card */}
-          <Card className="hover:shadow-lg transition-shadow">
-            <CardHeader>
-              <div className="flex items-center gap-3">
-                <div className="p-3 bg-green-100 rounded-lg">
-                  <UserPlus className="h-6 w-6 text-green-600" />
-                </div>
-                <div>
-                  <CardTitle>Registrieren</CardTitle>
-                  <CardDescription>Neu hier?</CardDescription>
-                </div>
-              </div>
-            </CardHeader>
-            <CardContent>
-              <p className="text-slate-600 mb-4">
-                Erstellen Sie einen neuen Account für Ihre Organisation.
-              </p>
-              <Button 
-                className="w-full bg-green-600 hover:bg-green-700"
-                onClick={() => navigate('/register')}
-              >
-                <UserPlus className="h-4 w-4 mr-2" />
+        <Card className="shadow-xl">
+          <Tabs defaultValue="login" className="w-full">
+            <TabsList className="grid w-full grid-cols-2">
+              <TabsTrigger value="login" className="flex items-center gap-2">
+                <LogIn className="h-4 w-4" />
+                Anmelden
+              </TabsTrigger>
+              <TabsTrigger value="register" className="flex items-center gap-2">
+                <UserPlus className="h-4 w-4" />
                 Registrieren
-              </Button>
-            </CardContent>
-          </Card>
-        </div>
+              </TabsTrigger>
+            </TabsList>
 
-        {/* Role Info */}
-        <div className="grid md:grid-cols-2 gap-6">
-          <Card className="bg-slate-50 border-slate-200">
+            {/* Login Tab */}
+            <TabsContent value="login">
+              <CardHeader>
+                <CardTitle>Anmelden</CardTitle>
+                <CardDescription>
+                  Für Behörden und Abschleppdienste
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                <form onSubmit={handleLogin} className="space-y-4">
+                  {loginError && (
+                    <div className="bg-red-50 text-red-700 px-4 py-3 rounded-md text-sm">
+                      {loginError}
+                    </div>
+                  )}
+
+                  <div className="space-y-2">
+                    <Label htmlFor="login-email">E-Mail</Label>
+                    <Input
+                      id="login-email"
+                      type="email"
+                      value={loginEmail}
+                      onChange={(e) => setLoginEmail(e.target.value)}
+                      placeholder="ihre@email.de"
+                      required
+                      className="h-12"
+                    />
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label htmlFor="login-password">Passwort</Label>
+                    <div className="relative">
+                      <Input
+                        id="login-password"
+                        type={showLoginPassword ? 'text' : 'password'}
+                        value={loginPassword}
+                        onChange={(e) => setLoginPassword(e.target.value)}
+                        placeholder="••••••••"
+                        required
+                        className="h-12 pr-12"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => setShowLoginPassword(!showLoginPassword)}
+                        className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"
+                      >
+                        {showLoginPassword ? <EyeOff className="h-5 w-5" /> : <Eye className="h-5 w-5" />}
+                      </button>
+                    </div>
+                  </div>
+
+                  <Button
+                    type="submit"
+                    disabled={loginLoading}
+                    className="w-full h-12 bg-slate-900 hover:bg-slate-800"
+                  >
+                    {loginLoading ? (
+                      <div className="loading-spinner"></div>
+                    ) : (
+                      <>
+                        <LogIn className="h-4 w-4 mr-2" />
+                        Anmelden
+                      </>
+                    )}
+                  </Button>
+
+                  <div className="text-center">
+                    <a href="/forgot-password" className="text-sm text-orange-600 hover:text-orange-700">
+                      Passwort vergessen?
+                    </a>
+                  </div>
+                </form>
+              </CardContent>
+            </TabsContent>
+
+            {/* Register Tab */}
+            <TabsContent value="register">
+              <CardHeader>
+                <CardTitle>Registrieren</CardTitle>
+                <CardDescription>
+                  Erstellen Sie einen neuen Account
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                <form onSubmit={handleRegister} className="space-y-4">
+                  {registerError && (
+                    <div className="bg-red-50 text-red-700 px-4 py-3 rounded-md text-sm">
+                      {registerError}
+                    </div>
+                  )}
+
+                  {/* Role Selection */}
+                  <div className="space-y-2">
+                    <Label>Ich bin...</Label>
+                    <div className="grid grid-cols-2 gap-3">
+                      <button
+                        type="button"
+                        onClick={() => setRegisterRole('authority')}
+                        className={`p-4 border-2 rounded-lg flex flex-col items-center gap-2 transition-colors ${
+                          registerRole === 'authority' 
+                            ? 'border-amber-500 bg-amber-50' 
+                            : 'border-slate-200 hover:border-slate-300'
+                        }`}
+                      >
+                        <Shield className={`h-6 w-6 ${registerRole === 'authority' ? 'text-amber-600' : 'text-slate-400'}`} />
+                        <span className={`font-medium ${registerRole === 'authority' ? 'text-amber-700' : 'text-slate-600'}`}>
+                          Behörde
+                        </span>
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setRegisterRole('towing_service')}
+                        className={`p-4 border-2 rounded-lg flex flex-col items-center gap-2 transition-colors ${
+                          registerRole === 'towing_service' 
+                            ? 'border-orange-500 bg-orange-50' 
+                            : 'border-slate-200 hover:border-slate-300'
+                        }`}
+                      >
+                        <Truck className={`h-6 w-6 ${registerRole === 'towing_service' ? 'text-orange-600' : 'text-slate-400'}`} />
+                        <span className={`font-medium ${registerRole === 'towing_service' ? 'text-orange-700' : 'text-slate-600'}`}>
+                          Abschleppdienst
+                        </span>
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* Common Fields */}
+                  <div className="grid grid-cols-2 gap-4">
+                    <div className="space-y-2">
+                      <Label htmlFor="register-name">
+                        <User className="h-3 w-3 inline mr-1" />
+                        Ansprechpartner
+                      </Label>
+                      <Input
+                        id="register-name"
+                        value={registerData.name}
+                        onChange={(e) => setRegisterData({...registerData, name: e.target.value})}
+                        placeholder="Max Mustermann"
+                        required
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="register-email">E-Mail</Label>
+                      <Input
+                        id="register-email"
+                        type="email"
+                        value={registerData.email}
+                        onChange={(e) => setRegisterData({...registerData, email: e.target.value})}
+                        placeholder="kontakt@firma.de"
+                        required
+                      />
+                    </div>
+                  </div>
+
+                  {/* Role-specific Fields */}
+                  {registerRole === 'authority' ? (
+                    <div className="space-y-2">
+                      <Label htmlFor="authority-name">
+                        <Building2 className="h-3 w-3 inline mr-1" />
+                        Behördenname
+                      </Label>
+                      <Input
+                        id="authority-name"
+                        value={registerData.authority_name}
+                        onChange={(e) => setRegisterData({...registerData, authority_name: e.target.value})}
+                        placeholder="z.B. Ordnungsamt Berlin-Mitte"
+                        required
+                      />
+                    </div>
+                  ) : (
+                    <>
+                      <div className="space-y-2">
+                        <Label htmlFor="company-name">
+                          <Truck className="h-3 w-3 inline mr-1" />
+                          Firmenname
+                        </Label>
+                        <Input
+                          id="company-name"
+                          value={registerData.company_name}
+                          onChange={(e) => setRegisterData({...registerData, company_name: e.target.value})}
+                          placeholder="z.B. Müller Abschleppdienst GmbH"
+                          required
+                        />
+                      </div>
+                      <div className="grid grid-cols-2 gap-4">
+                        <div className="space-y-2">
+                          <Label htmlFor="address">
+                            <MapPin className="h-3 w-3 inline mr-1" />
+                            Adresse
+                          </Label>
+                          <Input
+                            id="address"
+                            value={registerData.address}
+                            onChange={(e) => setRegisterData({...registerData, address: e.target.value})}
+                            placeholder="Straße, PLZ Ort"
+                            required
+                          />
+                        </div>
+                        <div className="space-y-2">
+                          <Label htmlFor="phone">
+                            <Phone className="h-3 w-3 inline mr-1" />
+                            Telefon
+                          </Label>
+                          <Input
+                            id="phone"
+                            type="tel"
+                            value={registerData.phone}
+                            onChange={(e) => setRegisterData({...registerData, phone: e.target.value})}
+                            placeholder="+49 123 456789"
+                            required
+                          />
+                        </div>
+                      </div>
+                    </>
+                  )}
+
+                  {/* Password Fields */}
+                  <div className="grid grid-cols-2 gap-4">
+                    <div className="space-y-2">
+                      <Label htmlFor="register-password">Passwort</Label>
+                      <div className="relative">
+                        <Input
+                          id="register-password"
+                          type={showRegisterPassword ? 'text' : 'password'}
+                          value={registerData.password}
+                          onChange={(e) => setRegisterData({...registerData, password: e.target.value})}
+                          placeholder="Min. 8 Zeichen"
+                          required
+                          className="pr-10"
+                        />
+                        <button
+                          type="button"
+                          onClick={() => setShowRegisterPassword(!showRegisterPassword)}
+                          className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"
+                        >
+                          {showRegisterPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                        </button>
+                      </div>
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="confirm-password">Passwort bestätigen</Label>
+                      <Input
+                        id="confirm-password"
+                        type="password"
+                        value={registerData.confirmPassword}
+                        onChange={(e) => setRegisterData({...registerData, confirmPassword: e.target.value})}
+                        placeholder="Passwort wiederholen"
+                        required
+                      />
+                    </div>
+                  </div>
+
+                  <Button
+                    type="submit"
+                    disabled={registerLoading}
+                    className={`w-full h-12 ${
+                      registerRole === 'authority' 
+                        ? 'bg-amber-600 hover:bg-amber-700' 
+                        : 'bg-orange-600 hover:bg-orange-700'
+                    }`}
+                  >
+                    {registerLoading ? (
+                      <div className="loading-spinner"></div>
+                    ) : (
+                      <>
+                        <UserPlus className="h-4 w-4 mr-2" />
+                        {registerRole === 'authority' ? 'Als Behörde registrieren' : 'Als Abschleppdienst registrieren'}
+                      </>
+                    )}
+                  </Button>
+
+                  <div className="p-3 bg-blue-50 border border-blue-200 rounded-lg">
+                    <p className="text-xs text-blue-800 text-center">
+                      <strong>Hinweis:</strong> Neue Registrierungen müssen von einem Administrator freigegeben werden.
+                    </p>
+                  </div>
+                </form>
+              </CardContent>
+            </TabsContent>
+          </Tabs>
+        </Card>
+
+        {/* Role Info Cards */}
+        <div className="grid md:grid-cols-2 gap-4 mt-8">
+          <Card className="bg-amber-50 border-amber-200">
             <CardContent className="pt-6">
-              <div className="flex items-start gap-4">
-                <div className="p-2 bg-amber-100 rounded">
-                  <Shield className="h-5 w-5 text-amber-600" />
-                </div>
+              <div className="flex items-start gap-3">
+                <Shield className="h-5 w-5 text-amber-600 mt-0.5" />
                 <div>
-                  <h3 className="font-semibold text-slate-900 mb-1">Behörden</h3>
-                  <p className="text-sm text-slate-600">
-                    Ordnungsämter, Polizei und andere Behörden können hier Abschleppaufträge erstellen und verwalten.
+                  <h3 className="font-semibold text-amber-900 mb-1">Für Behörden</h3>
+                  <p className="text-sm text-amber-700">
+                    Ordnungsämter und Polizei erstellen hier Abschleppaufträge.
                   </p>
                 </div>
               </div>
             </CardContent>
           </Card>
 
-          <Card className="bg-slate-50 border-slate-200">
+          <Card className="bg-orange-50 border-orange-200">
             <CardContent className="pt-6">
-              <div className="flex items-start gap-4">
-                <div className="p-2 bg-orange-100 rounded">
-                  <Truck className="h-5 w-5 text-orange-600" />
-                </div>
+              <div className="flex items-start gap-3">
+                <Truck className="h-5 w-5 text-orange-600 mt-0.5" />
                 <div>
-                  <h3 className="font-semibold text-slate-900 mb-1">Abschleppdienste</h3>
-                  <p className="text-sm text-slate-600">
-                    Abschleppunternehmen können hier Aufträge annehmen, Status aktualisieren und Fahrzeuge verwalten.
+                  <h3 className="font-semibold text-orange-900 mb-1">Für Abschleppdienste</h3>
+                  <p className="text-sm text-orange-700">
+                    Abschleppunternehmen nehmen Aufträge an und verwalten Fahrzeuge.
                   </p>
                 </div>
               </div>
             </CardContent>
           </Card>
-        </div>
-
-        {/* Info Note */}
-        <div className="mt-8 p-4 bg-blue-50 border border-blue-200 rounded-lg text-center">
-          <p className="text-sm text-blue-800">
-            <strong>Hinweis:</strong> Neue Registrierungen müssen von einem Administrator freigegeben werden, 
-            bevor der Zugang aktiviert wird.
-          </p>
         </div>
       </main>
 
