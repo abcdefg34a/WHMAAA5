@@ -216,17 +216,40 @@ export const TowingDashboard = () => {
   const handleSaveCosts = async () => {
     setSavingCosts(true);
     try {
-      const response = await axios.patch(`${API}/services/costs`, {
-        tow_cost: parseFloat(towCost) || 0,
-        daily_cost: parseFloat(dailyCost) || 0
+      const response = await axios.patch(`${API}/services/pricing-settings`, {
+        time_based_enabled: timeBasedEnabled,
+        first_half_hour: parseFloat(firstHalfHour) || null,
+        additional_half_hour: parseFloat(additionalHalfHour) || null,
+        tow_cost: parseFloat(towCost) || null,
+        daily_cost: parseFloat(dailyCost) || null,
+        processing_fee: parseFloat(processingFee) || null,
+        empty_trip_fee: parseFloat(emptyTripFee) || null,
+        night_surcharge: parseFloat(nightSurcharge) || null,
+        weekend_surcharge: parseFloat(weekendSurcharge) || null,
+        heavy_vehicle_surcharge: parseFloat(heavyVehicleSurcharge) || null
       });
       updateUser(response.data);
-      toast.success('Kosten gespeichert!');
+      toast.success('Preiseinstellungen gespeichert!');
       setSettingsDialogOpen(false);
     } catch (error) {
       toast.error('Fehler beim Speichern');
     } finally {
       setSavingCosts(false);
+    }
+  };
+
+  const fetchCalculatedCosts = async (jobId) => {
+    setLoadingCosts(true);
+    try {
+      const response = await axios.get(`${API}/jobs/${jobId}/calculate-costs`);
+      setCalculatedCosts(response.data);
+      if (response.data.total > 0) {
+        setPaymentAmount(response.data.total.toString());
+      }
+    } catch (error) {
+      console.error('Error calculating costs:', error);
+    } finally {
+      setLoadingCosts(false);
     }
   };
 
