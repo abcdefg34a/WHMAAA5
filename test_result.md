@@ -291,9 +291,8 @@ metadata:
 
 test_plan:
   current_focus:
-    - "Footer links for Legal Pages"
-    - "Pagination Component"
-    - "Pagination UI in Dashboards"
+    - "Towing service job creation with linked authorities"
+    - "Towing service job creation UI"
   stuck_tasks: []
   test_all: false
   test_priority: "high_first"
