@@ -4,7 +4,8 @@ import axios from 'axios';
 import { 
   Car, MapPin, Camera, LogOut, FileText, Copy, CheckCircle,
   Clock, Truck, Phone, Building2, Download, X, Settings, Euro,
-  Filter, CheckSquare, Square, ChevronDown, Calendar, Plus, Search
+  Filter, CheckSquare, Square, ChevronDown, Calendar, Plus, Search,
+  Edit, Save
 } from 'lucide-react';
 import { Button } from '../components/ui/button';
 import { Input } from '../components/ui/input';
