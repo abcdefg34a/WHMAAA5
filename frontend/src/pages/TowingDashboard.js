@@ -666,6 +666,26 @@ export const TowingDashboard = () => {
                       <p className="mt-2 text-sm font-medium text-orange-600">
                         {job.tow_reason}
                       </p>
+                      {/* Show job type and sicherstellung details */}
+                      {job.job_type === 'sicherstellung' && (
+                        <div className="mt-2 p-2 bg-amber-50 border border-amber-200 rounded text-xs">
+                          <span className="font-semibold text-amber-800">Sicherstellung</span>
+                          {job.sicherstellung_reason && (
+                            <span className="text-amber-700"> • {
+                              {
+                                'betriebsmittel': 'Betriebsmittel',
+                                'gestohlen': 'Gestohlen/Fahndung',
+                                'eigentumssicherung': 'Eigentumssicherung',
+                                'technische_maengel': 'Techn. Mängel',
+                                'strafrechtlich': 'Strafrechtlich'
+                              }[job.sicherstellung_reason] || job.sicherstellung_reason
+                            }</span>
+                          )}
+                          {job.vehicle_category === 'over_3_5t' && (
+                            <span className="text-amber-700"> • ab 3,5t</span>
+                          )}
+                        </div>
+                      )}
                     </CardContent>
                   </Card>
                 ))}
