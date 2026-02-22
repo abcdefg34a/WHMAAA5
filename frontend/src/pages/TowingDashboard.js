@@ -1993,6 +1993,115 @@ export const TowingDashboard = () => {
         </DialogContent>
       </Dialog>
 
+      {/* NEW: Company Info Dialog */}
+      <Dialog open={companyInfoDialogOpen} onOpenChange={setCompanyInfoDialogOpen}>
+        <DialogContent className="max-w-lg">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Building2 className="h-5 w-5 text-blue-600" />
+              Firmendaten bearbeiten
+            </DialogTitle>
+            <DialogDescription>
+              Diese Daten werden bei der Fahrzeugsuche angezeigt
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-4 py-4">
+            <div className="space-y-2">
+              <Label htmlFor="companyName">Firmenname</Label>
+              <Input
+                id="companyName"
+                value={companyName}
+                onChange={(e) => setCompanyName(e.target.value)}
+                placeholder="Mustermann Abschleppdienst GmbH"
+              />
+            </div>
+
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label htmlFor="companyPhone">Telefonnummer</Label>
+                <Input
+                  id="companyPhone"
+                  value={companyPhone}
+                  onChange={(e) => setCompanyPhone(e.target.value)}
+                  placeholder="+49 123 456789"
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="companyEmail">E-Mail</Label>
+                <Input
+                  id="companyEmail"
+                  type="email"
+                  value={companyEmail}
+                  onChange={(e) => setCompanyEmail(e.target.value)}
+                  placeholder="info@firma.de"
+                />
+              </div>
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="companyOpeningHours">Öffnungszeiten</Label>
+              <Input
+                id="companyOpeningHours"
+                value={companyOpeningHours}
+                onChange={(e) => setCompanyOpeningHours(e.target.value)}
+                placeholder="Mo-Fr 8:00-18:00, Sa 9:00-14:00"
+              />
+            </div>
+
+            <div className="p-4 bg-blue-50 border border-blue-200 rounded-lg space-y-4">
+              <h4 className="font-medium text-blue-800 flex items-center gap-2">
+                <MapPin className="h-4 w-4" />
+                Hof-Adresse (für Fahrzeugabholung)
+              </h4>
+              
+              <div className="space-y-2">
+                <Label htmlFor="companyYardAddress">Adresse</Label>
+                <Input
+                  id="companyYardAddress"
+                  value={companyYardAddress}
+                  onChange={(e) => setCompanyYardAddress(e.target.value)}
+                  placeholder="Hofstraße 1, 12345 Berlin"
+                />
+              </div>
+
+              <Button
+                type="button"
+                variant="outline"
+                onClick={handleGetYardLocation}
+                className="w-full"
+              >
+                <MapPin className="h-4 w-4 mr-2" />
+                GPS-Koordinaten vom aktuellen Standort erfassen
+              </Button>
+
+              {companyYardLat && companyYardLng && (
+                <div className="text-sm text-blue-700 bg-blue-100 p-2 rounded">
+                  ✓ Koordinaten: {companyYardLat.toFixed(6)}, {companyYardLng.toFixed(6)}
+                </div>
+              )}
+            </div>
+
+            <div className="flex gap-3 pt-4 border-t">
+              <Button
+                variant="outline"
+                onClick={() => setCompanyInfoDialogOpen(false)}
+                className="flex-1"
+              >
+                Abbrechen
+              </Button>
+              <Button
+                onClick={handleSaveCompanyInfo}
+                disabled={savingCompanyInfo}
+                className="flex-1 bg-blue-600 hover:bg-blue-700"
+              >
+                {savingCompanyInfo ? 'Speichert...' : 'Speichern'}
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+
       {/* NEW: Create Job Dialog - Same layout as Authority Dashboard */}
       <Dialog open={createJobDialogOpen} onOpenChange={setCreateJobDialogOpen}>
         <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
