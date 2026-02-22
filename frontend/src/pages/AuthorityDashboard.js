@@ -56,6 +56,13 @@ export const AuthorityDashboard = () => {
   const [totalJobs, setTotalJobs] = useState(0);
   const itemsPerPage = 50;
 
+  // NEW: Filter state
+  const [filterOpen, setFilterOpen] = useState(false);
+  const [filterStatus, setFilterStatus] = useState('all');
+  const [filterDateFrom, setFilterDateFrom] = useState('');
+  const [filterDateTo, setFilterDateTo] = useState('');
+  const [filterService, setFilterService] = useState('all');
+
   // Employee management state
   const [employees, setEmployees] = useState([]);
   const [employeeDialogOpen, setEmployeeDialogOpen] = useState(false);
