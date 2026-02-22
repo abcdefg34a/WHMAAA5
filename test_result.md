@@ -267,6 +267,9 @@ frontend:
       - working: true
         agent: "testing"
         comment: "PASS: Towing service job creation UI fully functional. Dashboard loads correctly with service code (dym071), pricing display (150.00€ tow cost, 25.00€ daily cost), 'Neuer Auftrag' button visible, existing jobs displayed properly. All three role logins working: Admin (admin@test.de/Admin123!), Authority (behoerde@test.de/Behoerde123), Towing Service (abschlepp@test.de/Abschlepp123). Each redirects to correct dashboard."
+      - working: true
+        agent: "testing"
+        comment: "✅ COMPREHENSIVE TEST PASSED - NEW 'Neuer Auftrag' function fully tested and working perfectly. VERIFIED: 1) Login with abschlepp@test.de/Abschlepp123 successful, 2) Green '+ Neuer Auftrag' button visible and clickable, 3) Dialog opens with correct 2-column layout matching authority form design, 4) LEFT COLUMN: Behörde dropdown, Auftragsart radio buttons (Abschleppen/Sicherstellung), Kennzeichen field with large font, FIN field, Abschleppgrund dropdown, Bemerkungen textarea, 5) RIGHT COLUMN: Interactive Leaflet map, 'Aktuellen Standort erfassen' button, Photo upload grid with 5 slots, 6) SICHERSTELLUNG MODE: Yellow box appears with additional fields (Grund, Fahrzeugkategorie, Anordnende Stelle, Geschätzter Fahrzeugwert, Telefonische Kontaktversuche), 7) Map interaction working (clickable to set location), 8) All form fields functional and properly styled. The redesigned dialog perfectly matches the authority form layout as requested. Screenshots taken at each step confirm proper functionality."
 
   - task: "Pagination Component"
     implemented: true
