@@ -249,6 +249,42 @@ backend:
         agent: "testing"
         comment: "✅ PASSED - Time-based cost calculation fully functional. TESTED: 1) Login as abschlepp@test.de/Abschlepp123 successful, 2) GET /api/auth/me shows time_based_enabled, first_half_hour, additional_half_hour fields, 3) PATCH /api/services/pricing-settings successfully activated time-based pricing (first_half_hour: 137.00€, additional_half_hour: 93.00€), 4) Created test job and updated to in_yard status with accepted_at and in_yard_at timestamps, 5) GET /api/jobs/{job_id}/calculate-costs correctly uses time-based pricing showing 'Erste halbe Stunde: 137.00€' in breakdown. Total cost calculation: 192.00€ (137€ first half hour + 25€ daily cost + 30€ processing fee). Time-based calculation working perfectly when job has both accepted_at and in_yard_at timestamps."
 
+  - task: "Duplicate license plate check on job creation"
+    implemented: true
+    working: true
+    file: "/app/backend/server.py"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+      - working: true
+        agent: "testing"
+        comment: "✅ PASSED - Duplicate license plate check working correctly. TESTED: 1) Login as behoerde@test.de/Behoerde123 successful, 2) Created first job with unique license plate successfully, 3) Attempted to create second job with same license plate, 4) Second job creation correctly failed with 400 status and proper German error message 'Ein Fahrzeug mit diesem Kennzeichen (DUP-TEST213601) ist bereits im System und wurde noch nicht freigegeben. Status: pending'. Duplicate prevention working as expected."
+
+  - task: "Edit job data endpoint"
+    implemented: true
+    working: true
+    file: "/app/backend/server.py"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+      - working: true
+        agent: "testing"
+        comment: "✅ PASSED - Edit job data endpoint (PATCH /api/jobs/{job_id}/edit-data) working correctly. TESTED: 1) Login as abschlepp@test.de/Abschlepp123 successful, 2) Created test job assigned to towing service, 3) Successfully edited job data (license_plate: EDIT-TEST123 → EDITED-123, vin: WVWZZZ3CZWE333333 → WBA12345678901234, tow_reason: Test job for editing → Parken im Parkverbot), 4) Verified job data was updated correctly, 5) Updated job to 'released' status, 6) Confirmed editing released job correctly fails with 400 status, 7) Audit log contains JOB_DATA_EDITED entry with detailed changes. All functionality working as specified."
+
+  - task: "Employee email uniqueness check"
+    implemented: true
+    working: true
+    file: "/app/backend/server.py"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+      - working: true
+        agent: "testing"
+        comment: "✅ PASSED - Employee email uniqueness check working correctly. TESTED: 1) Login as behoerde@test.de/Behoerde123 successful, 2) Created first employee with unique email successfully (ID: a1cbc497-ce67-4dba-a53a-cd3d1c99a959, Dienstnummer: DN-D7E0-003), 3) Attempted to create second employee with same email, 4) Second employee creation correctly failed with 400 status and proper German error message 'E-Mail bereits registriert'. Email uniqueness validation working as expected."
+
 frontend:
   - task: "Footer links for Legal Pages (Datenschutz, Impressum)"
     implemented: true
