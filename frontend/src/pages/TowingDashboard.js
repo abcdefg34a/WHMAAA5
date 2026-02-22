@@ -580,6 +580,10 @@ export const TowingDashboard = () => {
     try {
       const updateData = { status: newStatus };
       if (serviceNotes) updateData.service_notes = serviceNotes;
+      // WICHTIG: Sende auch die Service-Fotos mit
+      if (servicePhotos && servicePhotos.length > 0) {
+        updateData.service_photos = servicePhotos;
+      }
       
       await axios.patch(`${API}/jobs/${jobId}`, updateData);
       toast.success('Status aktualisiert');
@@ -588,6 +592,8 @@ export const TowingDashboard = () => {
       if (selectedJob?.id === jobId) {
         const response = await axios.get(`${API}/jobs/${jobId}`);
         setSelectedJob(response.data);
+        // Aktualisiere auch die lokalen Fotos
+        setServicePhotos(response.data.service_photos || []);
       }
     } catch (error) {
       toast.error('Fehler beim Aktualisieren');
