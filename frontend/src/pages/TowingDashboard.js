@@ -696,6 +696,40 @@ export const TowingDashboard = () => {
     setJobDetailOpen(true);
   };
 
+  // NEW: Open edit dialog for job data
+  const openEditJobDialog = (job) => {
+    setEditJobData({
+      license_plate: job.license_plate || '',
+      vin: job.vin || '',
+      tow_reason: job.tow_reason || '',
+      notes: job.notes || '',
+      location_address: job.location_address || ''
+    });
+    setEditJobDialogOpen(true);
+  };
+
+  // NEW: Save edited job data
+  const handleSaveJobData = async () => {
+    if (!selectedJob) return;
+    
+    setEditingJobData(true);
+    try {
+      const response = await axios.patch(`${API}/jobs/${selectedJob.id}/edit-data`, editJobData);
+      
+      // Update local state
+      setSelectedJob(response.data);
+      setJobs(jobs.map(j => j.id === selectedJob.id ? response.data : j));
+      
+      toast.success('Daten erfolgreich aktualisiert');
+      setEditJobDialogOpen(false);
+    } catch (error) {
+      console.error('Error updating job data:', error);
+      toast.error(error.response?.data?.detail || 'Fehler beim Speichern der Daten');
+    } finally {
+      setEditingJobData(false);
+    }
+  };
+
   const getStatusBadge = (status, isEmptyTrip = false) => {
     if (isEmptyTrip) {
       return (
