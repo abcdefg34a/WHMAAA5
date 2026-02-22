@@ -26,9 +26,10 @@ axios.interceptors.response.use(
     if (error.response?.status === 401) {
       // Token is invalid or expired - clear it
       localStorage.removeItem('token');
-      // Redirect to login if not already there
-      if (window.location.pathname !== '/login' && window.location.pathname !== '/register') {
-        window.location.href = '/login';
+      // Don't redirect if on public pages
+      const publicPaths = ['/login', '/register', '/portal', '/forgot-password', '/reset-password', '/', '/datenschutz', '/impressum'];
+      if (!publicPaths.includes(window.location.pathname)) {
+        window.location.href = '/';
       }
     }
     return Promise.reject(error);
