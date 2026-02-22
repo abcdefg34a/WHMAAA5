@@ -447,6 +447,124 @@ export const AuthorityDashboard = () => {
                     </CardTitle>
                   </CardHeader>
                   <CardContent className="space-y-4">
+                    {/* NEW: Job Type Selection */}
+                    <div className="space-y-3">
+                      <Label>Art des Auftrags *</Label>
+                      <div className="flex gap-4">
+                        <label className={`flex items-center gap-2 p-3 border rounded-lg cursor-pointer transition-colors ${jobType === 'towing' ? 'border-blue-500 bg-blue-50' : 'border-slate-200 hover:bg-slate-50'}`}>
+                          <input
+                            type="radio"
+                            name="jobType"
+                            value="towing"
+                            checked={jobType === 'towing'}
+                            onChange={(e) => setJobType(e.target.value)}
+                            className="w-4 h-4"
+                          />
+                          <span className="font-medium">Abschleppen</span>
+                          <span className="text-xs text-slate-500">(Falschparker)</span>
+                        </label>
+                        <label className={`flex items-center gap-2 p-3 border rounded-lg cursor-pointer transition-colors ${jobType === 'sicherstellung' ? 'border-blue-500 bg-blue-50' : 'border-slate-200 hover:bg-slate-50'}`}>
+                          <input
+                            type="radio"
+                            name="jobType"
+                            value="sicherstellung"
+                            checked={jobType === 'sicherstellung'}
+                            onChange={(e) => setJobType(e.target.value)}
+                            className="w-4 h-4"
+                          />
+                          <span className="font-medium">Sicherstellung</span>
+                          <span className="text-xs text-slate-500">(Polizeilich)</span>
+                        </label>
+                      </div>
+                    </div>
+
+                    {/* Sicherstellung-specific fields */}
+                    {jobType === 'sicherstellung' && (
+                      <div className="space-y-4 p-4 bg-amber-50 border border-amber-200 rounded-lg">
+                        <h4 className="font-semibold text-amber-800">Sicherstellungs-Details</h4>
+                        
+                        <div className="grid md:grid-cols-2 gap-4">
+                          <div className="space-y-2">
+                            <Label>Grund der Sicherstellung *</Label>
+                            <Select value={sicherstellungReason} onValueChange={setSicherstellungReason}>
+                              <SelectTrigger>
+                                <SelectValue placeholder="Grund auswählen" />
+                              </SelectTrigger>
+                              <SelectContent>
+                                <SelectItem value="betriebsmittel">Auslaufende Betriebsmittel</SelectItem>
+                                <SelectItem value="gestohlen">Gestohlenes Fahrzeug / Fahndung</SelectItem>
+                                <SelectItem value="eigentumssicherung">Eigentumssicherung (wertvoll/ungesichert)</SelectItem>
+                                <SelectItem value="technische_maengel">Technische Mängel / Beweissicherung</SelectItem>
+                                <SelectItem value="strafrechtlich">Strafrechtliche Beschlagnahme</SelectItem>
+                              </SelectContent>
+                            </Select>
+                          </div>
+
+                          <div className="space-y-2">
+                            <Label>Fahrzeugkategorie</Label>
+                            <Select value={vehicleCategory} onValueChange={setVehicleCategory}>
+                              <SelectTrigger>
+                                <SelectValue />
+                              </SelectTrigger>
+                              <SelectContent>
+                                <SelectItem value="under_3_5t">PKW/Krad bis 3,5t</SelectItem>
+                                <SelectItem value="over_3_5t">Fahrzeuge ab 3,5t</SelectItem>
+                              </SelectContent>
+                            </Select>
+                          </div>
+
+                          <div className="space-y-2">
+                            <Label>Anordnende Stelle</Label>
+                            <Select value={orderingAuthority} onValueChange={setOrderingAuthority}>
+                              <SelectTrigger>
+                                <SelectValue placeholder="Stelle auswählen" />
+                              </SelectTrigger>
+                              <SelectContent>
+                                <SelectItem value="schutzpolizei">Schutzpolizei</SelectItem>
+                                <SelectItem value="kriminalpolizei">Kriminalpolizei</SelectItem>
+                                <SelectItem value="staatsanwaltschaft">Staatsanwaltschaft</SelectItem>
+                                <SelectItem value="sachverstaendiger">Technischer Sachverständiger</SelectItem>
+                              </SelectContent>
+                            </Select>
+                          </div>
+
+                          <div className="space-y-2">
+                            <Label>Geschätzter Fahrzeugwert (€)</Label>
+                            <Input
+                              type="number"
+                              value={estimatedVehicleValue}
+                              onChange={(e) => setEstimatedVehicleValue(e.target.value)}
+                              placeholder="z.B. 15000"
+                            />
+                          </div>
+                        </div>
+
+                        <div className="space-y-2">
+                          <div className="flex items-center gap-2">
+                            <input
+                              type="checkbox"
+                              id="contactAttempts"
+                              checked={contactAttempts}
+                              onChange={(e) => setContactAttempts(e.target.checked)}
+                              className="w-4 h-4"
+                            />
+                            <Label htmlFor="contactAttempts" className="cursor-pointer">
+                              Telefonische Kontaktversuche durchgeführt
+                            </Label>
+                          </div>
+                          {contactAttempts && (
+                            <Textarea
+                              value={contactAttemptsNotes}
+                              onChange={(e) => setContactAttemptsNotes(e.target.value)}
+                              placeholder="Dokumentation der Kontaktversuche..."
+                              rows={2}
+                              className="mt-2"
+                            />
+                          )}
+                        </div>
+                      </div>
+                    )}
+
                     <div className="space-y-2">
                       <Label htmlFor="licensePlate">Kennzeichen *</Label>
                       <Input
