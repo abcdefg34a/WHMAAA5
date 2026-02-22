@@ -261,10 +261,15 @@ export const AuthorityDashboard = () => {
           const { latitude, longitude } = pos.coords;
           setPosition([latitude, longitude]);
           
-          // Reverse geocoding
+          // Reverse geocoding with proper User-Agent for Nominatim policy compliance
           try {
             const response = await fetch(
-              `https://nominatim.openstreetmap.org/reverse?format=json&lat=${latitude}&lon=${longitude}`
+              `https://nominatim.openstreetmap.org/reverse?format=json&lat=${latitude}&lon=${longitude}`,
+              {
+                headers: {
+                  'User-Agent': 'ImpoundPro/1.0 (Fahrzeug-Verwahrung-App)'
+                }
+              }
             );
             const data = await response.json();
             setLocationAddress(data.display_name || `${latitude}, ${longitude}`);
