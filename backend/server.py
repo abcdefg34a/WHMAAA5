@@ -994,6 +994,50 @@ async def update_pricing_settings(data: PricingSettingsRequest, user: dict = Dep
     
     return UserResponse(**updated_user)
 
+# NEW: Update company info (address, phone, email, opening hours)
+class CompanyInfoUpdate(BaseModel):
+    company_name: Optional[str] = None
+    phone: Optional[str] = None
+    email: Optional[str] = None
+    yard_address: Optional[str] = None
+    yard_lat: Optional[float] = None
+    yard_lng: Optional[float] = None
+    opening_hours: Optional[str] = None
+
+@api_router.patch("/towing/company-info")
+async def update_company_info(data: CompanyInfoUpdate, user: dict = Depends(get_current_user)):
+    """Update towing service company information"""
+    if user["role"] != UserRole.TOWING_SERVICE:
+        raise HTTPException(status_code=403, detail="Nur Abschleppdienste können Firmendaten ändern")
+    
+    update_data = {}
+    if data.company_name is not None:
+        update_data["company_name"] = data.company_name
+    if data.phone is not None:
+        update_data["phone"] = data.phone
+    if data.email is not None:
+        update_data["email"] = data.email
+    if data.yard_address is not None:
+        update_data["yard_address"] = data.yard_address
+    if data.yard_lat is not None:
+        update_data["yard_lat"] = data.yard_lat
+    if data.yard_lng is not None:
+        update_data["yard_lng"] = data.yard_lng
+    if data.opening_hours is not None:
+        update_data["opening_hours"] = data.opening_hours
+    
+    if update_data:
+        await db.users.update_one({"id": user["id"]}, {"$set": update_data})
+    
+    updated_user = await db.users.find_one({"id": user["id"]}, {"_id": 0, "password": 0})
+    
+    # Audit log
+    await log_audit("COMPANY_INFO_UPDATED", user["id"], user.get("company_name", user["name"]), {
+        "updated_fields": list(update_data.keys())
+    })
+    
+    return UserResponse(**updated_user)
+
 # NEW: Calculate job costs based on service pricing
 @api_router.get("/jobs/{job_id}/calculate-costs")
 async def calculate_job_costs(job_id: str, user: dict = Depends(get_current_user)):
