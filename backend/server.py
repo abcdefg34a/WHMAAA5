@@ -182,7 +182,7 @@ class UserResponse(BaseModel):
     service_code: Optional[str] = None
     linked_services: Optional[List[str]] = None
     created_at: str
-    # NEW fields
+    # Pricing fields
     tow_cost: Optional[float] = None
     daily_cost: Optional[float] = None
     business_license: Optional[str] = None
@@ -193,6 +193,15 @@ class UserResponse(BaseModel):
     dienstnummer: Optional[str] = None
     parent_authority_id: Optional[str] = None
     is_main_authority: Optional[bool] = None
+    # NEW: Extended pricing settings
+    time_based_enabled: Optional[bool] = None
+    first_half_hour: Optional[float] = None
+    additional_half_hour: Optional[float] = None
+    processing_fee: Optional[float] = None
+    empty_trip_fee: Optional[float] = None
+    night_surcharge: Optional[float] = None
+    weekend_surcharge: Optional[float] = None
+    heavy_vehicle_surcharge: Optional[float] = None
 
 class TokenResponse(BaseModel):
     access_token: str
