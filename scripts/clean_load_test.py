@@ -168,10 +168,32 @@ async def main():
             print(f"  {min(i+20, NUM_TOW)}/{NUM_TOW}", end="\r")
         print(f"\n  ✅ {results['towing_service_register']['success']} OK in {time.time()-start:.1f}s")
         
-        # 4. Approve all
+        # 4. Approve all - need to re-fetch pending after registration
         print(f"\n[4] Genehmige alle Benutzer...")
         start = time.time()
-        await approve_all(session, admin_token)
+        
+        # Re-fetch pending lists (they were just created!)
+        headers = {"Authorization": f"Bearer {admin_token}"}
+        async with session.get(f"{API_URL}/admin/pending-authorities", headers=headers) as resp:
+            pending_auth = await resp.json() if resp.status == 200 else []
+        async with session.get(f"{API_URL}/admin/pending-services", headers=headers) as resp:
+            pending_tow = await resp.json() if resp.status == 200 else []
+        
+        print(f"  Genehmige {len(pending_auth)} Behörden + {len(pending_tow)} Abschleppdienste...")
+        
+        # Approve in batches
+        for u in pending_auth:
+            s = time.time()
+            async with session.post(f"{API_URL}/admin/approve-authority/{u['id']}", json={"approved": True}, headers=headers) as resp:
+                results["approve"]["times"].append(time.time() - s)
+                results["approve"]["success" if resp.status == 200 else "failed"] += 1
+        
+        for u in pending_tow:
+            s = time.time()
+            async with session.post(f"{API_URL}/admin/approve-service/{u['id']}", json={"approved": True}, headers=headers) as resp:
+                results["approve"]["times"].append(time.time() - s)
+                results["approve"]["success" if resp.status == 200 else "failed"] += 1
+        
         print(f"  ✅ {results['approve']['success']} genehmigt in {time.time()-start:.1f}s")
         
         # 5. Get approved service IDs
