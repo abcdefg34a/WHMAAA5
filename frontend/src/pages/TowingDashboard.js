@@ -1002,6 +1002,62 @@ export const TowingDashboard = () => {
               </DialogHeader>
 
               <div className="space-y-6 py-4">
+                {/* Sicherstellung Details - prominent display */}
+                {selectedJob.job_type === 'sicherstellung' && (
+                  <div className="p-4 bg-amber-50 border border-amber-200 rounded-lg">
+                    <h4 className="font-semibold text-amber-800 mb-3">⚠️ Sicherstellung (Polizeilich)</h4>
+                    <div className="grid sm:grid-cols-2 gap-3 text-sm">
+                      <div>
+                        <Label className="text-amber-700">Grund</Label>
+                        <p className="font-medium">{
+                          {
+                            'betriebsmittel': 'Auslaufende Betriebsmittel',
+                            'gestohlen': 'Gestohlenes Fahrzeug / Fahndung',
+                            'eigentumssicherung': 'Eigentumssicherung (wertvoll/ungesichert)',
+                            'technische_maengel': 'Technische Mängel / Beweissicherung',
+                            'strafrechtlich': 'Strafrechtliche Beschlagnahme'
+                          }[selectedJob.sicherstellung_reason] || selectedJob.sicherstellung_reason || '-'
+                        }</p>
+                      </div>
+                      <div>
+                        <Label className="text-amber-700">Fahrzeugkategorie</Label>
+                        <p className="font-medium">{
+                          selectedJob.vehicle_category === 'under_3_5t' ? 'PKW/Krad bis 3,5t' :
+                          selectedJob.vehicle_category === 'over_3_5t' ? 'Fahrzeuge ab 3,5t' : '-'
+                        }</p>
+                      </div>
+                      {selectedJob.ordering_authority && (
+                        <div>
+                          <Label className="text-amber-700">Anordnende Stelle</Label>
+                          <p className="font-medium">{
+                            {
+                              'schutzpolizei': 'Schutzpolizei',
+                              'kriminalpolizei': 'Kriminalpolizei',
+                              'staatsanwaltschaft': 'Staatsanwaltschaft',
+                              'sachverstaendiger': 'Technischer Sachverständiger'
+                            }[selectedJob.ordering_authority] || selectedJob.ordering_authority
+                          }</p>
+                        </div>
+                      )}
+                      {selectedJob.contact_attempts !== null && (
+                        <div>
+                          <Label className="text-amber-700">Telefonische Kontaktversuche</Label>
+                          <p className="font-medium">{selectedJob.contact_attempts ? 'Ja' : 'Nein'}</p>
+                          {selectedJob.contact_attempts_notes && (
+                            <p className="text-xs text-amber-600 mt-1">{selectedJob.contact_attempts_notes}</p>
+                          )}
+                        </div>
+                      )}
+                      {selectedJob.estimated_vehicle_value && (
+                        <div>
+                          <Label className="text-amber-700">Geschätzter Wert</Label>
+                          <p className="font-medium">{selectedJob.estimated_vehicle_value.toLocaleString('de-DE')} €</p>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                )}
+
                 {/* Location Map */}
                 <div className="map-container h-48">
                   <MapContainer
