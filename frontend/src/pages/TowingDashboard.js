@@ -651,7 +651,7 @@ export const TowingDashboard = () => {
                           <p className="job-license-plate">{job.license_plate}</p>
                           <p className="text-xs text-slate-500">{job.job_number}</p>
                         </div>
-                        {getStatusBadge(job.status)}
+                        {getStatusBadge(job.status, job.is_empty_trip)}
                       </div>
                       <div className="space-y-2 text-sm">
                         <div className="flex items-center gap-2 text-slate-600">
@@ -724,7 +724,7 @@ export const TowingDashboard = () => {
                             <p className="job-license-plate">{job.license_plate}</p>
                             <p className="text-xs text-slate-500">{job.job_number}</p>
                           </div>
-                          {getStatusBadge(job.status)}
+                          {getStatusBadge(job.status, job.is_empty_trip)}
                         </div>
                         <div className="space-y-2 text-sm text-slate-600">
                           <p>Im Hof seit: {job.in_yard_at ? new Date(job.in_yard_at).toLocaleString('de-DE') : '-'}</p>
