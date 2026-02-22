@@ -338,7 +338,7 @@ class NewFeaturesAPITester:
         
         test_email = self.unique_employee_email
         
-        # Step 1: Create first employee with email "test-employee@test.de"
+        # Step 1: Create first employee with unique email
         employee_data_1 = {
             "email": test_email,
             "password": "TestEmployee123!",
@@ -346,7 +346,7 @@ class NewFeaturesAPITester:
         }
         
         success, response = self.run_test(
-            "Create First Employee", "POST", "authority/employees", 200,
+            f"Create First Employee ({test_email})", "POST", "authority/employees", 200,
             employee_data_1, self.authority_token
         )
         
