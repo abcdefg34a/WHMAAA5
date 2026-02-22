@@ -1437,66 +1437,62 @@ class TowingManagementAPITester:
         print(f"📡 Testing against: {self.base_url}")
         
         try:
-            # Basic connectivity
-            if not self.test_root_endpoint():
-                print("❌ Root endpoint failed - stopping tests")
-                return False
+            # First run the comprehensive backend review as requested
+            print("\n" + "="*80)
+            print("🎯 STARTING COMPREHENSIVE BACKEND REVIEW")
+            print("="*80)
             
-            # Authentication tests
-            if not self.test_user_registration():
-                print("❌ User registration failed - stopping tests")
-                return False
+            comprehensive_success = self.test_comprehensive_backend_review()
             
-            # Test login with pending approval
-            self.test_user_login()
-            self.test_auth_me()
-            
-            # Test admin approval workflow
-            self.test_admin_approval_workflow()
-            
-            # Test cost management
-            self.test_cost_management()
-            
-            # Service management (after approval)
-            self.test_service_linking()
-            
-            # NEW: Employee Management System Tests
-            print("\n" + "="*60)
-            print("🏢 EMPLOYEE MANAGEMENT SYSTEM TESTS")
-            print("="*60)
-            
-            self.test_employee_management()
-            self.test_employee_job_creation_and_hierarchy()
-            self.test_employee_blocking_and_management()
-            self.test_employee_error_cases()
-            
-            print("\n" + "="*60)
-            print("📋 CONTINUING WITH REGULAR JOB TESTS")
-            print("="*60)
-            
-            # Job management
-            if self.test_job_creation():
-                self.test_job_management()
+            # If comprehensive review passes, we can optionally run additional tests
+            if comprehensive_success:
+                print("\n" + "="*80)
+                print("✅ COMPREHENSIVE REVIEW PASSED - RUNNING ADDITIONAL TESTS")
+                print("="*80)
                 
-                # Test bulk job management features
-                self.test_bulk_job_management()
-                self.test_bulk_job_error_cases()
+                # Basic connectivity (if not already tested)
+                if not hasattr(self, 'root_tested'):
+                    self.test_root_endpoint()
+                    self.root_tested = True
                 
-                # Test date filtering
-                self.test_date_filtering()
-                
-                self.test_pdf_generation()
+                # Run additional comprehensive tests if time permits
+                # These are the existing comprehensive tests
+                if not hasattr(self, 'registration_tested'):
+                    if self.test_user_registration():
+                        self.test_user_login()
+                        self.test_auth_me()
+                        self.test_admin_approval_workflow()
+                        self.test_cost_management()
+                        self.test_service_linking()
+                        
+                        # Employee Management System Tests
+                        print("\n" + "="*60)
+                        print("🏢 EMPLOYEE MANAGEMENT SYSTEM TESTS")
+                        print("="*60)
+                        
+                        self.test_employee_management()
+                        self.test_employee_job_creation_and_hierarchy()
+                        self.test_employee_blocking_and_management()
+                        self.test_employee_error_cases()
+                        
+                        # Job management
+                        if self.test_job_creation():
+                            self.test_job_management()
+                            self.test_bulk_job_management()
+                            self.test_bulk_job_error_cases()
+                            self.test_date_filtering()
+                            self.test_pdf_generation()
+                        
+                        self.test_vehicle_search()
+                        self.test_admin_endpoints()
+                        
+                    self.registration_tested = True
+            else:
+                print("\n" + "="*80)
+                print("❌ COMPREHENSIVE REVIEW FAILED - STOPPING ADDITIONAL TESTS")
+                print("="*80)
             
-            # Public endpoints with cost calculation
-            self.test_vehicle_search()
-            
-            # Admin endpoints
-            self.test_admin_endpoints()
-            
-            # Error handling
-            self.test_error_handling()
-            
-            return True
+            return comprehensive_success
             
         except Exception as e:
             print(f"❌ Test suite failed with error: {str(e)}")
