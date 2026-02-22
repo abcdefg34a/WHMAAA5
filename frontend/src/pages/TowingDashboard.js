@@ -93,6 +93,14 @@ export const TowingDashboard = () => {
   useEffect(() => {
     setTowCost(user?.tow_cost || 0);
     setDailyCost(user?.daily_cost || 0);
+    setTimeBasedEnabled(user?.time_based_enabled || false);
+    setFirstHalfHour(user?.first_half_hour || '');
+    setAdditionalHalfHour(user?.additional_half_hour || '');
+    setProcessingFee(user?.processing_fee || '');
+    setEmptyTripFee(user?.empty_trip_fee || '');
+    setNightSurcharge(user?.night_surcharge || '');
+    setWeekendSurcharge(user?.weekend_surcharge || '');
+    setHeavyVehicleSurcharge(user?.heavy_vehicle_surcharge || '');
   }, [user]);
 
   // Clear selection when tab changes
