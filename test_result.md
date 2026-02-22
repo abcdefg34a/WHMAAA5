@@ -327,15 +327,18 @@ frontend:
 
   - task: "Portal Login Token Management Fix"
     implemented: true
-    working: false
+    working: true
     file: "/app/frontend/src/pages/PortalPage.js, /app/frontend/src/contexts/AuthContext.js"
-    stuck_count: 1
+    stuck_count: 0
     priority: "high"
-    needs_retesting: true
+    needs_retesting: false
     status_history:
       - working: false
         agent: "testing"
         comment: "❌ CRITICAL ISSUE FOUND: Portal login authentication works (backend logs confirm successful logins for behoerde@test.de and abschlepp@test.de) but there's a token/session management issue. After successful login, users get 403 errors when accessing protected resources (/api/auth/me, /api/jobs, etc.). The login separation logic is correctly implemented - admin login only works via /login, authority/towing only via /portal, and cross-role access is properly blocked. However, the token storage or AuthContext update after portal login is not working correctly, preventing dashboard access. Backend audit logs show: USER_LOGIN events for all roles, but frontend shows 403 Forbidden errors immediately after login."
+      - working: true
+        agent: "testing"
+        comment: "✅ PORTAL LOGIN TOKEN MANAGEMENT FIX VERIFIED - COMPLETE SUCCESS! Comprehensive testing of all three login scenarios completed successfully: 1) AUTHORITY PORTAL LOGIN: behoerde@test.de/Behoerde123 successfully redirected to /authority dashboard with NO 403 errors, dashboard loads properly with job creation form, map, and all functionality working, 2) TOWING SERVICE PORTAL LOGIN: abschlepp@test.de/Abschlepp123 successfully redirected to /towing dashboard with NO 403 errors, dashboard displays service code (ZpcJ04), pricing info, and 'Neuer Auftrag' button, 3) ADMIN LOGIN VIA /login: admin@test.de/Admin123! successfully redirected to /admin dashboard with NO 403 errors, admin dashboard shows proper statistics and navigation tabs. The token management issue has been completely resolved - all portal logins now work correctly with proper token storage and AuthContext updates. Login separation is working perfectly: admin-only access via /login, authority/towing-only access via /portal. All dashboards load without any authentication errors."
 
 metadata:
   created_by: "main_agent"
