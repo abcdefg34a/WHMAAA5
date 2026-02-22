@@ -86,6 +86,32 @@ export const TowingDashboard = () => {
   const [calculatedCosts, setCalculatedCosts] = useState(null);
   const [loadingCosts, setLoadingCosts] = useState(false);
 
+  // NEW: Create Job state
+  const [createJobDialogOpen, setCreateJobDialogOpen] = useState(false);
+  const [linkedAuthorities, setLinkedAuthorities] = useState([]);
+  const [loadingAuthorities, setLoadingAuthorities] = useState(false);
+  const [creatingJob, setCreatingJob] = useState(false);
+  const [newJobData, setNewJobData] = useState({
+    for_authority_id: '',
+    license_plate: '',
+    vin: '',
+    tow_reason: '',
+    location_address: '',
+    location_lat: 52.52,
+    location_lng: 13.405,
+    notes: '',
+    job_type: 'towing',
+    // Sicherstellung fields
+    sicherstellung_reason: '',
+    vehicle_category: '',
+    ordering_authority: '',
+    contact_attempts: false,
+    contact_attempts_notes: '',
+    estimated_vehicle_value: ''
+  });
+  const [newJobPhotos, setNewJobPhotos] = useState([]);
+  const newJobFileInputRef = useRef(null);
+
   useEffect(() => {
     fetchJobs();
   }, [filterStatus, filterDateFrom, filterDateTo, currentPage]);
