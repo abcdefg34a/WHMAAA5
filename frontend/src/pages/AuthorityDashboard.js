@@ -79,6 +79,15 @@ export const AuthorityDashboard = () => {
   const [submitting, setSubmitting] = useState(false);
   const fileInputRef = useRef(null);
 
+  // NEW: Job type and Sicherstellung fields
+  const [jobType, setJobType] = useState('towing');
+  const [sicherstellungReason, setSicherstellungReason] = useState('');
+  const [vehicleCategory, setVehicleCategory] = useState('under_3_5t');
+  const [orderingAuthority, setOrderingAuthority] = useState('');
+  const [contactAttempts, setContactAttempts] = useState(false);
+  const [contactAttemptsNotes, setContactAttemptsNotes] = useState('');
+  const [estimatedVehicleValue, setEstimatedVehicleValue] = useState('');
+
   useEffect(() => {
     fetchJobs();
     fetchLinkedServices();
