@@ -259,6 +259,12 @@ export const AuthorityDashboard = () => {
       return;
     }
 
+    // Validate Sicherstellung fields
+    if (jobType === 'sicherstellung' && !sicherstellungReason) {
+      toast.error('Bitte wählen Sie einen Grund für die Sicherstellung');
+      return;
+    }
+
     setSubmitting(true);
     try {
       const jobData = {
@@ -270,7 +276,15 @@ export const AuthorityDashboard = () => {
         location_lng: position[1],
         photos: photos,
         notes: notes || null,
-        assigned_service_id: selectedServiceId || null
+        assigned_service_id: selectedServiceId || null,
+        // NEW: Job type and Sicherstellung fields
+        job_type: jobType,
+        sicherstellung_reason: jobType === 'sicherstellung' ? sicherstellungReason : null,
+        vehicle_category: jobType === 'sicherstellung' ? vehicleCategory : null,
+        ordering_authority: jobType === 'sicherstellung' ? orderingAuthority : null,
+        contact_attempts: jobType === 'sicherstellung' ? contactAttempts : null,
+        contact_attempts_notes: jobType === 'sicherstellung' && contactAttempts ? contactAttemptsNotes : null,
+        estimated_vehicle_value: jobType === 'sicherstellung' && estimatedVehicleValue ? parseFloat(estimatedVehicleValue) : null
       };
 
       await axios.post(`${API}/jobs`, jobData);
@@ -285,6 +299,13 @@ export const AuthorityDashboard = () => {
       setPhotos([]);
       setNotes('');
       setSelectedServiceId('');
+      setJobType('towing');
+      setSicherstellungReason('');
+      setVehicleCategory('under_3_5t');
+      setOrderingAuthority('');
+      setContactAttempts(false);
+      setContactAttemptsNotes('');
+      setEstimatedVehicleValue('');
       
       fetchJobs();
       setActiveTab('jobs');
