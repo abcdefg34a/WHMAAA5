@@ -749,32 +749,34 @@ export const AdminDashboard = () => {
                         </tr>
                       </thead>
                       <tbody>
-                        {jobs.map(job => (
-                          <tr key={job.id}>
-                            <td className="font-mono text-sm">{job.job_number}</td>
-                            <td className="font-bold">{job.license_plate}</td>
-                            <td>{getStatusBadge(job.status)}</td>
-                            <td>{job.created_by_authority || job.created_by_name}</td>
-                            <td>
-                              {job.created_by_dienstnummer ? (
-                                <span className="font-mono text-xs px-2 py-1 bg-blue-100 text-blue-700 rounded">
-                                  {job.created_by_dienstnummer}
-                                </span>
-                              ) : '-'}
-                            </td>
-                            <td>{job.assigned_service_name || '-'}</td>
-                            <td>{new Date(job.created_at).toLocaleDateString('de-DE')}</td>
-                            <td>
-                              <Button
-                                variant="ghost"
-                                size="sm"
-                                onClick={() => downloadPDF(job.id)}
-                              >
-                                <Download className="h-4 w-4" />
-                              </Button>
-                            </td>
-                          </tr>
-                        ))}
+                        {jobs.map(job => {
+                          return (
+                            <tr key={job.id}>
+                              <td className="font-mono text-sm">{job.job_number}</td>
+                              <td className="font-bold">{job.license_plate}</td>
+                              <td>{getStatusBadge(job.status)}</td>
+                              <td>{job.created_by_authority || job.created_by_name}</td>
+                              <td>
+                                {job.created_by_dienstnummer ? (
+                                  <span className="font-mono text-xs px-2 py-1 bg-blue-100 text-blue-700 rounded">
+                                    {job.created_by_dienstnummer}
+                                  </span>
+                                ) : '-'}
+                              </td>
+                              <td>{job.assigned_service_name || '-'}</td>
+                              <td>{new Date(job.created_at).toLocaleDateString('de-DE')}</td>
+                              <td>
+                                <Button
+                                  variant="ghost"
+                                  size="sm"
+                                  onClick={() => downloadPDF(job.id)}
+                                >
+                                  <Download className="h-4 w-4" />
+                                </Button>
+                              </td>
+                            </tr>
+                          );
+                        })}
                       </tbody>
                     </table>
                   </div>
