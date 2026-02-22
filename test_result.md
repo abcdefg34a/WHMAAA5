@@ -240,15 +240,18 @@ backend:
 frontend:
   - task: "Footer links for Legal Pages (Datenschutz, Impressum)"
     implemented: true
-    working: "NA"
+    working: true
     file: "/app/frontend/src/pages/LandingPage.js"
     stuck_count: 0
     priority: "high"
-    needs_retesting: true
+    needs_retesting: false
     status_history:
       - working: "NA"
         agent: "main"
         comment: "Added footer links to /datenschutz and /impressum pages in LandingPage.js"
+      - working: true
+        agent: "testing"
+        comment: "PASS: Footer legal links working correctly. Both Datenschutz and Impressum pages are accessible from landing page footer. Navigation works properly and pages load with proper content structure."
 
   - task: "Towing service job creation UI"
     implemented: true
