@@ -301,6 +301,18 @@ frontend:
         agent: "testing"
         comment: "PASS: Pagination UI integrated into all dashboards. Verified pagination component is properly imported and used in AdminDashboard.js (lines 784-792), AuthorityDashboard.js (lines 881-889), and TowingDashboard.js (lines 946-954). All dashboards have proper pagination implementation with page change handlers."
 
+  - task: "Extended Leerfahrt (Empty Trip) Functionality"
+    implemented: true
+    working: true
+    file: "/app/frontend/src/pages/TowingDashboard.js"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+      - working: true
+        agent: "testing"
+        comment: "✅ COMPREHENSIVE LEERFAHRT FUNCTIONALITY TEST PASSED - Tested the new extended Leerfahrt function in the towing service dashboard with login abschlepp@test.de/Abschlepp123. VERIFIED ALL REQUIREMENTS: ✅ Found job with 'Vor Ort' status (TEST-LEER), ✅ 'Leerfahrt' button available and clickable, ✅ Leerfahrt dialog opened with all components: Two radio buttons for reasons ('Fahrzeug nicht mehr vor Ort' and 'Fahrer vor Ort angetroffen'), ✅ Conditional name/address fields appear when 'Fahrer vor Ort angetroffen' selected, ✅ Automatic Leerfahrt price display (50.00€ from configured empty_trip_fee), ✅ Payment method selection (Bar/Karte/Rechnung), ✅ Amount input field with default value, ✅ 'Leerfahrt & PDF' button functional, ✅ Form submission successful, ✅ PDF generation initiated. All screenshots taken at each step confirm proper functionality. The new extended Leerfahrt function is working perfectly as requested."
+
 metadata:
   created_by: "main_agent"
   version: "1.0"
