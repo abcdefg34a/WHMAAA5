@@ -16,10 +16,10 @@ class TowingManagementAPITester:
         self.tests_passed = 0
         self.test_results = []
         
-        # Test data
+        # Test data - Use provided admin credentials
         self.test_admin = {
-            "email": f"admin_{datetime.now().strftime('%H%M%S')}@test.de",
-            "password": "TestPass123!",
+            "email": "admin@test.de",
+            "password": "Admin123!",
             "name": "Test Admin",
             "role": "admin"
         }
