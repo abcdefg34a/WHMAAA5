@@ -142,7 +142,7 @@ class NewFeaturesAPITester:
             print("❌ No authority token available")
             return False
         
-        license_plate = "DUP-TEST 123"
+        license_plate = self.unique_license_plate
         
         # Step 1: Create first job with license plate "DUP-TEST 123"
         job_data_1 = {
