@@ -23,14 +23,14 @@ export const LoginPage = () => {
 
     try {
       const user = await login(email, password);
-      // Redirect based on role
-      if (user.role === 'admin') {
-        navigate('/admin');
-      } else if (user.role === 'authority') {
-        navigate('/authority');
-      } else if (user.role === 'towing_service') {
-        navigate('/towing');
+      // Admin-only login page - reject non-admin users
+      if (user.role !== 'admin') {
+        setError('Diese Anmeldeseite ist nur für Administratoren. Bitte nutzen Sie das Portal unter /portal für Behörden und Abschleppdienste.');
+        // Log them out since they used wrong login
+        localStorage.removeItem('token');
+        return;
       }
+      navigate('/admin');
     } catch (err) {
       setError(err.response?.data?.detail || 'Anmeldung fehlgeschlagen');
     } finally {
