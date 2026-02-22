@@ -1741,6 +1741,104 @@ async def update_job(job_id: str, data: JobUpdate, user: dict = Depends(get_curr
     updated_job = await db.jobs.find_one({"id": job_id}, {"_id": 0})
     return JobResponse(**updated_job)
 
+# ==================== JOB DATA EDITING (Kennzeichen, FIN, etc.) ====================
+
+@api_router.patch("/jobs/{job_id}/edit-data", response_model=JobResponse)
+async def edit_job_data(job_id: str, data: JobEditData, user: dict = Depends(get_current_user)):
+    """Edit job vehicle data - allows corrections to license plate, VIN, etc."""
+    job = await db.jobs.find_one({"id": job_id}, {"_id": 0})
+    if not job:
+        raise HTTPException(status_code=404, detail="Auftrag nicht gefunden")
+    
+    # Check access permissions
+    has_access = False
+    
+    if user["role"] == UserRole.ADMIN:
+        has_access = True
+    elif user["role"] == UserRole.AUTHORITY:
+        authority_id = get_authority_id(user)
+        if job.get("authority_id") == authority_id or job["created_by_id"] == user["id"]:
+            has_access = True
+    elif user["role"] == UserRole.TOWING_SERVICE:
+        if job["assigned_service_id"] == user["id"]:
+            has_access = True
+    
+    if not has_access:
+        raise HTTPException(status_code=403, detail="Keine Berechtigung zum Bearbeiten dieses Auftrags")
+    
+    # Only allow editing if job is not released
+    if job["status"] == JobStatus.RELEASED:
+        raise HTTPException(status_code=400, detail="Abgeschlossene Aufträge können nicht mehr bearbeitet werden")
+    
+    now = datetime.now(timezone.utc).isoformat()
+    update_data = {"updated_at": now}
+    changes = []
+    
+    # Update license plate if provided and different
+    if data.license_plate and data.license_plate.upper() != job.get("license_plate"):
+        new_plate = data.license_plate.upper()
+        
+        # Check if new license plate already exists in another active job
+        normalized_new_plate = new_plate.replace(" ", "").replace("-", "")
+        existing_job = await db.jobs.find_one({
+            "id": {"$ne": job_id},  # Exclude current job
+            "$or": [
+                {"license_plate": new_plate},
+                {"license_plate": normalized_new_plate}
+            ],
+            "status": {"$ne": JobStatus.RELEASED}
+        })
+        
+        if existing_job:
+            raise HTTPException(
+                status_code=400, 
+                detail=f"Ein Fahrzeug mit diesem Kennzeichen ({new_plate}) existiert bereits im System"
+            )
+        
+        changes.append(f"Kennzeichen: {job.get('license_plate')} → {new_plate}")
+        update_data["license_plate"] = new_plate
+    
+    # Update VIN if provided
+    if data.vin is not None:
+        new_vin = data.vin.upper() if data.vin else None
+        if new_vin != job.get("vin"):
+            changes.append(f"FIN: {job.get('vin') or '(leer)'} → {new_vin or '(leer)'}")
+            update_data["vin"] = new_vin
+    
+    # Update tow reason if provided
+    if data.tow_reason and data.tow_reason != job.get("tow_reason"):
+        changes.append(f"Abschleppgrund: {job.get('tow_reason')} → {data.tow_reason}")
+        update_data["tow_reason"] = data.tow_reason
+    
+    # Update notes if provided
+    if data.notes is not None and data.notes != job.get("notes"):
+        changes.append("Bemerkungen aktualisiert")
+        update_data["notes"] = data.notes
+    
+    # Update location if provided
+    if data.location_address and data.location_address != job.get("location_address"):
+        changes.append(f"Adresse aktualisiert")
+        update_data["location_address"] = data.location_address
+    if data.location_lat is not None:
+        update_data["location_lat"] = data.location_lat
+    if data.location_lng is not None:
+        update_data["location_lng"] = data.location_lng
+    
+    if len(update_data) <= 1:  # Only updated_at
+        raise HTTPException(status_code=400, detail="Keine Änderungen vorgenommen")
+    
+    await db.jobs.update_one({"id": job_id}, {"$set": update_data})
+    
+    # Audit log the changes
+    await log_audit("JOB_DATA_EDITED", user["id"], user.get("name", user["email"]), {
+        "job_id": job_id,
+        "job_number": job.get("job_number"),
+        "changes": changes
+    })
+    
+    updated_job = await db.jobs.find_one({"id": job_id}, {"_id": 0})
+    return JobResponse(**updated_job)
+
 # ==================== BULK STATUS UPDATE ====================
 
 @api_router.post("/jobs/bulk-update-status")
