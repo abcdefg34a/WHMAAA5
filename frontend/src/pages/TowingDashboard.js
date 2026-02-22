@@ -225,6 +225,101 @@ export const TowingDashboard = () => {
 
   const hasActiveFilters = filterStatus !== 'all' || filterDateFrom || filterDateTo;
 
+  // NEW: Fetch linked authorities for job creation
+  const fetchLinkedAuthorities = async () => {
+    setLoadingAuthorities(true);
+    try {
+      const response = await axios.get(`${API}/towing/linked-authorities`);
+      setLinkedAuthorities(response.data);
+    } catch (error) {
+      console.error('Error fetching linked authorities:', error);
+      toast.error('Fehler beim Laden der verknüpften Behörden');
+    } finally {
+      setLoadingAuthorities(false);
+    }
+  };
+
+  // NEW: Open create job dialog
+  const openCreateJobDialog = () => {
+    fetchLinkedAuthorities();
+    setNewJobData({
+      for_authority_id: '',
+      license_plate: '',
+      vin: '',
+      tow_reason: '',
+      location_address: '',
+      location_lat: 52.52,
+      location_lng: 13.405,
+      notes: '',
+      job_type: 'towing',
+      sicherstellung_reason: '',
+      vehicle_category: '',
+      ordering_authority: '',
+      contact_attempts: false,
+      contact_attempts_notes: '',
+      estimated_vehicle_value: ''
+    });
+    setNewJobPhotos([]);
+    setCreateJobDialogOpen(true);
+  };
+
+  // NEW: Handle new job photo upload
+  const handleNewJobPhotoUpload = (e) => {
+    const files = Array.from(e.target.files);
+    files.forEach(file => {
+      const reader = new FileReader();
+      reader.onloadend = () => {
+        setNewJobPhotos(prev => [...prev, reader.result]);
+      };
+      reader.readAsDataURL(file);
+    });
+  };
+
+  // NEW: Remove photo from new job
+  const removeNewJobPhoto = (index) => {
+    setNewJobPhotos(prev => prev.filter((_, i) => i !== index));
+  };
+
+  // NEW: Create job as towing service
+  const handleCreateJob = async () => {
+    // Validation
+    if (!newJobData.for_authority_id) {
+      toast.error('Bitte wählen Sie eine Behörde aus');
+      return;
+    }
+    if (!newJobData.license_plate) {
+      toast.error('Bitte geben Sie ein Kennzeichen ein');
+      return;
+    }
+    if (!newJobData.tow_reason) {
+      toast.error('Bitte geben Sie einen Abschleppgrund ein');
+      return;
+    }
+    if (!newJobData.location_address) {
+      toast.error('Bitte geben Sie eine Adresse ein');
+      return;
+    }
+
+    setCreatingJob(true);
+    try {
+      const payload = {
+        ...newJobData,
+        photos: newJobPhotos,
+        estimated_vehicle_value: newJobData.estimated_vehicle_value ? parseFloat(newJobData.estimated_vehicle_value) : null
+      };
+
+      await axios.post(`${API}/jobs`, payload);
+      toast.success('Auftrag erfolgreich erstellt!');
+      setCreateJobDialogOpen(false);
+      fetchJobs();
+    } catch (error) {
+      console.error('Error creating job:', error);
+      toast.error(error.response?.data?.detail || 'Fehler beim Erstellen des Auftrags');
+    } finally {
+      setCreatingJob(false);
+    }
+  };
+
   const copyServiceCode = async () => {
     if (user?.service_code) {
       try {
