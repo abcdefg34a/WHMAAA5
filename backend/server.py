@@ -203,6 +203,22 @@ class UpdateCostsRequest(BaseModel):
     tow_cost: float
     daily_cost: float
 
+# NEW: Extended pricing settings for towing services
+class PricingSettingsRequest(BaseModel):
+    # Zeitbasiert
+    time_based_enabled: Optional[bool] = False
+    first_half_hour: Optional[float] = None
+    additional_half_hour: Optional[float] = None
+    # Standard
+    tow_cost: Optional[float] = None
+    daily_cost: Optional[float] = None
+    # Zusatzkosten
+    processing_fee: Optional[float] = None  # Bearbeitungsgebühr
+    empty_trip_fee: Optional[float] = None  # Leerfahrt
+    night_surcharge: Optional[float] = None  # Nachtzuschlag
+    weekend_surcharge: Optional[float] = None  # Wochenendzuschlag
+    heavy_vehicle_surcharge: Optional[float] = None  # Schwerlast ab 3,5t
+
 class ApproveServiceRequest(BaseModel):
     approved: bool
     rejection_reason: Optional[str] = None
