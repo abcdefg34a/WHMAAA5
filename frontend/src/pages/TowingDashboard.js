@@ -2543,6 +2543,75 @@ export const TowingDashboard = () => {
           )}
         </DialogContent>
       </Dialog>
+
+      {/* Photo Lightbox Dialog */}
+      <Dialog open={lightboxOpen} onOpenChange={setLightboxOpen}>
+        <DialogContent className="max-w-4xl p-0 bg-black/95 border-none">
+          <div className="relative">
+            {/* Close Button */}
+            <button
+              onClick={() => setLightboxOpen(false)}
+              className="absolute top-4 right-4 z-10 bg-white/20 hover:bg-white/30 text-white p-2 rounded-full transition-colors"
+            >
+              <X className="h-6 w-6" />
+            </button>
+
+            {/* Photo Counter */}
+            <div className="absolute top-4 left-4 z-10 bg-white/20 text-white px-3 py-1 rounded-full text-sm">
+              {lightboxIndex + 1} / {lightboxPhotos.length}
+            </div>
+
+            {/* Main Image */}
+            <div className="flex items-center justify-center min-h-[60vh] p-4">
+              {lightboxPhoto && (
+                <img 
+                  src={lightboxPhoto} 
+                  alt={`Foto ${lightboxIndex + 1}`}
+                  className="max-w-full max-h-[80vh] object-contain rounded-lg"
+                />
+              )}
+            </div>
+
+            {/* Navigation Arrows */}
+            {lightboxPhotos.length > 1 && (
+              <>
+                <button
+                  onClick={prevPhoto}
+                  className="absolute left-4 top-1/2 -translate-y-1/2 bg-white/20 hover:bg-white/30 text-white p-3 rounded-full transition-colors"
+                >
+                  <ChevronDown className="h-6 w-6 rotate-90" />
+                </button>
+                <button
+                  onClick={nextPhoto}
+                  className="absolute right-4 top-1/2 -translate-y-1/2 bg-white/20 hover:bg-white/30 text-white p-3 rounded-full transition-colors"
+                >
+                  <ChevronDown className="h-6 w-6 -rotate-90" />
+                </button>
+              </>
+            )}
+
+            {/* Thumbnail Strip */}
+            {lightboxPhotos.length > 1 && (
+              <div className="flex justify-center gap-2 p-4 bg-black/50">
+                {lightboxPhotos.map((photo, idx) => (
+                  <button
+                    key={idx}
+                    onClick={() => {
+                      setLightboxIndex(idx);
+                      setLightboxPhoto(photo);
+                    }}
+                    className={`w-16 h-16 rounded overflow-hidden border-2 transition-colors ${
+                      idx === lightboxIndex ? 'border-orange-500' : 'border-transparent hover:border-white/50'
+                    }`}
+                  >
+                    <img src={photo} alt="" className="w-full h-full object-cover" />
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 };
