@@ -619,7 +619,7 @@ export const TowingDashboard = () => {
       fetchJobs();
       
       // Download PDF
-      window.open(`${API}/jobs/${selectedJob.id}/pdf`, '_blank');
+      downloadPDF(selectedJob.id, selectedJob.job_number);
     } catch (error) {
       toast.error('Fehler bei der Freigabe');
     }
