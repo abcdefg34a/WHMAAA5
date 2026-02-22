@@ -265,6 +265,8 @@ class JobCreate(BaseModel):
     photos: List[str] = []
     notes: Optional[str] = None
     assigned_service_id: Optional[str] = None
+    # NEW: For towing service creating jobs on behalf of authority
+    for_authority_id: Optional[str] = None
     # NEW: Job type and Sicherstellung fields
     job_type: Optional[str] = "towing"  # "towing" or "sicherstellung"
     # Sicherstellung-specific fields
