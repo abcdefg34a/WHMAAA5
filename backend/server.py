@@ -339,6 +339,8 @@ class JobResponse(BaseModel):
     is_empty_trip: Optional[bool] = None
     # NEW: Calculated costs breakdown
     calculated_costs: Optional[dict] = None
+    # NEW: Track if created by towing service
+    created_by_service: Optional[bool] = False
 
 class VehicleSearchResult(BaseModel):
     found: bool
