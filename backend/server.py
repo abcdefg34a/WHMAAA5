@@ -1414,6 +1414,28 @@ async def create_job(data: JobCreate, user: dict = Depends(get_current_user)):
     if user["role"] not in [UserRole.AUTHORITY, UserRole.ADMIN, UserRole.TOWING_SERVICE]:
         raise HTTPException(status_code=403, detail="Keine Berechtigung zum Erstellen von Aufträgen")
     
+    # ========== DUPLICATE LICENSE PLATE CHECK ==========
+    # Check if there's an active job with the same license plate
+    # A job is considered "active" if it's not in 'released' status
+    normalized_plate = data.license_plate.upper().replace(" ", "").replace("-", "")
+    
+    # Find any job with this license plate that is NOT released
+    active_job = await db.jobs.find_one({
+        "$or": [
+            {"license_plate": data.license_plate.upper()},
+            {"license_plate": normalized_plate},
+            {"license_plate": {"$regex": f"^{re.escape(normalized_plate)}$", "$options": "i"}}
+        ],
+        "status": {"$ne": JobStatus.RELEASED}
+    })
+    
+    if active_job:
+        raise HTTPException(
+            status_code=400, 
+            detail=f"Ein Fahrzeug mit diesem Kennzeichen ({active_job['license_plate']}) ist bereits im System und wurde noch nicht freigegeben. Status: {active_job['status']}"
+        )
+    # ========== END DUPLICATE CHECK ==========
+    
     job_id = str(uuid.uuid4())
     now = datetime.now(timezone.utc).isoformat()
     
