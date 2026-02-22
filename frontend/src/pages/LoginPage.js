@@ -88,6 +88,7 @@ export const LoginPage = () => {
                   onChange={(e) => setEmail(e.target.value)}
                   placeholder="ihre@email.de"
                   required
+                  autoComplete="email"
                   className="h-12"
                 />
               </div>
