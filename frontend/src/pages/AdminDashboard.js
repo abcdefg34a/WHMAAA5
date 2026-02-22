@@ -123,49 +123,6 @@ export const AdminDashboard = () => {
     }
   };
 
-  const fetchBackups = async () => {
-    setBackupLoading(true);
-    try {
-      const response = await axios.get(`${API}/admin/backups`);
-      setBackups(response.data);
-    } catch (error) {
-      console.error('Error fetching backups:', error);
-    } finally {
-      setBackupLoading(false);
-    }
-  };
-
-  const handleCreateBackup = async () => {
-    try {
-      toast.info('Backup wird erstellt...');
-      await axios.post(`${API}/admin/backup`);
-      toast.success('Backup erfolgreich erstellt');
-      fetchBackups();
-    } catch (error) {
-      toast.error(error.response?.data?.detail || 'Backup fehlgeschlagen');
-    }
-  };
-
-  const handleExportCSV = async () => {
-    try {
-      toast.info('CSV wird erstellt...');
-      const response = await axios.get(`${API}/export/jobs/csv`, {
-        responseType: 'blob'
-      });
-      const url = window.URL.createObjectURL(new Blob([response.data]));
-      const link = document.createElement('a');
-      link.href = url;
-      link.setAttribute('download', `auftraege_${new Date().toISOString().split('T')[0]}.csv`);
-      document.body.appendChild(link);
-      link.click();
-      link.remove();
-      window.URL.revokeObjectURL(url);
-      toast.success('CSV erfolgreich heruntergeladen');
-    } catch (error) {
-      toast.error(error.response?.data?.detail || 'Export fehlgeschlagen');
-    }
-  };
-
   const handleExportExcel = async () => {
     try {
       toast.info('Excel wird erstellt...');
