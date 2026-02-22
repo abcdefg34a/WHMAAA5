@@ -362,6 +362,10 @@ class VehicleSearchResult(BaseModel):
     # Location coordinates for map
     location_lat: Optional[float] = None
     location_lng: Optional[float] = None
+    # NEW: Additional info for towed status
+    tow_reason: Optional[str] = None
+    location_address: Optional[str] = None
+    created_by_authority: Optional[str] = None
 
 class LinkServiceRequest(BaseModel):
     service_code: str
