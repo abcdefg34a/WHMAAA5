@@ -276,6 +276,8 @@ class JobUpdate(BaseModel):
     owner_address: Optional[str] = None
     payment_method: Optional[str] = None
     payment_amount: Optional[float] = None
+    # NEW: Empty trip flag
+    is_empty_trip: Optional[bool] = None
 
 class BulkStatusUpdate(BaseModel):
     job_ids: List[str]
