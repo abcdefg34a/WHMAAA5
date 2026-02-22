@@ -827,61 +827,63 @@ export const AdminDashboard = () => {
                         </tr>
                       </thead>
                       <tbody>
-                        {users.map(u => (
-                          <tr key={u.id} className={u.is_blocked ? 'opacity-60 bg-red-50' : ''}>
-                            <td className="font-medium">{u.name}</td>
-                            <td>{u.email}</td>
-                            <td>{getRoleBadge(u.role)}</td>
-                            <td>{u.authority_name || u.company_name || '-'}</td>
-                            <td>
-                              <div className="flex gap-1 flex-wrap">
-                                {u.role === 'towing_service' && getApprovalBadge(u.approval_status)}
-                                {getBlockedBadge(u.is_blocked)}
-                              </div>
-                            </td>
-                            <td>{new Date(u.created_at).toLocaleDateString('de-DE')}</td>
-                            <td>
-                              {u.role !== 'admin' && (
-                                <DropdownMenu>
-                                  <DropdownMenuTrigger asChild>
-                                    <Button variant="ghost" size="sm">
-                                      <MoreVertical className="h-4 w-4" />
-                                    </Button>
-                                  </DropdownMenuTrigger>
-                                  <DropdownMenuContent align="end">
-                                    <DropdownMenuItem onClick={() => openPasswordDialog(u)}>
-                                      <Key className="h-4 w-4 mr-2" />
-                                      Passwort ändern
-                                    </DropdownMenuItem>
-                                    <DropdownMenuSeparator />
-                                    {u.is_blocked ? (
-                                      <DropdownMenuItem onClick={() => handleBlockUser(u, false)}>
-                                        <Unlock className="h-4 w-4 mr-2" />
-                                        Entsperren
+                        {users.map(u => {
+                          return (
+                            <tr key={u.id} className={u.is_blocked ? 'opacity-60 bg-red-50' : ''}>
+                              <td className="font-medium">{u.name}</td>
+                              <td>{u.email}</td>
+                              <td>{getRoleBadge(u.role)}</td>
+                              <td>{u.authority_name || u.company_name || '-'}</td>
+                              <td>
+                                <div className="flex gap-1 flex-wrap">
+                                  {u.role === 'towing_service' && getApprovalBadge(u.approval_status)}
+                                  {getBlockedBadge(u.is_blocked)}
+                                </div>
+                              </td>
+                              <td>{new Date(u.created_at).toLocaleDateString('de-DE')}</td>
+                              <td>
+                                {u.role !== 'admin' && (
+                                  <DropdownMenu>
+                                    <DropdownMenuTrigger asChild>
+                                      <Button variant="ghost" size="sm">
+                                        <MoreVertical className="h-4 w-4" />
+                                      </Button>
+                                    </DropdownMenuTrigger>
+                                    <DropdownMenuContent align="end">
+                                      <DropdownMenuItem onClick={() => openPasswordDialog(u)}>
+                                        <Key className="h-4 w-4 mr-2" />
+                                        Passwort ändern
                                       </DropdownMenuItem>
-                                    ) : (
+                                      <DropdownMenuSeparator />
+                                      {u.is_blocked ? (
+                                        <DropdownMenuItem onClick={() => handleBlockUser(u, false)}>
+                                          <Unlock className="h-4 w-4 mr-2" />
+                                          Entsperren
+                                        </DropdownMenuItem>
+                                      ) : (
+                                        <DropdownMenuItem 
+                                          onClick={() => handleBlockUser(u, true)}
+                                          className="text-orange-600"
+                                        >
+                                          <Lock className="h-4 w-4 mr-2" />
+                                          Sperren
+                                        </DropdownMenuItem>
+                                      )}
+                                      <DropdownMenuSeparator />
                                       <DropdownMenuItem 
-                                        onClick={() => handleBlockUser(u, true)}
-                                        className="text-orange-600"
+                                        onClick={() => openDeleteDialog(u)}
+                                        className="text-red-600"
                                       >
-                                        <Lock className="h-4 w-4 mr-2" />
-                                        Sperren
+                                        <Trash2 className="h-4 w-4 mr-2" />
+                                        Löschen
                                       </DropdownMenuItem>
-                                    )}
-                                    <DropdownMenuSeparator />
-                                    <DropdownMenuItem 
-                                      onClick={() => openDeleteDialog(u)}
-                                      className="text-red-600"
-                                    >
-                                      <Trash2 className="h-4 w-4 mr-2" />
-                                      Löschen
-                                    </DropdownMenuItem>
-                                  </DropdownMenuContent>
-                                </DropdownMenu>
-                              )}
-                            </td>
-                          </tr>
-                        ))}
+                                    </DropdownMenuContent>
+                                  </DropdownMenu>
+                                )}
+                              </td>
+                            </tr>
+                          );
+                        })}
                       </tbody>
                     </table>
                   </div>
