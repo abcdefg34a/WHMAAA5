@@ -298,16 +298,16 @@ export const LandingPage = () => {
                       <div className="flex items-center gap-3 mb-4">
                         <MapPin className="h-5 w-5 text-slate-600" />
                         <div>
-                          <p className="text-sm text-slate-500">Standort des Fahrzeugs</p>
+                          <p className="text-sm text-slate-500">Standort des Abschlepphofs</p>
                           <p className="font-medium">{searchResult.yard_address}</p>
                         </div>
                       </div>
 
-                      {/* Interaktive Karte */}
-                      {searchResult.location_lat && searchResult.location_lng && (
+                      {/* Interaktive Karte - zeigt Hof-Standort */}
+                      {searchResult.yard_lat && searchResult.yard_lng && (
                         <div className="rounded-lg overflow-hidden border border-slate-200 mb-4" style={{ height: '250px' }}>
                           <MapContainer 
-                            center={[searchResult.location_lat, searchResult.location_lng]} 
+                            center={[searchResult.yard_lat, searchResult.yard_lng]} 
                             zoom={15} 
                             style={{ height: '100%', width: '100%' }}
                             scrollWheelZoom={false}
@@ -316,9 +316,9 @@ export const LandingPage = () => {
                               attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
                               url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
                             />
-                            <Marker position={[searchResult.location_lat, searchResult.location_lng]}>
+                            <Marker position={[searchResult.yard_lat, searchResult.yard_lng]}>
                               <Popup>
-                                <strong>{searchResult.license_plate}</strong><br />
+                                <strong>{searchResult.company_name}</strong><br />
                                 {searchResult.yard_address}
                               </Popup>
                             </Marker>
