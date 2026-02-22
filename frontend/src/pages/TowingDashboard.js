@@ -1253,10 +1253,27 @@ export const TowingDashboard = () => {
 
             {/* Price Calculation Section */}
             <div className="space-y-3 p-4 bg-slate-50 rounded-lg border">
-              <Label className="font-semibold">Betrag (€) *</Label>
+              <Label className="font-semibold">Kostenberechnung</Label>
               
-              {/* Calculated Price Info */}
-              {selectedJob?.in_yard_at && (
+              {/* Calculated Costs from Backend */}
+              {loadingCosts ? (
+                <div className="flex justify-center py-4">
+                  <div className="loading-spinner"></div>
+                </div>
+              ) : calculatedCosts && calculatedCosts.breakdown?.length > 0 ? (
+                <div className="text-sm text-slate-600 space-y-1">
+                  {calculatedCosts.breakdown.map((item, idx) => (
+                    <div key={idx} className="flex justify-between">
+                      <span>{item.label}:</span>
+                      <span>{item.amount.toFixed(2)} €</span>
+                    </div>
+                  ))}
+                  <div className="flex justify-between font-bold border-t pt-2 mt-2">
+                    <span>Berechneter Gesamtpreis:</span>
+                    <span className="text-green-600">{calculatedCosts.total.toFixed(2)} €</span>
+                  </div>
+                </div>
+              ) : selectedJob?.in_yard_at ? (
                 <div className="text-sm text-slate-600 space-y-1">
                   <div className="flex justify-between">
                     <span>Anfahrtskosten:</span>
@@ -1277,7 +1294,7 @@ export const TowingDashboard = () => {
                     </span>
                   </div>
                 </div>
-              )}
+              ) : null}
               
               <div className="flex gap-2 mt-3">
                 <Button
