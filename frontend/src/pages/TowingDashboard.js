@@ -728,8 +728,20 @@ export const TowingDashboard = () => {
                 variant="outline"
                 size="sm"
                 onClick={() => setSettingsDialogOpen(true)}
+                title="Preise anpassen"
               >
-                <Settings className="h-4 w-4" />
+                <Euro className="h-4 w-4" />
+              </Button>
+
+              {/* Company Info Button */}
+              <Button
+                data-testid="company-info-btn"
+                variant="outline"
+                size="sm"
+                onClick={openCompanyInfoDialog}
+                title="Firmendaten bearbeiten"
+              >
+                <Building2 className="h-4 w-4" />
               </Button>
               
               <Button
@@ -749,6 +761,29 @@ export const TowingDashboard = () => {
 
       {/* Main Content */}
       <main className="max-w-7xl mx-auto px-4 py-6">
+        {/* Company Info Card */}
+        <Card className="mb-6 border-blue-200 bg-blue-50">
+          <CardContent className="py-4">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-4">
+                <Building2 className="h-6 w-6 text-blue-600" />
+                <div>
+                  <p className="text-sm text-blue-700">Ihre Firmendaten</p>
+                  <p className="font-bold text-blue-900">
+                    {user?.company_name || 'Nicht angegeben'} | {user?.phone || 'Keine Telefonnummer'}
+                  </p>
+                  <p className="text-xs text-blue-600">
+                    Hof: {user?.yard_address || 'Keine Adresse hinterlegt'}
+                  </p>
+                </div>
+              </div>
+              <Button variant="outline" size="sm" onClick={openCompanyInfoDialog} className="border-blue-300 text-blue-700 hover:bg-blue-100">
+                Bearbeiten
+              </Button>
+            </div>
+          </CardContent>
+        </Card>
+
         {/* Service Code Card (Mobile) */}
         <Card className="mb-6 md:hidden">
           <CardContent className="py-4">
