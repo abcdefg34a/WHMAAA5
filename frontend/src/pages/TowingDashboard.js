@@ -1160,7 +1160,10 @@ export const TowingDashboard = () => {
                     {selectedJob.status === 'in_yard' && (
                       <Button
                         data-testid="status-release-btn"
-                        onClick={() => setReleaseDialogOpen(true)}
+                        onClick={() => {
+                          setReleaseDialogOpen(true);
+                          fetchCalculatedCosts(selectedJob.id);
+                        }}
                         className="bg-green-500 hover:bg-green-600"
                       >
                         <CheckCircle className="h-4 w-4 mr-2" />
