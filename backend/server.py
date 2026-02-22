@@ -684,15 +684,16 @@ async def login(data: UserLogin, request: Request):
     # Check if authority or towing service is approved (employees don't need approval)
     if user["role"] in [UserRole.TOWING_SERVICE, UserRole.AUTHORITY]:
         # Skip approval check for employee accounts (they inherit from parent)
-        if user.get("is_main_authority") == False:
+        if user.get("is_main_authority") == False and user.get("parent_authority_id"):
             pass  # Employee accounts don't need separate approval
+        elif user["role"] == UserRole.AUTHORITY and not user.get("is_main_authority"):
+            pass  # Non-main authority employees
         else:
-            approval_status = user.get("approval_status", ApprovalStatus.APPROVED)  # Default approved for old accounts
-            if approval_status == ApprovalStatus.PENDING:
+            # Main accounts need approval
+            approval_status = user.get("approval_status")
+            if approval_status is None or approval_status == ApprovalStatus.PENDING:
                 raise HTTPException(status_code=403, detail="Ihr Konto wartet noch auf Freischaltung durch einen Administrator")
             elif approval_status == ApprovalStatus.REJECTED:
-                # Delete the rejected account so they can re-register
-                await db.users.delete_one({"id": user["id"]})
                 rejection_reason = user.get("rejection_reason", "")
                 raise HTTPException(status_code=403, detail=f"Ihre Registrierung wurde abgelehnt: {rejection_reason}. Sie können sich erneut registrieren.")
     
