@@ -403,6 +403,7 @@ export const PortalPage = () => {
                           onChange={(e) => setRegisterData({...registerData, password: e.target.value})}
                           placeholder="Min. 8 Zeichen"
                           required
+                          autoComplete="new-password"
                           className="pr-10"
                         />
                         <button
@@ -423,6 +424,7 @@ export const PortalPage = () => {
                         onChange={(e) => setRegisterData({...registerData, confirmPassword: e.target.value})}
                         placeholder="Passwort wiederholen"
                         required
+                        autoComplete="new-password"
                       />
                     </div>
                   </div>
