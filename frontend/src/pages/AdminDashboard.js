@@ -715,12 +715,8 @@ export const AdminDashboard = () => {
                     Suchen
                   </Button>
                 </div>
-                {/* Export Buttons */}
+                {/* Export Button */}
                 <div className="flex gap-2 mt-4 pt-4 border-t">
-                  <Button variant="outline" size="sm" onClick={handleExportCSV}>
-                    <Download className="h-4 w-4 mr-2" />
-                    CSV Export
-                  </Button>
                   <Button variant="outline" size="sm" onClick={handleExportExcel}>
                     <FileSpreadsheet className="h-4 w-4 mr-2" />
                     Excel Export
