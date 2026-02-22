@@ -14,7 +14,7 @@ const API_URL = process.env.REACT_APP_BACKEND_URL;
 
 export const PortalPage = () => {
   const navigate = useNavigate();
-  const { login } = useAuth();
+  const { login, logout } = useAuth();
   
   // Login state
   const [loginEmail, setLoginEmail] = useState('');
