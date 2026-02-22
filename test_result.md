@@ -237,6 +237,18 @@ backend:
         agent: "testing"
         comment: "✅ PASSED - All employee management endpoints working correctly. Employee creation, blocking/unblocking, password changes, and deletion all functional. Proper hierarchy and access controls in place."
 
+  - task: "Time-based cost calculation (halbe Stunde Preise)"
+    implemented: true
+    working: true
+    file: "/app/backend/server.py"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+      - working: true
+        agent: "testing"
+        comment: "✅ PASSED - Time-based cost calculation fully functional. TESTED: 1) Login as abschlepp@test.de/Abschlepp123 successful, 2) GET /api/auth/me shows time_based_enabled, first_half_hour, additional_half_hour fields, 3) PATCH /api/services/pricing-settings successfully activated time-based pricing (first_half_hour: 137.00€, additional_half_hour: 93.00€), 4) Created test job and updated to in_yard status with accepted_at and in_yard_at timestamps, 5) GET /api/jobs/{job_id}/calculate-costs correctly uses time-based pricing showing 'Erste halbe Stunde: 137.00€' in breakdown. Total cost calculation: 192.00€ (137€ first half hour + 25€ daily cost + 30€ processing fee). Time-based calculation working perfectly when job has both accepted_at and in_yard_at timestamps."
+
 frontend:
   - task: "Footer links for Legal Pages (Datenschutz, Impressum)"
     implemented: true
