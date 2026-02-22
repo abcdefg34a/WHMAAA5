@@ -974,7 +974,7 @@ export const TowingDashboard = () => {
               <DialogHeader>
                 <DialogTitle className="flex items-center gap-3">
                   <span className="job-license-plate text-2xl">{selectedJob.license_plate}</span>
-                  {getStatusBadge(selectedJob.status)}
+                  {getStatusBadge(selectedJob.status, selectedJob.is_empty_trip)}
                 </DialogTitle>
                 <DialogDescription>
                   {selectedJob.job_number} • {selectedJob.tow_reason}
