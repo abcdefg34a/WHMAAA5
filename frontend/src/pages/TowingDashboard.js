@@ -687,8 +687,23 @@ export const TowingDashboard = () => {
     return jobs;
   };
 
-  const downloadPDF = async (jobId) => {
-    window.open(`${API}/jobs/${jobId}/pdf`, '_blank');
+  const downloadPDF = async (jobId, jobNumber) => {
+    try {
+      const response = await axios.get(`${API}/jobs/${jobId}/pdf`, {
+        responseType: 'blob'
+      });
+      const url = window.URL.createObjectURL(new Blob([response.data]));
+      const link = document.createElement('a');
+      link.href = url;
+      link.setAttribute('download', `Abschleppprotokoll_${jobNumber || jobId}.pdf`);
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      window.URL.revokeObjectURL(url);
+    } catch (error) {
+      console.error('PDF download error:', error);
+      toast.error('PDF konnte nicht heruntergeladen werden');
+    }
   };
 
   return (
