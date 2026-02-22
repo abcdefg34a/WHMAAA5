@@ -1586,6 +1586,7 @@ async def get_jobs_count(
     search: Optional[str] = None,
     date_from: Optional[str] = None,
     date_to: Optional[str] = None,
+    service_id: Optional[str] = None,  # NEW: Filter by towing service
     user: dict = Depends(get_current_user)
 ):
     """Get total count of jobs for pagination"""
@@ -1602,6 +1603,10 @@ async def get_jobs_count(
     
     if status:
         query["status"] = status
+    
+    # NEW: Filter by towing service (for authorities)
+    if service_id and user["role"] == UserRole.AUTHORITY:
+        query["assigned_service_id"] = service_id
     
     if date_from or date_to:
         date_query = {}
