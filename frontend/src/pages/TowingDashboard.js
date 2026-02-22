@@ -327,7 +327,14 @@ export const TowingDashboard = () => {
     setJobDetailOpen(true);
   };
 
-  const getStatusBadge = (status) => {
+  const getStatusBadge = (status, isEmptyTrip = false) => {
+    if (isEmptyTrip) {
+      return (
+        <span className="px-2 py-1 rounded-full text-xs font-medium bg-orange-100 text-orange-800">
+          Leerfahrt
+        </span>
+      );
+    }
     const statusConfig = {
       pending: { label: 'Ausstehend', class: 'status-pending' },
       assigned: { label: 'Zugewiesen', class: 'status-assigned' },
