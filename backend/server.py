@@ -1531,6 +1531,7 @@ async def get_jobs(
     search: Optional[str] = None,
     date_from: Optional[str] = None,
     date_to: Optional[str] = None,
+    service_id: Optional[str] = None,  # NEW: Filter by towing service
     page: int = 1,
     limit: int = 50,
     user: dict = Depends(get_current_user)
@@ -1550,6 +1551,10 @@ async def get_jobs(
     # Filter by status
     if status:
         query["status"] = status
+    
+    # NEW: Filter by towing service (for authorities)
+    if service_id and user["role"] == UserRole.AUTHORITY:
+        query["assigned_service_id"] = service_id
     
     # Filter by date range
     if date_from or date_to:
