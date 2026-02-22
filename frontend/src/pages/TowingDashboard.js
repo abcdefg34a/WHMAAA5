@@ -785,52 +785,164 @@ export const TowingDashboard = () => {
 
       {/* Settings Dialog (Costs) */}
       <Dialog open={settingsDialogOpen} onOpenChange={setSettingsDialogOpen}>
-        <DialogContent>
+        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
               <Euro className="h-5 w-5" />
-              Preise anpassen
+              Preiseinstellungen
             </DialogTitle>
             <DialogDescription>
-              Legen Sie Ihre Anfahrtskosten und täglichen Standgebühren fest
+              Konfigurieren Sie Ihre Preise - nur ausgefüllte Felder werden berechnet
             </DialogDescription>
           </DialogHeader>
 
-          <div className="space-y-4 py-4">
-            <div className="space-y-2">
-              <Label htmlFor="towCost">Anfahrtskosten (€)</Label>
-              <Input
-                data-testid="settings-tow-cost-input"
-                id="towCost"
-                type="number"
-                step="0.01"
-                min="0"
-                value={towCost}
-                onChange={(e) => setTowCost(e.target.value)}
-                placeholder="150.00"
-              />
-              <p className="text-xs text-slate-500">Einmalige Kosten für den Abschleppvorgang</p>
+          <div className="space-y-6 py-4">
+            {/* Zeitbasierte Berechnung */}
+            <div className="space-y-4">
+              <div className="flex items-center justify-between">
+                <div>
+                  <h4 className="font-semibold">Zeitbasierte Berechnung</h4>
+                  <p className="text-xs text-slate-500">Für Sicherstellungen nach Berliner Gebührenordnung</p>
+                </div>
+                <label className="relative inline-flex items-center cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={timeBasedEnabled}
+                    onChange={(e) => setTimeBasedEnabled(e.target.checked)}
+                    className="sr-only peer"
+                  />
+                  <div className="w-11 h-6 bg-slate-200 peer-focus:outline-none peer-focus:ring-2 peer-focus:ring-blue-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600"></div>
+                </label>
+              </div>
+              
+              {timeBasedEnabled && (
+                <div className="grid grid-cols-2 gap-4 p-4 bg-blue-50 rounded-lg">
+                  <div className="space-y-2">
+                    <Label>Erste halbe Stunde (€)</Label>
+                    <Input
+                      type="number"
+                      step="0.01"
+                      min="0"
+                      value={firstHalfHour}
+                      onChange={(e) => setFirstHalfHour(e.target.value)}
+                      placeholder="137.00"
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label>Jede weitere halbe Stunde (€)</Label>
+                    <Input
+                      type="number"
+                      step="0.01"
+                      min="0"
+                      value={additionalHalfHour}
+                      onChange={(e) => setAdditionalHalfHour(e.target.value)}
+                      placeholder="93.00"
+                    />
+                  </div>
+                </div>
+              )}
             </div>
 
-            <div className="space-y-2">
-              <Label htmlFor="dailyCost">Standkosten pro Tag (€)</Label>
-              <Input
-                data-testid="settings-daily-cost-input"
-                id="dailyCost"
-                type="number"
-                step="0.01"
-                min="0"
-                value={dailyCost}
-                onChange={(e) => setDailyCost(e.target.value)}
-                placeholder="20.00"
-              />
-              <p className="text-xs text-slate-500">Tägliche Gebühr für die Verwahrung</p>
+            {/* Standard Preise */}
+            <div className="space-y-4">
+              <h4 className="font-semibold">Standard Preise</h4>
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label>Anfahrt/Abschleppen (€)</Label>
+                  <Input
+                    type="number"
+                    step="0.01"
+                    min="0"
+                    value={towCost}
+                    onChange={(e) => setTowCost(e.target.value)}
+                    placeholder="150.00"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label>Standkosten pro Tag (€)</Label>
+                  <Input
+                    type="number"
+                    step="0.01"
+                    min="0"
+                    value={dailyCost}
+                    onChange={(e) => setDailyCost(e.target.value)}
+                    placeholder="20.00"
+                  />
+                </div>
+              </div>
             </div>
 
+            {/* Zusatzkosten */}
+            <div className="space-y-4">
+              <h4 className="font-semibold">Zusatzkosten (optional)</h4>
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label>Bearbeitungsgebühr (€)</Label>
+                  <Input
+                    type="number"
+                    step="0.01"
+                    min="0"
+                    value={processingFee}
+                    onChange={(e) => setProcessingFee(e.target.value)}
+                    placeholder="63.00"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label>Leerfahrt (€)</Label>
+                  <Input
+                    type="number"
+                    step="0.01"
+                    min="0"
+                    value={emptyTripFee}
+                    onChange={(e) => setEmptyTripFee(e.target.value)}
+                    placeholder="31.50"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label>Nachtzuschlag (€)</Label>
+                  <Input
+                    type="number"
+                    step="0.01"
+                    min="0"
+                    value={nightSurcharge}
+                    onChange={(e) => setNightSurcharge(e.target.value)}
+                    placeholder="0.00"
+                  />
+                  <p className="text-xs text-slate-500">22:00 - 06:00 Uhr</p>
+                </div>
+                <div className="space-y-2">
+                  <Label>Wochenendzuschlag (€)</Label>
+                  <Input
+                    type="number"
+                    step="0.01"
+                    min="0"
+                    value={weekendSurcharge}
+                    onChange={(e) => setWeekendSurcharge(e.target.value)}
+                    placeholder="0.00"
+                  />
+                  <p className="text-xs text-slate-500">Samstag & Sonntag</p>
+                </div>
+                <div className="space-y-2 col-span-2">
+                  <Label>Schwerlastzuschlag ab 3,5t (€)</Label>
+                  <Input
+                    type="number"
+                    step="0.01"
+                    min="0"
+                    value={heavyVehicleSurcharge}
+                    onChange={(e) => setHeavyVehicleSurcharge(e.target.value)}
+                    placeholder="0.00"
+                  />
+                </div>
+              </div>
+            </div>
+
+            {/* Beispielrechnung */}
             <div className="bg-slate-50 rounded-lg p-4">
-              <p className="text-sm font-medium text-slate-700">Beispielrechnung</p>
+              <p className="text-sm font-medium text-slate-700">Beispielrechnung (Standard)</p>
               <p className="text-sm text-slate-600 mt-1">
-                Fahrzeug 3 Tage im Hof: {parseFloat(towCost || 0).toFixed(2)} € + (3 × {parseFloat(dailyCost || 0).toFixed(2)} €) = <span className="font-bold">{(parseFloat(towCost || 0) + 3 * parseFloat(dailyCost || 0)).toFixed(2)} €</span>
+                Fahrzeug 3 Tage im Hof: {parseFloat(towCost || 0).toFixed(2)} € + (3 × {parseFloat(dailyCost || 0).toFixed(2)} €) 
+                {processingFee ? ` + ${parseFloat(processingFee).toFixed(2)} € Bearbeitung` : ''} 
+                = <span className="font-bold">{(parseFloat(towCost || 0) + 3 * parseFloat(dailyCost || 0) + parseFloat(processingFee || 0)).toFixed(2)} €</span>
               </p>
             </div>
 
