@@ -201,48 +201,31 @@ class NewFeaturesAPITester:
             print("❌ No towing service token available")
             return False
         
-        # Step 1: Get a job assigned to this towing service
+        # Step 1: Create a test job assigned to this towing service
+        print("   Creating a test job assigned to towing service...")
+        
+        job_data = {
+            "license_plate": "EDIT-TEST123",
+            "vin": "WVWZZZ3CZWE333333",
+            "tow_reason": "Test job for editing",
+            "location_address": "Edit Straße 1, 12345 Berlin",
+            "location_lat": 52.520008,
+            "location_lng": 13.404954,
+            "notes": "Job for edit test",
+            "assigned_service_id": self.towing_service_id
+        }
+        
         success, response = self.run_test(
-            "Get Assigned Jobs", "GET", "jobs", 200, token=self.towing_token
+            "Create Job for Edit Test", "POST", "jobs", 200,
+            job_data, self.authority_token
         )
         
-        if not success or not response:
-            print("❌ Failed to get jobs")
+        if not success:
+            print("❌ Failed to create test job")
             return False
         
-        # Find a job that's not in "released" status
-        editable_job = None
-        for job in response:
-            if job.get('status') != 'released':
-                editable_job = job
-                break
-        
-        if not editable_job:
-            print("❌ No editable jobs found - creating a test job")
-            
-            # Create a test job first (need authority to create, then assign to towing service)
-            job_data = {
-                "license_plate": "EDIT-TEST123",
-                "vin": "WVWZZZ3CZWE333333",
-                "tow_reason": "Test job for editing",
-                "location_address": "Edit Straße 1, 12345 Berlin",
-                "location_lat": 52.520008,
-                "location_lng": 13.404954,
-                "notes": "Job for edit test",
-                "assigned_service_id": self.towing_service_id
-            }
-            
-            success, response = self.run_test(
-                "Create Job for Edit Test", "POST", "jobs", 200,
-                job_data, self.authority_token
-            )
-            
-            if success:
-                editable_job = response
-                print(f"   ✅ Created test job with ID: {editable_job.get('id')}")
-            else:
-                print("❌ Failed to create test job")
-                return False
+        editable_job = response
+        print(f"   ✅ Created test job with ID: {editable_job.get('id')}")
         
         job_id = editable_job.get('id')
         original_license_plate = editable_job.get('license_plate')
