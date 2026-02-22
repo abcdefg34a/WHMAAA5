@@ -382,6 +382,82 @@ export const TowingDashboard = () => {
     }
   };
 
+  // NEW: Open Empty Trip Dialog
+  const openEmptyTripDialog = () => {
+    setEmptyTripReason('vehicle_gone');
+    setEmptyTripDriverFirstName('');
+    setEmptyTripDriverLastName('');
+    setEmptyTripDriverAddress('');
+    setEmptyTripPaymentMethod('cash');
+    // Set default price from settings
+    setEmptyTripPaymentAmount(user?.empty_trip_fee ? user.empty_trip_fee.toString() : '');
+    setEmptyTripDialogOpen(true);
+  };
+
+  // NEW: Handle Empty Trip submission with PDF
+  const handleEmptyTripSubmit = async () => {
+    if (emptyTripReason === 'driver_present') {
+      if (!emptyTripDriverFirstName || !emptyTripDriverLastName) {
+        toast.error('Bitte geben Sie den Namen des Fahrers ein');
+        return;
+      }
+    }
+    if (!emptyTripPaymentAmount) {
+      toast.error('Bitte geben Sie den Betrag ein');
+      return;
+    }
+
+    setSubmittingEmptyTrip(true);
+    try {
+      // Build service notes based on reason
+      let serviceNotes = '';
+      if (emptyTripReason === 'vehicle_gone') {
+        serviceNotes = 'Leerfahrt - Fahrzeug war nicht mehr vor Ort';
+      } else {
+        serviceNotes = `Leerfahrt - Fahrer vor Ort angetroffen: ${emptyTripDriverFirstName} ${emptyTripDriverLastName}`;
+        if (emptyTripDriverAddress) {
+          serviceNotes += `, Adresse: ${emptyTripDriverAddress}`;
+        }
+      }
+
+      // Update job with empty trip data
+      await axios.patch(`${API}/jobs/${selectedJob.id}`, { 
+        status: 'released',
+        is_empty_trip: true,
+        service_notes: serviceNotes,
+        owner_first_name: emptyTripReason === 'driver_present' ? emptyTripDriverFirstName : null,
+        owner_last_name: emptyTripReason === 'driver_present' ? emptyTripDriverLastName : null,
+        owner_address: emptyTripReason === 'driver_present' ? emptyTripDriverAddress : null,
+        payment_method: emptyTripPaymentMethod,
+        payment_amount: parseFloat(emptyTripPaymentAmount)
+      });
+
+      toast.success('Leerfahrt erfasst!');
+      
+      // Generate and download PDF
+      const pdfResponse = await axios.get(`${API}/jobs/${selectedJob.id}/pdf`, {
+        responseType: 'blob'
+      });
+      const url = window.URL.createObjectURL(new Blob([pdfResponse.data]));
+      const link = document.createElement('a');
+      link.href = url;
+      link.setAttribute('download', `Leerfahrt_${selectedJob.job_number}.pdf`);
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      window.URL.revokeObjectURL(url);
+
+      setEmptyTripDialogOpen(false);
+      setJobDetailOpen(false);
+      fetchJobs();
+    } catch (error) {
+      console.error('Error processing empty trip:', error);
+      toast.error('Fehler beim Erfassen der Leerfahrt');
+    } finally {
+      setSubmittingEmptyTrip(false);
+    }
+  };
+
   const copyServiceCode = async () => {
     if (user?.service_code) {
       try {
