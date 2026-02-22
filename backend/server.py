@@ -352,6 +352,8 @@ class VehicleSearchResult(BaseModel):
     towed_at: Optional[str] = None
     in_yard_at: Optional[str] = None
     yard_address: Optional[str] = None
+    yard_lat: Optional[float] = None  # NEW: Yard coordinates for map
+    yard_lng: Optional[float] = None  # NEW: Yard coordinates for map
     company_name: Optional[str] = None
     phone: Optional[str] = None
     email: Optional[str] = None
@@ -361,7 +363,7 @@ class VehicleSearchResult(BaseModel):
     daily_cost: Optional[float] = None
     days_in_yard: Optional[int] = None
     total_cost: Optional[float] = None
-    # Location coordinates for map
+    # Location coordinates for map - REMOVED, using yard coordinates instead
     location_lat: Optional[float] = None
     location_lng: Optional[float] = None
     # NEW: Additional info for towed status
