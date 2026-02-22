@@ -102,6 +102,7 @@ export const TowingDashboard = () => {
   const [linkedAuthorities, setLinkedAuthorities] = useState([]);
   const [loadingAuthorities, setLoadingAuthorities] = useState(false);
   const [creatingJob, setCreatingJob] = useState(false);
+  const [newJobPosition, setNewJobPosition] = useState(null); // Map position
   const [newJobData, setNewJobData] = useState({
     for_authority_id: '',
     license_plate: '',
@@ -114,7 +115,7 @@ export const TowingDashboard = () => {
     job_type: 'towing',
     // Sicherstellung fields
     sicherstellung_reason: '',
-    vehicle_category: '',
+    vehicle_category: 'under_3_5t',
     ordering_authority: '',
     contact_attempts: false,
     contact_attempts_notes: '',
