@@ -1756,6 +1756,12 @@ class TowingManagementAPITester:
         print(f"📡 Testing against: {self.base_url}")
         
         try:
+            # Test AWS SES Email Integration (as requested in review)
+            print("\n" + "="*80)
+            print("📧 TESTING AWS SES EMAIL INTEGRATION")
+            print("="*80)
+            self.test_aws_ses_email_integration()
+            
             # First run the comprehensive backend review as requested
             print("\n" + "="*80)
             print("🎯 STARTING COMPREHENSIVE BACKEND REVIEW")
