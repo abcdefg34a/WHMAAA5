@@ -1701,6 +1701,186 @@ class TowingManagementAPITester:
         
         return True
 
+    def test_edit_location_and_delete_job_workflow(self):
+        """Test the specific workflow from review request: Edit Location & Delete Job"""
+        print("\n🎯 Testing Edit Location & Delete Job Workflow (Review Request)...")
+        print("   Database is MongoDB Atlas (Cloud) and is EMPTY - creating test data...")
+        
+        # Step 1: Login as Admin with provided credentials
+        print("\n   Step 1: Login as Admin...")
+        login_data = {"email": "admin@test.de", "password": "Admin123!"}
+        success, response = self.run_test(
+            "Admin Login (admin@test.de / Admin123!)", "POST", "auth/login", 200, login_data
+        )
+        
+        if not success or 'access_token' not in response:
+            print("❌ Failed to login as admin - cannot continue workflow test")
+            return False
+        
+        admin_token = response['access_token']
+        print(f"   ✅ Admin login successful, token: {admin_token[:20]}...")
+        
+        # Step 2: Register a test Authority
+        print("\n   Step 2: Register a test Authority...")
+        authority_data = {
+            "name": "Test Behörde",
+            "email": "test-behoerde@test.de",
+            "password": "TestPass123!",
+            "role": "authority",
+            "authority_name": "Ordnungsamt Test"
+        }
+        
+        success, response = self.run_test(
+            "Register Test Authority", "POST", "auth/register", 202, authority_data
+        )
+        
+        if not success:
+            print("❌ Failed to register test authority")
+            return False
+        
+        print("   ✅ Authority registration successful (202 - pending approval)")
+        
+        # Get the authority ID from pending authorities
+        success, response = self.run_test(
+            "Get Pending Authorities", "GET", "admin/pending-authorities", 200, token=admin_token
+        )
+        
+        authority_id = None
+        if success and response:
+            for auth in response:
+                if auth.get('email') == 'test-behoerde@test.de':
+                    authority_id = auth.get('id')
+                    break
+        
+        if not authority_id:
+            print("❌ Could not find registered authority in pending list")
+            return False
+        
+        print(f"   ✅ Found authority ID: {authority_id}")
+        
+        # Step 3: Approve the Authority as Admin
+        print("\n   Step 3: Approve the Authority as Admin...")
+        approval_data = {"approved": True}
+        success, response = self.run_test(
+            "Approve Authority", "POST", f"admin/approve-authority/{authority_id}", 200,
+            approval_data, admin_token
+        )
+        
+        if not success:
+            print("❌ Failed to approve authority")
+            return False
+        
+        print("   ✅ Authority approved successfully")
+        
+        # Step 4: Login as the new Authority
+        print("\n   Step 4: Login as the new Authority...")
+        authority_login = {"email": "test-behoerde@test.de", "password": "TestPass123!"}
+        success, response = self.run_test(
+            "Authority Login", "POST", "auth/login", 200, authority_login
+        )
+        
+        if not success or 'access_token' not in response:
+            print("❌ Failed to login as approved authority")
+            return False
+        
+        authority_token = response['access_token']
+        print(f"   ✅ Authority login successful, token: {authority_token[:20]}...")
+        
+        # Step 5: Create a test Job
+        print("\n   Step 5: Create a test Job...")
+        job_data = {
+            "license_plate": "B-TEST 123",
+            "tow_reason": "Parken im Parkverbot",
+            "location_address": "Alte Adresse",
+            "location_lat": 52.52,
+            "location_lng": 13.405
+        }
+        
+        success, response = self.run_test(
+            "Create Test Job", "POST", "jobs", 200, job_data, authority_token
+        )
+        
+        if not success or 'id' not in response:
+            print("❌ Failed to create test job")
+            return False
+        
+        job_id = response['id']
+        original_job = response
+        print(f"   ✅ Job created successfully, ID: {job_id}")
+        print(f"   Original location: {original_job.get('location_address')}")
+        print(f"   Original coordinates: {original_job.get('location_lat')}, {original_job.get('location_lng')}")
+        
+        # Step 6: Test Edit Job with Location Change
+        print("\n   Step 6: Test Edit Job with Location Change...")
+        edit_data = {
+            "license_plate": "B-EDIT 456",
+            "location_address": "Neue Adresse, Berlin",
+            "location_lat": 52.53,
+            "location_lng": 13.41
+        }
+        
+        success, response = self.run_test(
+            "Edit Job Data (Location Change)", "PATCH", f"jobs/{job_id}/edit-data", 200,
+            edit_data, authority_token
+        )
+        
+        if not success:
+            print("❌ Failed to edit job data")
+            return False
+        
+        print("   ✅ Job edit successful")
+        
+        # Verify the location was updated
+        success, response = self.run_test(
+            "Verify Job Update", "GET", f"jobs/{job_id}", 200, token=authority_token
+        )
+        
+        if success and response:
+            updated_license = response.get('license_plate')
+            updated_address = response.get('location_address')
+            updated_lat = response.get('location_lat')
+            updated_lng = response.get('location_lng')
+            
+            print(f"   Updated license plate: {updated_license}")
+            print(f"   Updated location: {updated_address}")
+            print(f"   Updated coordinates: {updated_lat}, {updated_lng}")
+            
+            # Verify changes
+            if (updated_license == "B-EDIT 456" and 
+                updated_address == "Neue Adresse, Berlin" and
+                updated_lat == 52.53 and 
+                updated_lng == 13.41):
+                print("   ✅ Location update verified successfully")
+            else:
+                print("   ❌ Location update verification failed")
+                return False
+        
+        # Step 7: Test Delete Job
+        print("\n   Step 7: Test Delete Job...")
+        success, response = self.run_test(
+            "Delete Job", "DELETE", f"jobs/{job_id}", 200, token=authority_token
+        )
+        
+        if not success:
+            print("❌ Failed to delete job")
+            return False
+        
+        print("   ✅ Job deletion successful")
+        
+        # Verify job was deleted
+        success, response = self.run_test(
+            "Verify Job Deletion", "GET", f"jobs/{job_id}", 404, token=authority_token
+        )
+        
+        if success:  # 404 is expected for deleted job
+            print("   ✅ Job deletion verified - job no longer exists")
+        else:
+            print("   ❌ Job deletion verification failed - job still exists")
+            return False
+        
+        print("\n🎉 Edit Location & Delete Job Workflow completed successfully!")
+        return True
+
     def test_comprehensive_backend_review(self):
         """Run all tests specified in the review request"""
         print("\n" + "="*80)
@@ -1708,6 +1888,10 @@ class TowingManagementAPITester:
         print("="*80)
         
         all_tests_passed = True
+        
+        # PRIORITY TEST: Edit Location & Delete Job Workflow
+        if not self.test_edit_location_and_delete_job_workflow():
+            all_tests_passed = False
         
         # NEW: Time-based cost calculation test (as requested in review)
         if not self.test_time_based_cost_calculation():
