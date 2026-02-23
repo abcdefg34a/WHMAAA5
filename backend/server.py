@@ -131,6 +131,319 @@ def setup_logging():
 
 logger, audit_logger = setup_logging()
 
+# ==================== EMAIL SERVICE (AWS SES) ====================
+
+class EmailService:
+    """Service for sending emails via AWS SES"""
+    
+    def __init__(self):
+        """Initialize SES client"""
+        if AWS_ACCESS_KEY_ID and AWS_SECRET_ACCESS_KEY:
+            self.ses_client = boto3.client(
+                'ses',
+                region_name=AWS_SES_REGION,
+                aws_access_key_id=AWS_ACCESS_KEY_ID,
+                aws_secret_access_key=AWS_SECRET_ACCESS_KEY
+            )
+            self.enabled = True
+            logger.info("AWS SES Email Service initialized")
+        else:
+            self.ses_client = None
+            self.enabled = False
+            logger.warning("AWS SES not configured - emails will be logged only")
+        
+        self.sender_email = AWS_SES_VERIFIED_EMAIL
+        self.frontend_url = FRONTEND_URL
+    
+    def send_email(self, to_email: str, subject: str, html_content: str, text_content: str = None) -> Optional[str]:
+        """Send email via AWS SES"""
+        if not self.enabled:
+            logger.info(f"[EMAIL MOCK] To: {to_email}, Subject: {subject}")
+            print(f"\n{'='*60}")
+            print(f"📧 EMAIL (SES nicht konfiguriert - nur Log)")
+            print(f"An: {to_email}")
+            print(f"Betreff: {subject}")
+            print(f"{'='*60}\n")
+            return None
+        
+        try:
+            body = {
+                'Html': {'Data': html_content, 'Charset': 'UTF-8'}
+            }
+            if text_content:
+                body['Text'] = {'Data': text_content, 'Charset': 'UTF-8'}
+            
+            response = self.ses_client.send_email(
+                Source=self.sender_email,
+                Destination={'ToAddresses': [to_email]},
+                Message={
+                    'Subject': {'Data': subject, 'Charset': 'UTF-8'},
+                    'Body': body
+                }
+            )
+            
+            message_id = response['MessageId']
+            logger.info(f"Email sent successfully to {to_email}, MessageId: {message_id}")
+            return message_id
+            
+        except ClientError as e:
+            error_code = e.response['Error']['Code']
+            error_message = e.response['Error']['Message']
+            logger.error(f"Failed to send email to {to_email}: {error_code} - {error_message}")
+            
+            if error_code == 'MessageRejected':
+                raise Exception(f"E-Mail wurde abgelehnt: {error_message}")
+            elif error_code == 'MailFromDomainNotVerified':
+                raise Exception("Absender-E-Mail nicht verifiziert")
+            else:
+                raise Exception(f"E-Mail-Versand fehlgeschlagen: {error_message}")
+    
+    def send_password_reset_email(self, to_email: str, reset_token: str, user_name: str) -> Optional[str]:
+        """Send password reset email"""
+        reset_link = f"{self.frontend_url}/reset-password?token={reset_token}"
+        
+        subject = "Passwort zurücksetzen - AbschleppPortal"
+        
+        html_content = f"""
+        <!DOCTYPE html>
+        <html>
+        <head>
+            <meta charset="UTF-8">
+            <meta name="viewport" content="width=device-width, initial-scale=1.0">
+            <style>
+                body {{ font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; line-height: 1.6; color: #333; max-width: 600px; margin: 0 auto; padding: 20px; }}
+                .container {{ background-color: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px; padding: 40px 30px; }}
+                .header {{ text-align: center; margin-bottom: 30px; }}
+                .header h1 {{ color: #1e293b; margin: 0; font-size: 24px; }}
+                .logo {{ font-size: 32px; margin-bottom: 10px; }}
+                .content {{ margin: 20px 0; }}
+                .button {{ display: inline-block; padding: 14px 32px; background-color: #f97316; color: white; text-decoration: none; border-radius: 6px; font-weight: 600; margin: 20px 0; }}
+                .button:hover {{ background-color: #ea580c; }}
+                .link-box {{ background-color: #f1f5f9; padding: 12px; border-radius: 4px; word-break: break-all; font-size: 13px; margin: 15px 0; }}
+                .warning {{ background-color: #fef3c7; border: 1px solid #fcd34d; border-radius: 6px; padding: 12px; margin: 20px 0; font-size: 14px; }}
+                .footer {{ font-size: 12px; color: #64748b; margin-top: 40px; border-top: 1px solid #e2e8f0; padding-top: 20px; text-align: center; }}
+            </style>
+        </head>
+        <body>
+            <div class="container">
+                <div class="header">
+                    <div class="logo">🚗</div>
+                    <h1>Passwort zurücksetzen</h1>
+                </div>
+                
+                <div class="content">
+                    <p>Hallo {user_name},</p>
+                    
+                    <p>Sie haben eine Anfrage zum Zurücksetzen Ihres Passworts gestellt. Klicken Sie auf den Button unten, um ein neues Passwort zu erstellen:</p>
+                    
+                    <center>
+                        <a href="{reset_link}" class="button">Passwort zurücksetzen</a>
+                    </center>
+                    
+                    <p>Oder kopieren Sie diesen Link in Ihren Browser:</p>
+                    <div class="link-box">{reset_link}</div>
+                    
+                    <div class="warning">
+                        <strong>⚠️ Hinweis:</strong> Dieser Link ist 1 Stunde gültig. Falls Sie diese Anfrage nicht gestellt haben, ignorieren Sie diese E-Mail.
+                    </div>
+                </div>
+                
+                <div class="footer">
+                    <p>Diese E-Mail wurde automatisch gesendet. Bitte antworten Sie nicht direkt darauf.</p>
+                    <p>© {datetime.now().year} AbschleppPortal - werhatmeinautoabgeschleppt.de</p>
+                </div>
+            </div>
+        </body>
+        </html>
+        """
+        
+        text_content = f"""
+Passwort zurücksetzen - AbschleppPortal
+
+Hallo {user_name},
+
+Sie haben eine Anfrage zum Zurücksetzen Ihres Passworts gestellt.
+
+Klicken Sie auf diesen Link, um ein neues Passwort zu erstellen:
+{reset_link}
+
+Dieser Link ist 1 Stunde gültig. Falls Sie diese Anfrage nicht gestellt haben, ignorieren Sie diese E-Mail.
+
+Mit freundlichen Grüßen,
+Ihr AbschleppPortal Team
+        """
+        
+        return self.send_email(to_email, subject, html_content, text_content)
+    
+    def send_registration_confirmation(self, to_email: str, user_name: str, role: str) -> Optional[str]:
+        """Send registration confirmation email"""
+        role_name = "Behörde" if role == "authority" else "Abschleppdienst"
+        
+        subject = f"Registrierung bestätigt - AbschleppPortal"
+        
+        html_content = f"""
+        <!DOCTYPE html>
+        <html>
+        <head>
+            <meta charset="UTF-8">
+            <style>
+                body {{ font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; line-height: 1.6; color: #333; max-width: 600px; margin: 0 auto; padding: 20px; }}
+                .container {{ background-color: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px; padding: 40px 30px; }}
+                .header {{ text-align: center; margin-bottom: 30px; }}
+                .header h1 {{ color: #16a34a; margin: 0; font-size: 24px; }}
+                .success-icon {{ font-size: 48px; margin-bottom: 15px; }}
+                .content {{ margin: 20px 0; }}
+                .info-box {{ background-color: #dbeafe; border: 1px solid #3b82f6; border-radius: 6px; padding: 15px; margin: 20px 0; }}
+                .footer {{ font-size: 12px; color: #64748b; margin-top: 40px; border-top: 1px solid #e2e8f0; padding-top: 20px; text-align: center; }}
+            </style>
+        </head>
+        <body>
+            <div class="container">
+                <div class="header">
+                    <div class="success-icon">✅</div>
+                    <h1>Willkommen bei AbschleppPortal!</h1>
+                </div>
+                
+                <div class="content">
+                    <p>Hallo {user_name},</p>
+                    
+                    <p>Vielen Dank für Ihre Registrierung als <strong>{role_name}</strong>!</p>
+                    
+                    <div class="info-box">
+                        <strong>ℹ️ Nächste Schritte:</strong><br>
+                        Ihre Registrierung muss von einem Administrator freigegeben werden, bevor Sie das Portal nutzen können. Sie erhalten eine weitere E-Mail, sobald Ihr Konto aktiviert wurde.
+                    </div>
+                    
+                    <p>Bei Fragen stehen wir Ihnen gerne zur Verfügung.</p>
+                </div>
+                
+                <div class="footer">
+                    <p>© {datetime.now().year} AbschleppPortal - werhatmeinautoabgeschleppt.de</p>
+                </div>
+            </div>
+        </body>
+        </html>
+        """
+        
+        return self.send_email(to_email, subject, html_content)
+    
+    def send_account_approved_email(self, to_email: str, user_name: str, role: str) -> Optional[str]:
+        """Send account approval notification"""
+        role_name = "Behörde" if role == "authority" else "Abschleppdienst"
+        login_url = f"{self.frontend_url}/portal"
+        
+        subject = "Ihr Konto wurde freigeschaltet - AbschleppPortal"
+        
+        html_content = f"""
+        <!DOCTYPE html>
+        <html>
+        <head>
+            <meta charset="UTF-8">
+            <style>
+                body {{ font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; line-height: 1.6; color: #333; max-width: 600px; margin: 0 auto; padding: 20px; }}
+                .container {{ background-color: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px; padding: 40px 30px; }}
+                .header {{ text-align: center; margin-bottom: 30px; }}
+                .header h1 {{ color: #16a34a; margin: 0; font-size: 24px; }}
+                .success-icon {{ font-size: 48px; margin-bottom: 15px; }}
+                .button {{ display: inline-block; padding: 14px 32px; background-color: #16a34a; color: white; text-decoration: none; border-radius: 6px; font-weight: 600; margin: 20px 0; }}
+                .footer {{ font-size: 12px; color: #64748b; margin-top: 40px; border-top: 1px solid #e2e8f0; padding-top: 20px; text-align: center; }}
+            </style>
+        </head>
+        <body>
+            <div class="container">
+                <div class="header">
+                    <div class="success-icon">🎉</div>
+                    <h1>Konto freigeschaltet!</h1>
+                </div>
+                
+                <div class="content">
+                    <p>Hallo {user_name},</p>
+                    
+                    <p>Gute Nachrichten! Ihr Konto als <strong>{role_name}</strong> wurde von einem Administrator freigegeben.</p>
+                    
+                    <p>Sie können sich jetzt anmelden und das Portal nutzen:</p>
+                    
+                    <center>
+                        <a href="{login_url}" class="button">Zum Portal anmelden</a>
+                    </center>
+                </div>
+                
+                <div class="footer">
+                    <p>© {datetime.now().year} AbschleppPortal - werhatmeinautoabgeschleppt.de</p>
+                </div>
+            </div>
+        </body>
+        </html>
+        """
+        
+        return self.send_email(to_email, subject, html_content)
+    
+    def send_job_notification(self, to_email: str, job_number: str, license_plate: str, status: str, service_name: str = None) -> Optional[str]:
+        """Send job status notification"""
+        status_labels = {
+            'assigned': 'Zugewiesen',
+            'on_site': 'Abschleppdienst vor Ort',
+            'towed': 'Fahrzeug abgeschleppt',
+            'in_yard': 'Fahrzeug im Hof',
+            'released': 'Fahrzeug abgeholt'
+        }
+        status_label = status_labels.get(status, status)
+        
+        subject = f"Auftrag {job_number} - {status_label}"
+        
+        html_content = f"""
+        <!DOCTYPE html>
+        <html>
+        <head>
+            <meta charset="UTF-8">
+            <style>
+                body {{ font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; line-height: 1.6; color: #333; max-width: 600px; margin: 0 auto; padding: 20px; }}
+                .container {{ background-color: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px; padding: 40px 30px; }}
+                .header {{ text-align: center; margin-bottom: 30px; }}
+                .header h1 {{ color: #1e293b; margin: 0; font-size: 24px; }}
+                .status-badge {{ display: inline-block; padding: 8px 16px; background-color: #f97316; color: white; border-radius: 20px; font-weight: 600; }}
+                .details {{ background-color: #f1f5f9; border-radius: 6px; padding: 15px; margin: 20px 0; }}
+                .detail-row {{ display: flex; justify-content: space-between; padding: 8px 0; border-bottom: 1px solid #e2e8f0; }}
+                .footer {{ font-size: 12px; color: #64748b; margin-top: 40px; border-top: 1px solid #e2e8f0; padding-top: 20px; text-align: center; }}
+            </style>
+        </head>
+        <body>
+            <div class="container">
+                <div class="header">
+                    <h1>🚗 Auftrags-Update</h1>
+                </div>
+                
+                <div class="content">
+                    <center>
+                        <span class="status-badge">{status_label}</span>
+                    </center>
+                    
+                    <div class="details">
+                        <div class="detail-row">
+                            <strong>Auftragsnummer:</strong>
+                            <span>{job_number}</span>
+                        </div>
+                        <div class="detail-row">
+                            <strong>Kennzeichen:</strong>
+                            <span>{license_plate}</span>
+                        </div>
+                        {f'<div class="detail-row"><strong>Abschleppdienst:</strong><span>{service_name}</span></div>' if service_name else ''}
+                    </div>
+                </div>
+                
+                <div class="footer">
+                    <p>© {datetime.now().year} AbschleppPortal - werhatmeinautoabgeschleppt.de</p>
+                </div>
+            </div>
+        </body>
+        </html>
+        """
+        
+        return self.send_email(to_email, subject, html_content)
+
+# Initialize email service
+email_service = EmailService()
+
 # ==================== MODELS ====================
 
 class UserRole:
