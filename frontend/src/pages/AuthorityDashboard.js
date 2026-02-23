@@ -95,6 +95,22 @@ export const AuthorityDashboard = () => {
   const [contactAttemptsNotes, setContactAttemptsNotes] = useState('');
   const [estimatedVehicleValue, setEstimatedVehicleValue] = useState('');
 
+  // NEW: Edit/Delete Job state
+  const [editJobDialogOpen, setEditJobDialogOpen] = useState(false);
+  const [editingJobData, setEditingJobData] = useState(false);
+  const [selectedJobForEdit, setSelectedJobForEdit] = useState(null);
+  const [editJobData, setEditJobData] = useState({
+    license_plate: '',
+    vin: '',
+    tow_reason: '',
+    notes: '',
+    location_address: '',
+    location_lat: null,
+    location_lng: null
+  });
+  const [editJobPosition, setEditJobPosition] = useState(null);
+  const [deletingJob, setDeletingJob] = useState(null);
+
   useEffect(() => {
     fetchJobs();
     fetchLinkedServices();
