@@ -710,15 +710,19 @@ export const TowingDashboard = () => {
     setPaymentAmount('');
   };
 
-  const handlePhotoUpload = (e) => {
+  const handlePhotoUpload = async (e) => {
     const files = Array.from(e.target.files);
-    files.forEach(file => {
-      const reader = new FileReader();
-      reader.onload = (e) => {
-        setServicePhotos(prev => [...prev, e.target.result]);
-      };
-      reader.readAsDataURL(file);
-    });
+    toast.info('Fotos werden komprimiert...');
+    
+    for (const file of files) {
+      try {
+        const compressedImage = await compressImage(file, 1200, 0.7);
+        setServicePhotos(prev => [...prev, compressedImage]);
+      } catch (error) {
+        console.error('Compression error:', error);
+      }
+    }
+    toast.success('Fotos komprimiert');
   };
 
   // Photo Lightbox functions
