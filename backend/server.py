@@ -1702,6 +1702,18 @@ async def approve_service(service_id: str, data: ApproveServiceRequest, user: di
             "service_id": service_id,
             "company_name": service["company_name"]
         })
+        
+        # Send approval email
+        try:
+            email_service.send_account_approved_email(
+                to_email=service["email"],
+                user_name=service.get("name", service["company_name"]),
+                role=UserRole.TOWING_SERVICE
+            )
+            logger.info(f"Approval email sent to {service['email']}")
+        except Exception as e:
+            logger.error(f"Failed to send approval email: {e}")
+        
         return {"message": f"{service['company_name']} wurde freigeschaltet"}
     else:
         await db.users.update_one(
