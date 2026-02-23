@@ -27,6 +27,11 @@ class ComprehensiveAPITester:
             "password": "TestPass123!"
         }
         
+        self.towing_creds = {
+            "email": "abschlepp@test.de",
+            "password": "Abschlepp123"
+        }
+        
         # Test data for job creation
         self.test_job_data = {
             "license_plate": "B-TEST999",
