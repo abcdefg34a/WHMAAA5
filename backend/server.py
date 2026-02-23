@@ -2925,8 +2925,8 @@ async def generate_pdf(job_id: str):
     if job.get('owner_first_name'):
         story.append(Paragraph("Halterdaten", heading_style))
         owner_data = [
-            [Paragraph("<b>Name</b>", cell_style), Paragraph(f"{job.get('owner_first_name', '')} {job.get('owner_last_name', '')}", cell_style)],
-            [Paragraph("<b>Adresse</b>", cell_style), Paragraph(wrap_text(job.get('owner_address', '-'), 55), cell_style)],
+            [Paragraph("<b>Name</b>", cell_style), Paragraph(f"{job.get('owner_first_name') or ''} {job.get('owner_last_name') or ''}", cell_style)],
+            [Paragraph("<b>Adresse</b>", cell_style), Paragraph(wrap_text(job.get('owner_address') or '-', 55), cell_style)],
         ]
         owner_table = Table(owner_data, colWidths=[4.5*cm, 12.5*cm])
         owner_table.setStyle(TableStyle([
