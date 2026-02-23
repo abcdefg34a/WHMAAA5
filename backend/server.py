@@ -985,6 +985,17 @@ async def register(data: UserRegister, request: Request):
         "approval_required": data.role in [UserRole.TOWING_SERVICE, UserRole.AUTHORITY]
     })
     
+    # Send registration confirmation email
+    try:
+        email_service.send_registration_confirmation(
+            to_email=data.email,
+            user_name=data.name,
+            role=data.role
+        )
+        logger.info(f"Registration confirmation email sent to {data.email}")
+    except Exception as e:
+        logger.error(f"Failed to send registration email: {e}")
+    
     # For towing services and authorities: Don't return token, they need approval first
     if data.role in [UserRole.TOWING_SERVICE, UserRole.AUTHORITY]:
         raise HTTPException(
