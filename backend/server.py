@@ -2197,6 +2197,56 @@ async def edit_job_data(job_id: str, data: JobEditData, user: dict = Depends(get
     updated_job = await db.jobs.find_one({"id": job_id}, {"_id": 0})
     return JobResponse(**updated_job)
 
+# ==================== DELETE JOB ====================
+
+@api_router.delete("/jobs/{job_id}")
+async def delete_job(job_id: str, user: dict = Depends(get_current_user)):
+    """Delete a job - only allowed for creator before it's too far in process"""
+    job = await db.jobs.find_one({"id": job_id}, {"_id": 0})
+    if not job:
+        raise HTTPException(status_code=404, detail="Auftrag nicht gefunden")
+    
+    # Check access permissions - only creator or admin can delete
+    has_access = False
+    
+    if user["role"] == UserRole.ADMIN:
+        has_access = True
+    elif user["role"] == UserRole.AUTHORITY:
+        authority_id = get_authority_id(user)
+        # Authority can delete if they created the job
+        if job.get("authority_id") == authority_id or job["created_by_id"] == user["id"]:
+            has_access = True
+    elif user["role"] == UserRole.TOWING_SERVICE:
+        # Towing service can delete if they created the job (for_authority jobs)
+        if job.get("created_by_id") == user["id"]:
+            has_access = True
+    
+    if not has_access:
+        raise HTTPException(status_code=403, detail="Keine Berechtigung zum Löschen dieses Auftrags")
+    
+    # Only allow deletion if job is in early stages (pending, assigned, or on_site)
+    # Don't allow deletion if vehicle is already towed/in_yard/released
+    allowed_delete_statuses = [JobStatus.PENDING, JobStatus.ASSIGNED, JobStatus.ON_SITE]
+    if job["status"] not in allowed_delete_statuses:
+        raise HTTPException(
+            status_code=400, 
+            detail=f"Auftrag kann nicht gelöscht werden - Fahrzeug wurde bereits abgeschleppt. Status: {job['status']}"
+        )
+    
+    # Delete the job
+    await db.jobs.delete_one({"id": job_id})
+    
+    # Audit log the deletion
+    await log_audit("JOB_DELETED", user["id"], user.get("name", user["email"]), {
+        "job_id": job_id,
+        "job_number": job.get("job_number"),
+        "license_plate": job.get("license_plate"),
+        "status_at_deletion": job["status"],
+        "reason": "User requested deletion"
+    })
+    
+    return {"message": f"Auftrag {job['job_number']} wurde gelöscht"}
+
 # ==================== BULK STATUS UPDATE ====================
 
 @api_router.post("/jobs/bulk-update-status")
