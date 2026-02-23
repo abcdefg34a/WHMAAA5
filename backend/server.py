@@ -2838,7 +2838,7 @@ async def generate_pdf(job_id: str):
     if job.get('created_by_dienstnummer'):
         vehicle_data.append([
             Paragraph("<b>Erfasst von</b>", cell_style), 
-            Paragraph(f"{job.get('created_by_name', '-')} ({job['created_by_dienstnummer']})", cell_style)
+            Paragraph(f"{job.get('created_by_name') or '-'} ({job['created_by_dienstnummer']})", cell_style)
         ])
     
     vehicle_table = Table(vehicle_data, colWidths=[4.5*cm, 12.5*cm])
