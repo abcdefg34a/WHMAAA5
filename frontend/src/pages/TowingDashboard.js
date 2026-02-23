@@ -161,8 +161,12 @@ export const TowingDashboard = () => {
     vin: '',
     tow_reason: '',
     notes: '',
-    location_address: ''
+    location_address: '',
+    location_lat: null,
+    location_lng: null
   });
+  const [editJobPosition, setEditJobPosition] = useState(null);
+  const [deletingJob, setDeletingJob] = useState(false);
 
   useEffect(() => {
     fetchJobs();
