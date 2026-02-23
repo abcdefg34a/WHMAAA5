@@ -122,6 +122,13 @@ export const PortalPage = () => {
       return;
     }
 
+    // Validate business license for towing services
+    if (registerRole === 'towing_service' && !businessLicenseImage) {
+      setRegisterError('Bitte laden Sie ein Foto Ihres Gewerbescheins hoch');
+      setRegisterLoading(false);
+      return;
+    }
+
     try {
       const payload = {
         name: registerData.name,
