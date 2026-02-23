@@ -2965,10 +2965,10 @@ async def generate_pdf(job_id: str):
     if service:
         story.append(Paragraph("Abschleppdienst", heading_style))
         service_data = [
-            [Paragraph("<b>Unternehmen</b>", cell_style), Paragraph(service.get('company_name', '-'), cell_style)],
-            [Paragraph("<b>Telefon</b>", cell_style), Paragraph(service.get('phone', '-'), cell_style)],
-            [Paragraph("<b>Hof-Adresse</b>", cell_style), Paragraph(wrap_text(service.get('yard_address', '-'), 55), cell_style)],
-            [Paragraph("<b>Öffnungszeiten</b>", cell_style), Paragraph(service.get('opening_hours', '-'), cell_style)],
+            [Paragraph("<b>Unternehmen</b>", cell_style), Paragraph(service.get('company_name') or '-', cell_style)],
+            [Paragraph("<b>Telefon</b>", cell_style), Paragraph(service.get('phone') or '-', cell_style)],
+            [Paragraph("<b>Hof-Adresse</b>", cell_style), Paragraph(wrap_text(service.get('yard_address') or '-', 55), cell_style)],
+            [Paragraph("<b>Öffnungszeiten</b>", cell_style), Paragraph(service.get('opening_hours') or '-', cell_style)],
         ]
         service_table = Table(service_data, colWidths=[4.5*cm, 12.5*cm])
         service_table.setStyle(TableStyle([
