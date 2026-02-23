@@ -1748,6 +1748,18 @@ async def approve_authority(authority_id: str, data: ApproveServiceRequest, user
             "authority_id": authority_id,
             "authority_name": authority["authority_name"]
         })
+        
+        # Send approval email
+        try:
+            email_service.send_account_approved_email(
+                to_email=authority["email"],
+                user_name=authority.get("name", authority["authority_name"]),
+                role=UserRole.AUTHORITY
+            )
+            logger.info(f"Authority approval email sent to {authority['email']}")
+        except Exception as e:
+            logger.error(f"Failed to send authority approval email: {e}")
+        
         return {"message": f"{authority['authority_name']} wurde freigeschaltet"}
     else:
         await db.users.update_one(
