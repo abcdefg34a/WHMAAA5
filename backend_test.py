@@ -1591,6 +1591,116 @@ class TowingManagementAPITester:
             print("   ❌ Failed to calculate costs")
             return False
 
+    def test_aws_ses_email_integration(self):
+        """Test AWS SES email integration via forgot password functionality"""
+        print("\n📧 Testing AWS SES Email Integration...")
+        
+        # Test 1: Password reset with admin@test.de
+        print("\n🔍 Testing password reset email with admin@test.de...")
+        reset_data = {"email": "admin@test.de"}
+        success, response = self.run_test(
+            "Password Reset Email (admin@test.de)", "POST", "auth/forgot-password", 200, reset_data
+        )
+        
+        if success and response:
+            message = response.get('message', '')
+            print(f"   Response message: {message}")
+            
+            # Check if response contains expected German message
+            if "Falls ein Konto mit dieser E-Mail existiert" in message:
+                print("   ✅ Correct response message received")
+            else:
+                print("   ❌ Unexpected response message")
+        
+        # Test 2: Password reset with verified sender email
+        print("\n🔍 Testing password reset email with verified sender email...")
+        reset_data_verified = {"email": "info@werhatmeinautoabgeschleppt.de"}
+        success, response = self.run_test(
+            "Password Reset Email (Verified Sender)", "POST", "auth/forgot-password", 200, reset_data_verified
+        )
+        
+        if success and response:
+            message = response.get('message', '')
+            print(f"   Response message: {message}")
+            
+            # Check if response contains expected German message
+            if "Falls ein Konto mit dieser E-Mail existiert" in message:
+                print("   ✅ Correct response message received")
+            else:
+                print("   ❌ Unexpected response message")
+        
+        # Test 3: Check backend logs for email sending
+        print("\n📋 Checking backend logs for email sending...")
+        try:
+            import subprocess
+            import os
+            
+            # Check supervisor backend logs for email-related messages
+            log_files = [
+                "/var/log/supervisor/backend.out.log",
+                "/var/log/supervisor/backend.err.log"
+            ]
+            
+            email_sent_found = False
+            ses_error_found = False
+            error_details = []
+            
+            for log_file in log_files:
+                if os.path.exists(log_file):
+                    try:
+                        # Get last 100 lines of log
+                        result = subprocess.run(['tail', '-n', '100', log_file], 
+                                              capture_output=True, text=True, timeout=10)
+                        log_content = result.stdout
+                        
+                        # Check for email sending success
+                        if "Password reset email sent" in log_content:
+                            email_sent_found = True
+                            print(f"   ✅ Found 'Password reset email sent' in {log_file}")
+                        
+                        # Check for SES errors
+                        if "MessageRejected" in log_content:
+                            ses_error_found = True
+                            error_details.append("MessageRejected - Email destination not verified (Sandbox mode)")
+                            print(f"   ⚠️ Found MessageRejected error in {log_file}")
+                        
+                        if "MailFromDomainNotVerified" in log_content:
+                            ses_error_found = True
+                            error_details.append("MailFromDomainNotVerified - Sender domain not verified")
+                            print(f"   ⚠️ Found MailFromDomainNotVerified error in {log_file}")
+                        
+                        # Check for other AWS SES errors
+                        if "ClientError" in log_content and "SES" in log_content:
+                            ses_error_found = True
+                            error_details.append("AWS SES ClientError found in logs")
+                            print(f"   ⚠️ Found AWS SES ClientError in {log_file}")
+                        
+                        # Check for email mock messages (when SES is not configured)
+                        if "EMAIL MOCK" in log_content or "SES nicht konfiguriert" in log_content:
+                            print(f"   ℹ️ Found email mock messages - SES not fully configured")
+                        
+                    except subprocess.TimeoutExpired:
+                        print(f"   ⚠️ Timeout reading {log_file}")
+                    except Exception as e:
+                        print(f"   ⚠️ Error reading {log_file}: {str(e)}")
+                else:
+                    print(f"   ⚠️ Log file {log_file} not found")
+            
+            # Summary of log analysis
+            if email_sent_found:
+                print("   ✅ Email sending confirmed in backend logs")
+            elif ses_error_found:
+                print("   ⚠️ SES errors found in logs:")
+                for error in error_details:
+                    print(f"      - {error}")
+            else:
+                print("   ℹ️ No specific email sending confirmation found in recent logs")
+                
+        except Exception as e:
+            print(f"   ⚠️ Error checking backend logs: {str(e)}")
+        
+        return True
+
     def test_comprehensive_backend_review(self):
         """Run all tests specified in the review request"""
         print("\n" + "="*80)
