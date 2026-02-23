@@ -1104,6 +1104,43 @@ export const AuthorityDashboard = () => {
                             </Button>
                           </div>
                         )}
+                        
+                        {/* Edit/Delete Buttons - only show if job is not released */}
+                        {job.status !== 'released' && (
+                          <div className="mt-4 pt-4 border-t flex justify-between items-center">
+                            {/* Delete button - only for early stages */}
+                            {['pending', 'assigned', 'on_site'].includes(job.status) ? (
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                onClick={() => handleDeleteJob(job)}
+                                disabled={deletingJob === job.id}
+                                className="text-red-600 border-red-200 hover:bg-red-50"
+                              >
+                                {deletingJob === job.id ? (
+                                  <>Löscht...</>
+                                ) : (
+                                  <>
+                                    <X className="h-4 w-4 mr-1" />
+                                    Löschen
+                                  </>
+                                )}
+                              </Button>
+                            ) : (
+                              <div />
+                            )}
+                            
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={() => openEditJobDialog(job)}
+                              className="text-blue-600 border-blue-200 hover:bg-blue-50"
+                            >
+                              <Settings className="h-4 w-4 mr-1" />
+                              Bearbeiten
+                            </Button>
+                          </div>
+                        )}
                       </div>
                     ))}
                   </div>
