@@ -694,6 +694,8 @@ class VehicleSearchResult(BaseModel):
     tow_cost: Optional[float] = None
     daily_cost: Optional[float] = None
     days_in_yard: Optional[int] = None
+    processing_fee: Optional[float] = None  # Bearbeitungsgebühr
+    night_surcharge: Optional[float] = None  # Nachtzuschlag
     total_cost: Optional[float] = None
     # Location coordinates for map - REMOVED, using yard coordinates instead
     location_lat: Optional[float] = None
