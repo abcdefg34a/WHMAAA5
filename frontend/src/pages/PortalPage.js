@@ -1,7 +1,7 @@
-import React, { useState } from 'react';
+import React, { useState, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
-import { Car, Shield, Truck, UserPlus, LogIn, ArrowLeft, Eye, EyeOff, Building2, Phone, MapPin, User, FileText } from 'lucide-react';
+import { Car, Shield, Truck, UserPlus, LogIn, ArrowLeft, Eye, EyeOff, Building2, Phone, MapPin, User, FileText, Upload, X, Image } from 'lucide-react';
 import { Button } from '../components/ui/button';
 import { Input } from '../components/ui/input';
 import { Label } from '../components/ui/label';
