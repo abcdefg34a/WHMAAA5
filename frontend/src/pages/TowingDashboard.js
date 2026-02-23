@@ -2805,7 +2805,7 @@ export const TowingDashboard = () => {
 
       {/* Edit Job Data Dialog */}
       <Dialog open={editJobDialogOpen} onOpenChange={setEditJobDialogOpen}>
-        <DialogContent className="max-w-md">
+        <DialogContent className="max-w-md max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
               <Edit className="h-5 w-5" />
