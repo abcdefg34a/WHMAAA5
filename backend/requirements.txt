@@ -129,3 +129,5 @@ openpyxl
 python-json-logger
 et-xmlfile
 boto3
+pymongo[srv]
+dnspython
