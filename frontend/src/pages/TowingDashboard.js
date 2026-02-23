@@ -2815,6 +2815,57 @@ export const TowingDashboard = () => {
                 rows={3}
               />
             </div>
+
+            {/* Location Edit Section */}
+            <div className="space-y-2 pt-4 border-t">
+              <Label className="flex items-center gap-2">
+                <MapPin className="h-4 w-4" />
+                Standort ändern
+              </Label>
+              <Input
+                value={editJobData.location_address}
+                onChange={(e) => setEditJobData(prev => ({...prev, location_address: e.target.value}))}
+                placeholder="Adresse eingeben..."
+              />
+              <div className="h-48 rounded-lg overflow-hidden border">
+                <MapContainer
+                  center={editJobPosition || [52.52, 13.405]}
+                  zoom={editJobPosition ? 15 : 10}
+                  className="h-full w-full"
+                  key={editJobDialogOpen ? 'edit-map-open' : 'edit-map-closed'}
+                >
+                  <TileLayer
+                    attribution='&copy; OpenStreetMap'
+                    url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+                  />
+                  {editJobPosition && (
+                    <Marker position={editJobPosition} />
+                  )}
+                  <MapClickHandler onMapClick={async (lat, lng) => {
+                    setEditJobPosition([lat, lng]);
+                    setEditJobData(prev => ({
+                      ...prev,
+                      location_lat: lat,
+                      location_lng: lng
+                    }));
+                    // Reverse geocoding
+                    try {
+                      const response = await fetch(
+                        `https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lng}`,
+                        { headers: { 'User-Agent': 'ImpoundPro/1.0' } }
+                      );
+                      const data = await response.json();
+                      if (data.display_name) {
+                        setEditJobData(prev => ({...prev, location_address: data.display_name}));
+                      }
+                    } catch (e) {
+                      console.error('Reverse geocoding error:', e);
+                    }
+                  }} />
+                </MapContainer>
+              </div>
+              <p className="text-xs text-slate-500">Klicken Sie auf die Karte um den Standort zu ändern</p>
+            </div>
           </div>
           <div className="flex justify-end gap-3">
             <Button variant="outline" onClick={() => setEditJobDialogOpen(false)}>
