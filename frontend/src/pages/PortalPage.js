@@ -35,7 +35,8 @@ export const PortalPage = () => {
     // Towing service fields
     company_name: '',
     address: '',
-    phone: ''
+    phone: '',
+    business_license: ''  // Gewerbenachweis
   });
   const [showRegisterPassword, setShowRegisterPassword] = useState(false);
   const [registerLoading, setRegisterLoading] = useState(false);
