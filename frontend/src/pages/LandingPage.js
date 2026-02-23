@@ -304,18 +304,30 @@ export const LandingPage = () => {
                         <Euro className="h-5 w-5 text-orange-600" />
                         <h3 className="font-bold text-lg text-orange-900">Geschätzte Kosten (Stand heute)</h3>
                       </div>
-                      <div className="grid sm:grid-cols-3 gap-4 text-sm">
-                        <div>
-                          <p className="text-orange-700">Anfahrtskosten</p>
-                          <p className="font-bold text-lg text-orange-900">{searchResult.tow_cost?.toFixed(2)} €</p>
+                      <div className="space-y-2 text-sm">
+                        <div className="flex justify-between py-1 border-b border-orange-200">
+                          <span className="text-orange-700">Anfahrt/Abschleppen</span>
+                          <span className="font-semibold text-orange-900">{searchResult.tow_cost?.toFixed(2)} €</span>
                         </div>
-                        <div>
-                          <p className="text-orange-700">Standkosten ({searchResult.days_in_yard} Tag(e) × {searchResult.daily_cost?.toFixed(2)} €)</p>
-                          <p className="font-bold text-lg text-orange-900">{(searchResult.daily_cost * searchResult.days_in_yard).toFixed(2)} €</p>
+                        <div className="flex justify-between py-1 border-b border-orange-200">
+                          <span className="text-orange-700">Standkosten ({searchResult.days_in_yard} Tag(e) × {searchResult.daily_cost?.toFixed(2)} €)</span>
+                          <span className="font-semibold text-orange-900">{(searchResult.daily_cost * searchResult.days_in_yard).toFixed(2)} €</span>
                         </div>
-                        <div className="bg-orange-100 rounded-lg p-3">
-                          <p className="text-orange-700">Gesamt</p>
-                          <p className="font-black text-2xl text-orange-900">{searchResult.total_cost?.toFixed(2)} €</p>
+                        {searchResult.processing_fee > 0 && (
+                          <div className="flex justify-between py-1 border-b border-orange-200">
+                            <span className="text-orange-700">Bearbeitungsgebühr</span>
+                            <span className="font-semibold text-orange-900">{searchResult.processing_fee?.toFixed(2)} €</span>
+                          </div>
+                        )}
+                        {searchResult.night_surcharge > 0 && (
+                          <div className="flex justify-between py-1 border-b border-orange-200">
+                            <span className="text-orange-700">Nachtzuschlag</span>
+                            <span className="font-semibold text-orange-900">{searchResult.night_surcharge?.toFixed(2)} €</span>
+                          </div>
+                        )}
+                        <div className="flex justify-between py-2 mt-2 bg-orange-100 rounded-lg px-3">
+                          <span className="font-bold text-orange-900">Gesamtbetrag</span>
+                          <span className="font-black text-xl text-orange-900">{searchResult.total_cost?.toFixed(2)} €</span>
                         </div>
                       </div>
                       <p className="text-xs text-orange-600 mt-3">
