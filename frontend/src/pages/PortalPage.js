@@ -390,6 +390,20 @@ export const PortalPage = () => {
                           />
                         </div>
                       </div>
+                      <div className="space-y-2">
+                        <Label htmlFor="business-license">
+                          <FileText className="h-3 w-3 inline mr-1" />
+                          Gewerbenachweis-Nr. / Handelsregisternr.
+                        </Label>
+                        <Input
+                          id="business-license"
+                          value={registerData.business_license}
+                          onChange={(e) => setRegisterData({...registerData, business_license: e.target.value})}
+                          placeholder="z.B. HRB 12345 oder Gewerbe-Nr. 123/456"
+                          required
+                        />
+                        <p className="text-xs text-slate-500">Bitte geben Sie Ihre Handelsregister- oder Gewerbenummer ein</p>
+                      </div>
                     </>
                   )}
 
