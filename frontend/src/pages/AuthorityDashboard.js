@@ -1407,6 +1407,137 @@ export const AuthorityDashboard = () => {
           </div>
         </DialogContent>
       </Dialog>
+
+      {/* Edit Job Data Dialog */}
+      <Dialog open={editJobDialogOpen} onOpenChange={setEditJobDialogOpen}>
+        <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Settings className="h-5 w-5" />
+              Auftrag bearbeiten
+            </DialogTitle>
+            <DialogDescription>
+              Korrigieren Sie Kennzeichen, FIN, Standort oder andere Angaben
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-4">
+            <div className="space-y-2">
+              <Label htmlFor="edit-license-plate">Kennzeichen</Label>
+              <Input
+                id="edit-license-plate"
+                value={editJobData.license_plate}
+                onChange={(e) => setEditJobData(prev => ({...prev, license_plate: e.target.value.toUpperCase()}))}
+                placeholder="z.B. B-AB 1234"
+                className="text-lg font-mono"
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="edit-vin">Fahrzeug-Identnummer (FIN)</Label>
+              <Input
+                id="edit-vin"
+                value={editJobData.vin}
+                onChange={(e) => setEditJobData(prev => ({...prev, vin: e.target.value.toUpperCase()}))}
+                placeholder="17-stellige FIN"
+                className="font-mono"
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="edit-tow-reason">Abschleppgrund</Label>
+              <Select 
+                value={editJobData.tow_reason}
+                onValueChange={(value) => setEditJobData(prev => ({...prev, tow_reason: value}))}
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder="Grund auswählen..." />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="Parken im Parkverbot">Parken im Parkverbot</SelectItem>
+                  <SelectItem value="Parken in Feuerwehrzufahrt">Parken in Feuerwehrzufahrt</SelectItem>
+                  <SelectItem value="Parken auf Gehweg">Parken auf Gehweg</SelectItem>
+                  <SelectItem value="Parken in Halteverbotszone">Parken in Halteverbotszone</SelectItem>
+                  <SelectItem value="Parken auf Behindertenparkplatz">Parken auf Behindertenparkplatz</SelectItem>
+                  <SelectItem value="Unfall/Panne">Unfall/Panne</SelectItem>
+                  <SelectItem value="Polizeiliche Anordnung">Polizeiliche Anordnung</SelectItem>
+                  <SelectItem value="Sonstiges">Sonstiges</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="edit-notes">Bemerkungen</Label>
+              <Textarea
+                id="edit-notes"
+                value={editJobData.notes}
+                onChange={(e) => setEditJobData(prev => ({...prev, notes: e.target.value}))}
+                placeholder="Zusätzliche Informationen..."
+                rows={2}
+              />
+            </div>
+
+            {/* Location Edit Section */}
+            <div className="space-y-2 pt-4 border-t">
+              <Label className="flex items-center gap-2">
+                <MapPin className="h-4 w-4" />
+                Standort ändern
+              </Label>
+              <Input
+                value={editJobData.location_address}
+                onChange={(e) => setEditJobData(prev => ({...prev, location_address: e.target.value}))}
+                placeholder="Adresse eingeben..."
+              />
+              <div className="h-48 rounded-lg overflow-hidden border">
+                <MapContainer
+                  center={editJobPosition || [52.52, 13.405]}
+                  zoom={editJobPosition ? 15 : 10}
+                  className="h-full w-full"
+                  key={editJobDialogOpen ? 'auth-edit-map-open' : 'auth-edit-map-closed'}
+                >
+                  <TileLayer
+                    attribution='&copy; OpenStreetMap'
+                    url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+                  />
+                  <LocationPicker 
+                    position={editJobPosition} 
+                    setPosition={async (pos) => {
+                      setEditJobPosition(pos);
+                      setEditJobData(prev => ({
+                        ...prev,
+                        location_lat: pos[0],
+                        location_lng: pos[1]
+                      }));
+                      // Reverse geocoding
+                      try {
+                        const response = await fetch(
+                          `https://nominatim.openstreetmap.org/reverse?format=json&lat=${pos[0]}&lon=${pos[1]}`,
+                          { headers: { 'User-Agent': 'ImpoundPro/1.0' } }
+                        );
+                        const data = await response.json();
+                        if (data.display_name) {
+                          setEditJobData(prev => ({...prev, location_address: data.display_name}));
+                        }
+                      } catch (e) {
+                        console.error('Reverse geocoding error:', e);
+                      }
+                    }} 
+                  />
+                </MapContainer>
+              </div>
+              <p className="text-xs text-slate-500">Klicken Sie auf die Karte um den Standort zu ändern</p>
+            </div>
+          </div>
+          <div className="flex justify-end gap-3">
+            <Button variant="outline" onClick={() => setEditJobDialogOpen(false)}>
+              Abbrechen
+            </Button>
+            <Button 
+              onClick={handleSaveJobData}
+              disabled={editingJobData}
+              className="bg-blue-600 hover:bg-blue-700"
+            >
+              {editingJobData ? 'Speichert...' : 'Speichern'}
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 };
