@@ -128,3 +128,4 @@ Pillow
 openpyxl
 python-json-logger
 et-xmlfile
+boto3
