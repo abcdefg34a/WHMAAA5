@@ -2350,14 +2350,18 @@ async def search_vehicle(q: str):
     service = None
     tow_cost = None
     daily_cost = None
+    processing_fee = None
+    night_surcharge = None
     days_in_yard = 0
     total_cost = None
     
     if job.get("assigned_service_id"):
         service = await db.users.find_one({"id": job["assigned_service_id"]}, {"_id": 0, "password": 0})
         if service:
-            tow_cost = service.get("tow_cost", 0)
-            daily_cost = service.get("daily_cost", 0)
+            tow_cost = service.get("tow_cost", 0) or 0
+            daily_cost = service.get("daily_cost", 0) or 0
+            processing_fee = service.get("processing_fee", 0) or 0
+            night_surcharge = service.get("night_surcharge", 0) or 0
             
             # Calculate days in yard
             if job.get("in_yard_at"):
@@ -2365,7 +2369,9 @@ async def search_vehicle(q: str):
             elif job.get("towed_at"):
                 days_in_yard = calculate_days_in_yard(job["towed_at"])
             
-            total_cost = calculate_total_cost(tow_cost, daily_cost, days_in_yard)
+            # Calculate total cost including all fees
+            standkosten = daily_cost * days_in_yard
+            total_cost = tow_cost + standkosten + processing_fee + night_surcharge
     
     return VehicleSearchResult(
         found=True,
