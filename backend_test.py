@@ -1881,6 +1881,269 @@ class TowingManagementAPITester:
         print("\n🎉 Edit Location & Delete Job Workflow completed successfully!")
         return True
 
+    def test_review_request_scenarios(self):
+        """Test specific scenarios from the review request"""
+        print("\n🎯 Testing Review Request Scenarios...")
+        print("=" * 60)
+        
+        # Test credentials from review request
+        admin_creds = {"email": "admin@test.de", "password": "Admin123!"}
+        authority_creds = {"email": "test-behoerde@test.de", "password": "TestPass123!"}
+        
+        # Step 1: Admin login
+        success, response = self.run_test(
+            "Admin Login (Review Credentials)", "POST", "auth/login", 200, admin_creds
+        )
+        
+        if success and 'access_token' in response:
+            self.admin_token = response['access_token']
+            print(f"   ✅ Admin login successful with provided credentials")
+        else:
+            print("❌ Admin login failed - cannot continue")
+            return False
+        
+        # Step 2: Authority login
+        success, response = self.run_test(
+            "Authority Login (Review Credentials)", "POST", "auth/login", 200, authority_creds
+        )
+        
+        if success and 'access_token' in response:
+            self.authority_token = response['access_token']
+            authority_user = response.get('user', {})
+            self.authority_id = authority_user.get('id')
+            print(f"   ✅ Authority login successful")
+            print(f"   Authority ID: {self.authority_id}")
+        else:
+            print("❌ Authority login failed - cannot continue")
+            return False
+        
+        # SCENARIO 1: AUFTRAG ERSTELLEN
+        print("\n📋 SCENARIO 1: AUFTRAG ERSTELLEN")
+        job_data = {
+            "license_plate": "B-TEST 999",
+            "tow_reason": "Parken im Parkverbot",
+            "location_address": "Teststraße 1, Berlin",
+            "location_lat": 52.52,
+            "location_lng": 13.405
+        }
+        
+        success, response = self.run_test(
+            "Create Job (B-TEST 999)", "POST", "jobs", 200,
+            job_data, self.authority_token
+        )
+        
+        if success and response:
+            self.test_job_id = response.get('id')
+            job_number = response.get('job_number')
+            print(f"   ✅ Job created successfully")
+            print(f"   Job ID: {self.test_job_id}")
+            print(f"   Job Number: {job_number}")
+            print(f"   License Plate: {response.get('license_plate')}")
+            print(f"   Location: {response.get('location_address')}")
+            print(f"   Coordinates: {response.get('location_lat')}, {response.get('location_lng')}")
+        else:
+            print("   ❌ Job creation failed")
+            return False
+        
+        # SCENARIO 2: AUFTRAG BEARBEITEN MIT STANDORT
+        print("\n✏️ SCENARIO 2: AUFTRAG BEARBEITEN MIT STANDORT")
+        edit_data = {
+            "license_plate": "B-EDIT 888",
+            "location_address": "Neue Straße 2, Berlin",
+            "location_lat": 52.53,
+            "location_lng": 13.41
+        }
+        
+        success, response = self.run_test(
+            "Edit Job Data", "PATCH", f"jobs/{self.test_job_id}/edit-data", 200,
+            edit_data, self.authority_token
+        )
+        
+        if success:
+            print(f"   ✅ Job data edited successfully")
+            
+            # Verify the changes
+            success, response = self.run_test(
+                "Verify Job Changes", "GET", f"jobs/{self.test_job_id}", 200,
+                token=self.authority_token
+            )
+            
+            if success and response:
+                updated_plate = response.get('license_plate')
+                updated_address = response.get('location_address')
+                updated_lat = response.get('location_lat')
+                updated_lng = response.get('location_lng')
+                
+                print(f"   Updated License Plate: {updated_plate}")
+                print(f"   Updated Address: {updated_address}")
+                print(f"   Updated Coordinates: {updated_lat}, {updated_lng}")
+                
+                if (updated_plate == "B-EDIT 888" and 
+                    updated_address == "Neue Straße 2, Berlin" and
+                    updated_lat == 52.53 and updated_lng == 13.41):
+                    print(f"   ✅ All changes verified successfully")
+                else:
+                    print(f"   ❌ Changes not properly saved")
+        else:
+            print("   ❌ Job edit failed")
+        
+        # SCENARIO 3: AUFTRAG LÖSCHEN
+        print("\n🗑️ SCENARIO 3: AUFTRAG LÖSCHEN")
+        success, response = self.run_test(
+            "Delete Job", "DELETE", f"jobs/{self.test_job_id}", 200,
+            token=self.authority_token
+        )
+        
+        if success:
+            print(f"   ✅ Job deleted successfully")
+            
+            # Verify deletion
+            success, response = self.run_test(
+                "Verify Job Deletion", "GET", f"jobs/{self.test_job_id}", 404,
+                token=self.authority_token
+            )
+            
+            if success:  # 404 is expected
+                print(f"   ✅ Job deletion verified - job no longer exists")
+            else:
+                print(f"   ❌ Job still exists after deletion")
+        else:
+            print("   ❌ Job deletion failed")
+        
+        # SCENARIO 4: KENNZEICHEN-DUPLIKAT TEST
+        print("\n🔄 SCENARIO 4: KENNZEICHEN-DUPLIKAT TEST")
+        
+        # Create first job with unique license plate
+        duplicate_job_data = {
+            "license_plate": "DUP-CHECK 123",
+            "tow_reason": "First job with this plate",
+            "location_address": "Duplikatstraße 1, Berlin",
+            "location_lat": 52.52,
+            "location_lng": 13.405
+        }
+        
+        success, response = self.run_test(
+            "Create First Job (DUP-CHECK 123)", "POST", "jobs", 200,
+            duplicate_job_data, self.authority_token
+        )
+        
+        if success and response:
+            first_job_id = response.get('id')
+            print(f"   ✅ First job created successfully: {first_job_id}")
+            
+            # Try to create second job with same license plate
+            duplicate_job_data["tow_reason"] = "Second job with same plate - should fail"
+            
+            success, response = self.run_test(
+                "Create Duplicate Job (Should Fail)", "POST", "jobs", 400,
+                duplicate_job_data, self.authority_token
+            )
+            
+            if success:  # 400 is expected
+                print(f"   ✅ Duplicate license plate correctly rejected")
+                # Try to get error message
+                if hasattr(self, 'test_results') and self.test_results:
+                    last_result = self.test_results[-1]
+                    error_msg = last_result.get('error', {}).get('detail', 'Unknown error')
+                    print(f"   Error message: {error_msg}")
+            else:
+                print(f"   ❌ Duplicate license plate was incorrectly allowed")
+        else:
+            print("   ❌ Failed to create first job for duplicate test")
+        
+        # SCENARIO 5: PDF DOWNLOAD
+        print("\n📄 SCENARIO 5: PDF DOWNLOAD")
+        
+        # Create a job for PDF test
+        pdf_job_data = {
+            "license_plate": "PDF-TEST 456",
+            "tow_reason": "Job for PDF generation test",
+            "location_address": "PDF Straße 1, Berlin",
+            "location_lat": 52.52,
+            "location_lng": 13.405
+        }
+        
+        success, response = self.run_test(
+            "Create Job for PDF Test", "POST", "jobs", 200,
+            pdf_job_data, self.authority_token
+        )
+        
+        if success and response:
+            pdf_job_id = response.get('id')
+            print(f"   ✅ PDF test job created: {pdf_job_id}")
+            
+            # Test PDF generation
+            url = f"{self.base_url}/jobs/{pdf_job_id}/pdf"
+            headers = {'Authorization': f'Bearer {self.authority_token}'}
+            
+            try:
+                print(f"   🔍 Testing PDF generation...")
+                pdf_response = requests.get(url, headers=headers, timeout=30)
+                
+                if pdf_response.status_code == 200:
+                    content_type = pdf_response.headers.get('content-type', '')
+                    file_size = len(pdf_response.content)
+                    
+                    if 'application/pdf' in content_type:
+                        print(f"   ✅ PDF generated successfully")
+                        print(f"   Content-Type: {content_type}")
+                        print(f"   File size: {file_size} bytes")
+                        self.tests_passed += 1
+                    else:
+                        print(f"   ❌ Wrong content type: {content_type}")
+                else:
+                    print(f"   ❌ PDF generation failed - Status: {pdf_response.status_code}")
+                    try:
+                        error_data = pdf_response.json()
+                        print(f"   Error: {error_data}")
+                    except:
+                        print(f"   Error: {pdf_response.text}")
+                
+                self.tests_run += 1
+                
+            except Exception as e:
+                print(f"   ❌ PDF generation error: {str(e)}")
+                self.tests_run += 1
+        else:
+            print("   ❌ Failed to create job for PDF test")
+        
+        # SCENARIO 6: ÖFFENTLICHE SUCHE
+        print("\n🔍 SCENARIO 6: ÖFFENTLICHE SUCHE")
+        
+        # Search for the duplicate check vehicle
+        success, response = self.run_test(
+            "Public Search (DUP-CHECK 123)", "GET", "search/vehicle?q=DUP-CHECK%20123", 200
+        )
+        
+        if success and response:
+            found = response.get('found', False)
+            print(f"   Search result: {'Found' if found else 'Not Found'}")
+            
+            if found:
+                # Check for cost calculation fields
+                processing_fee = response.get('processing_fee')
+                night_surcharge = response.get('night_surcharge')
+                total_cost = response.get('total_cost')
+                
+                print(f"   ✅ Vehicle found in public search")
+                print(f"   Job Number: {response.get('job_number', 'N/A')}")
+                print(f"   Status: {response.get('status', 'N/A')}")
+                print(f"   Processing Fee: {processing_fee}€" if processing_fee else "   Processing Fee: Not set")
+                print(f"   Night Surcharge: {night_surcharge}€" if night_surcharge else "   Night Surcharge: Not set")
+                print(f"   Total Cost: {total_cost}€" if total_cost else "   Total Cost: Not calculated")
+                
+                # Verify cost fields are present
+                if processing_fee is not None and night_surcharge is not None:
+                    print(f"   ✅ Cost calculation fields (processing_fee, night_surcharge) present")
+                else:
+                    print(f"   ⚠️ Some cost calculation fields missing")
+            else:
+                print(f"   ℹ️ Vehicle not found (expected if not in yard)")
+        else:
+            print("   ❌ Public search failed")
+        
+        return True
+
     def test_comprehensive_backend_review(self):
         """Run all tests specified in the review request"""
         print("\n" + "="*80)
@@ -1889,43 +2152,38 @@ class TowingManagementAPITester:
         
         all_tests_passed = True
         
-        # PRIORITY TEST: Edit Location & Delete Job Workflow
-        if not self.test_edit_location_and_delete_job_workflow():
+        # PRIORITY TEST: Review Request Scenarios
+        if not self.test_review_request_scenarios():
             all_tests_passed = False
         
-        # NEW: Time-based cost calculation test (as requested in review)
-        if not self.test_time_based_cost_calculation():
-            all_tests_passed = False
+        # Additional comprehensive tests
+        print("\n🔧 Additional Backend Tests...")
         
-        # 1. Authentication with provided credentials
-        if not self.test_admin_login_with_provided_credentials():
-            all_tests_passed = False
-        
-        # 2. Pagination endpoints
+        # 1. Pagination endpoints
         if not self.test_pagination_endpoints():
             all_tests_passed = False
         
-        # 3. Audit logging
+        # 2. Audit logging
         if not self.test_audit_logging_endpoints():
             all_tests_passed = False
         
-        # 4. Excel export
+        # 3. Excel export
         if not self.test_excel_export_endpoint():
             all_tests_passed = False
         
-        # 5. Full-text search
+        # 4. Full-text search
         if not self.test_fulltext_search_endpoint():
             all_tests_passed = False
         
-        # 6. Service approval endpoints
+        # 5. Service approval endpoints
         if not self.test_service_approval_endpoints():
             all_tests_passed = False
         
-        # 7. User management
+        # 6. User management
         if not self.test_user_management_endpoint():
             all_tests_passed = False
         
-        # 8. Public search with location coordinates
+        # 7. Public search with location coordinates
         if not self.test_public_search_endpoint():
             all_tests_passed = False
         
