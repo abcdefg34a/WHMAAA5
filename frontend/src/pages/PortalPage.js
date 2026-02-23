@@ -44,14 +44,47 @@ export const PortalPage = () => {
   const [businessLicenseImage, setBusinessLicenseImage] = useState(null);
   const businessLicenseInputRef = useRef(null);
 
-  // Handle business license photo upload
-  const handleBusinessLicenseUpload = (e) => {
+  // Compress image function
+  const compressImage = (file, maxWidth = 1200, quality = 0.7) => {
+    return new Promise((resolve) => {
+      const reader = new FileReader();
+      reader.onload = (event) => {
+        const img = new window.Image();
+        img.onload = () => {
+          const canvas = document.createElement('canvas');
+          let width = img.width;
+          let height = img.height;
+
+          // Calculate new dimensions
+          if (width > maxWidth) {
+            height = Math.round((height * maxWidth) / width);
+            width = maxWidth;
+          }
+
+          canvas.width = width;
+          canvas.height = height;
+
+          const ctx = canvas.getContext('2d');
+          ctx.drawImage(img, 0, 0, width, height);
+
+          // Convert to compressed JPEG
+          const compressedDataUrl = canvas.toDataURL('image/jpeg', quality);
+          resolve(compressedDataUrl);
+        };
+        img.src = event.target.result;
+      };
+      reader.readAsDataURL(file);
+    });
+  };
+
+  // Handle business license photo upload with compression
+  const handleBusinessLicenseUpload = async (e) => {
     const file = e.target.files[0];
     if (!file) return;
 
-    // Check file size (max 5MB)
-    if (file.size > 5 * 1024 * 1024) {
-      toast.error('Datei zu groß. Maximal 5MB erlaubt.');
+    // Check file size (max 10MB before compression)
+    if (file.size > 10 * 1024 * 1024) {
+      toast.error('Datei zu groß. Maximal 10MB erlaubt.');
       return;
     }
 
@@ -61,12 +94,23 @@ export const PortalPage = () => {
       return;
     }
 
-    const reader = new FileReader();
-    reader.onload = (event) => {
-      setBusinessLicenseImage(event.target.result);
-      setRegisterData(prev => ({...prev, business_license: event.target.result}));
-    };
-    reader.readAsDataURL(file);
+    toast.info('Bild wird komprimiert...');
+
+    try {
+      // Compress image to max 1200px width and 70% quality
+      const compressedImage = await compressImage(file, 1200, 0.7);
+      
+      setBusinessLicenseImage(compressedImage);
+      setRegisterData(prev => ({...prev, business_license: compressedImage}));
+      
+      // Show size reduction info
+      const originalSize = (file.size / 1024).toFixed(0);
+      const compressedSize = (compressedImage.length * 0.75 / 1024).toFixed(0); // Base64 is ~33% larger
+      toast.success(`Bild komprimiert: ${originalSize}KB → ~${compressedSize}KB`);
+    } catch (error) {
+      console.error('Compression error:', error);
+      toast.error('Fehler beim Komprimieren des Bildes');
+    }
   };
 
   const removeBusinessLicenseImage = () => {
