@@ -419,6 +419,75 @@ export const AuthorityDashboard = () => {
     }
   };
 
+  // NEW: Open edit dialog for job
+  const openEditJobDialog = (job) => {
+    setSelectedJobForEdit(job);
+    setEditJobData({
+      license_plate: job.license_plate || '',
+      vin: job.vin || '',
+      tow_reason: job.tow_reason || '',
+      notes: job.notes || '',
+      location_address: job.location_address || '',
+      location_lat: job.location_lat || null,
+      location_lng: job.location_lng || null
+    });
+    if (job.location_lat && job.location_lng) {
+      setEditJobPosition([job.location_lat, job.location_lng]);
+    } else {
+      setEditJobPosition(null);
+    }
+    setEditJobDialogOpen(true);
+  };
+
+  // NEW: Save edited job data
+  const handleSaveJobData = async () => {
+    if (!selectedJobForEdit) return;
+    
+    setEditingJobData(true);
+    try {
+      const dataToSend = {
+        ...editJobData,
+        location_lat: editJobPosition ? editJobPosition[0] : editJobData.location_lat,
+        location_lng: editJobPosition ? editJobPosition[1] : editJobData.location_lng
+      };
+      
+      const response = await axios.patch(`${API}/jobs/${selectedJobForEdit.id}/edit-data`, dataToSend);
+      
+      // Update local state
+      setJobs(jobs.map(j => j.id === selectedJobForEdit.id ? response.data : j));
+      
+      toast.success('Daten erfolgreich aktualisiert');
+      setEditJobDialogOpen(false);
+    } catch (error) {
+      console.error('Error updating job data:', error);
+      toast.error(error.response?.data?.detail || 'Fehler beim Speichern der Daten');
+    } finally {
+      setEditingJobData(false);
+    }
+  };
+
+  // NEW: Delete job
+  const handleDeleteJob = async (job) => {
+    if (!window.confirm(`Auftrag ${job.job_number} wirklich löschen? Diese Aktion kann nicht rückgängig gemacht werden.`)) {
+      return;
+    }
+    
+    setDeletingJob(job.id);
+    try {
+      await axios.delete(`${API}/jobs/${job.id}`);
+      
+      // Remove from local state
+      setJobs(jobs.filter(j => j.id !== job.id));
+      
+      toast.success(`Auftrag ${job.job_number} wurde gelöscht`);
+    } catch (error) {
+      console.error('Error deleting job:', error);
+      toast.error(error.response?.data?.detail || 'Fehler beim Löschen des Auftrags');
+    } finally {
+      setDeletingJob(null);
+    }
+  };
+
   const getStatusBadge = (status) => {
     const statusConfig = {
       pending: { label: 'Ausstehend', class: 'status-pending' },
