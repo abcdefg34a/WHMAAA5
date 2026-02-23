@@ -44,6 +44,16 @@ const LocationPicker = ({ position, setPosition }) => {
   return position ? <Marker position={position} /> : null;
 };
 
+// Map Click Handler for Edit Dialog
+const MapClickHandler = ({ onMapClick }) => {
+  useMapEvents({
+    click(e) {
+      onMapClick(e.latlng.lat, e.latlng.lng);
+    },
+  });
+  return null;
+};
+
 export const TowingDashboard = () => {
   const { user, logout, updateUser } = useAuth();
   const [activeTab, setActiveTab] = useState('incoming');
