@@ -105,6 +105,18 @@
 user_problem_statement: "Vehicle towing management web app in German - Go-Live Feature Package (Audit Logging, Pagination, Legal Pages)"
 
 backend:
+  - task: "Edit Location & Delete Job Workflow"
+    implemented: true
+    working: true
+    file: "/app/backend/server.py"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+      - working: true
+        agent: "testing"
+        comment: "✅ EDIT LOCATION & DELETE JOB WORKFLOW COMPLETE - PERFECT SUCCESS! Tested the complete workflow as specified in review request with MongoDB Atlas (Cloud) empty database. COMPREHENSIVE TEST RESULTS: 1) ✅ Admin login with admin@test.de/Admin123! successful, 2) ✅ Authority registration (test-behoerde@test.de/TestPass123!) with 202 pending approval status, 3) ✅ Authority approval by admin successful, 4) ✅ Authority login after approval successful, 5) ✅ Test job creation with license plate 'B-TEST 123', location 'Alte Adresse' at coordinates (52.52, 13.405), 6) ✅ Job edit via PATCH /api/jobs/{job_id}/edit-data successfully updated license plate to 'B-EDIT 456', location to 'Neue Adresse, Berlin' at coordinates (52.53, 13.41), 7) ✅ Job deletion via DELETE /api/jobs/{job_id} successful, 8) ✅ Job deletion verification confirmed - GET /api/jobs/{job_id} returns 404 as expected. All workflow steps completed successfully with proper data validation and location coordinate updates. The edit-data endpoint correctly handles location changes and the delete endpoint properly removes jobs from the system."
+
   - task: "Admin Authentication with provided credentials"
     implemented: true
     working: true
