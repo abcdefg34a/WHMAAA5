@@ -1225,10 +1225,10 @@ class TowingManagementAPITester:
             
             # Check if results contain the search term in various fields
             for job in response[:3]:  # Check first 3 results
-                license_plate = job.get('license_plate', '').lower()
-                job_number = job.get('job_number', '').lower()
-                tow_reason = job.get('tow_reason', '').lower()
-                notes = job.get('notes', '').lower()
+                license_plate = (job.get('license_plate') or '').lower()
+                job_number = (job.get('job_number') or '').lower()
+                tow_reason = (job.get('tow_reason') or '').lower()
+                notes = (job.get('notes') or '').lower()
                 
                 contains_test = any('test' in field for field in [license_plate, job_number, tow_reason, notes])
                 if contains_test:
