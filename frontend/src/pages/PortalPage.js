@@ -41,6 +41,41 @@ export const PortalPage = () => {
   const [showRegisterPassword, setShowRegisterPassword] = useState(false);
   const [registerLoading, setRegisterLoading] = useState(false);
   const [registerError, setRegisterError] = useState('');
+  const [businessLicenseImage, setBusinessLicenseImage] = useState(null);
+  const businessLicenseInputRef = useRef(null);
+
+  // Handle business license photo upload
+  const handleBusinessLicenseUpload = (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+
+    // Check file size (max 5MB)
+    if (file.size > 5 * 1024 * 1024) {
+      toast.error('Datei zu groß. Maximal 5MB erlaubt.');
+      return;
+    }
+
+    // Check file type
+    if (!file.type.startsWith('image/')) {
+      toast.error('Bitte nur Bilddateien hochladen (JPG, PNG, etc.)');
+      return;
+    }
+
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      setBusinessLicenseImage(event.target.result);
+      setRegisterData(prev => ({...prev, business_license: event.target.result}));
+    };
+    reader.readAsDataURL(file);
+  };
+
+  const removeBusinessLicenseImage = () => {
+    setBusinessLicenseImage(null);
+    setRegisterData(prev => ({...prev, business_license: ''}));
+    if (businessLicenseInputRef.current) {
+      businessLicenseInputRef.current.value = '';
+    }
+  };
 
   const handleLogin = async (e) => {
     e.preventDefault();
