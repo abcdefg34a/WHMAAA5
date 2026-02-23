@@ -426,18 +426,51 @@ export const PortalPage = () => {
                         </div>
                       </div>
                       <div className="space-y-2">
-                        <Label htmlFor="business-license">
+                        <Label>
                           <FileText className="h-3 w-3 inline mr-1" />
-                          Gewerbenachweis-Nr. / Handelsregisternr.
+                          Gewerbenachweis (Foto)
                         </Label>
-                        <Input
-                          id="business-license"
-                          value={registerData.business_license}
-                          onChange={(e) => setRegisterData({...registerData, business_license: e.target.value})}
-                          placeholder="z.B. HRB 12345 oder Gewerbe-Nr. 123/456"
-                          required
+                        
+                        {/* Hidden file input */}
+                        <input
+                          type="file"
+                          ref={businessLicenseInputRef}
+                          onChange={handleBusinessLicenseUpload}
+                          accept="image/*"
+                          className="hidden"
                         />
-                        <p className="text-xs text-slate-500">Bitte geben Sie Ihre Handelsregister- oder Gewerbenummer ein</p>
+                        
+                        {!businessLicenseImage ? (
+                          <div 
+                            onClick={() => businessLicenseInputRef.current?.click()}
+                            className="border-2 border-dashed border-slate-300 rounded-lg p-6 text-center cursor-pointer hover:border-orange-400 hover:bg-orange-50 transition-colors"
+                          >
+                            <Upload className="h-8 w-8 mx-auto text-slate-400 mb-2" />
+                            <p className="text-sm font-medium text-slate-600">Gewerbenachweis hochladen</p>
+                            <p className="text-xs text-slate-500 mt-1">Klicken oder Foto hierher ziehen</p>
+                            <p className="text-xs text-slate-400 mt-1">JPG, PNG (max. 5MB)</p>
+                          </div>
+                        ) : (
+                          <div className="relative border rounded-lg overflow-hidden">
+                            <img 
+                              src={businessLicenseImage} 
+                              alt="Gewerbenachweis" 
+                              className="w-full h-40 object-cover"
+                            />
+                            <button
+                              type="button"
+                              onClick={removeBusinessLicenseImage}
+                              className="absolute top-2 right-2 bg-red-500 text-white p-1 rounded-full hover:bg-red-600"
+                            >
+                              <X className="h-4 w-4" />
+                            </button>
+                            <div className="absolute bottom-0 left-0 right-0 bg-green-500 text-white text-xs py-1 px-2 flex items-center gap-1">
+                              <Image className="h-3 w-3" />
+                              Gewerbenachweis hochgeladen
+                            </div>
+                          </div>
+                        )}
+                        <p className="text-xs text-slate-500">Bitte laden Sie ein Foto Ihres Gewerbescheins oder Handelsregisterauszugs hoch</p>
                       </div>
                     </>
                   )}
