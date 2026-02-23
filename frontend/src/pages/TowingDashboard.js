@@ -54,6 +54,39 @@ const MapClickHandler = ({ onMapClick }) => {
   return null;
 };
 
+// Image compression utility function
+const compressImage = (file, maxWidth = 1200, quality = 0.7) => {
+  return new Promise((resolve) => {
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      const img = new window.Image();
+      img.onload = () => {
+        const canvas = document.createElement('canvas');
+        let width = img.width;
+        let height = img.height;
+
+        // Calculate new dimensions
+        if (width > maxWidth) {
+          height = Math.round((height * maxWidth) / width);
+          width = maxWidth;
+        }
+
+        canvas.width = width;
+        canvas.height = height;
+
+        const ctx = canvas.getContext('2d');
+        ctx.drawImage(img, 0, 0, width, height);
+
+        // Convert to compressed JPEG
+        const compressedDataUrl = canvas.toDataURL('image/jpeg', quality);
+        resolve(compressedDataUrl);
+      };
+      img.src = event.target.result;
+    };
+    reader.readAsDataURL(file);
+  });
+};
+
 export const TowingDashboard = () => {
   const { user, logout, updateUser } = useAuth();
   const [activeTab, setActiveTab] = useState('incoming');
