@@ -1530,9 +1530,33 @@ export const TowingDashboard = () => {
                 </DialogDescription>
               </DialogHeader>
 
-              {/* Edit Button - only show if job is not released */}
+              {/* Edit & Delete Buttons - only show if job is not released */}
               {selectedJob.status !== 'released' && (
-                <div className="flex justify-end -mt-2">
+                <div className="flex justify-between items-center -mt-2">
+                  {/* Delete button - only for early stages */}
+                  {['pending', 'assigned', 'on_site'].includes(selectedJob.status) && (
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={handleDeleteJob}
+                      disabled={deletingJob}
+                      className="text-red-600 border-red-200 hover:bg-red-50"
+                    >
+                      {deletingJob ? (
+                        <>
+                          <div className="loading-spinner mr-2"></div>
+                          Löscht...
+                        </>
+                      ) : (
+                        <>
+                          <X className="h-4 w-4 mr-2" />
+                          Auftrag löschen
+                        </>
+                      )}
+                    </Button>
+                  )}
+                  {!['pending', 'assigned', 'on_site'].includes(selectedJob.status) && <div />}
+                  
                   <Button
                     variant="outline"
                     size="sm"
