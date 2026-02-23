@@ -708,8 +708,16 @@ export const TowingDashboard = () => {
       vin: job.vin || '',
       tow_reason: job.tow_reason || '',
       notes: job.notes || '',
-      location_address: job.location_address || ''
+      location_address: job.location_address || '',
+      location_lat: job.location_lat || null,
+      location_lng: job.location_lng || null
     });
+    // Set map position if coordinates exist
+    if (job.location_lat && job.location_lng) {
+      setEditJobPosition([job.location_lat, job.location_lng]);
+    } else {
+      setEditJobPosition(null);
+    }
     setEditJobDialogOpen(true);
   };
 
@@ -719,7 +727,14 @@ export const TowingDashboard = () => {
     
     setEditingJobData(true);
     try {
-      const response = await axios.patch(`${API}/jobs/${selectedJob.id}/edit-data`, editJobData);
+      // Include coordinates if position was changed
+      const dataToSend = {
+        ...editJobData,
+        location_lat: editJobPosition ? editJobPosition[0] : editJobData.location_lat,
+        location_lng: editJobPosition ? editJobPosition[1] : editJobData.location_lng
+      };
+      
+      const response = await axios.patch(`${API}/jobs/${selectedJob.id}/edit-data`, dataToSend);
       
       // Update local state
       setSelectedJob(response.data);
@@ -732,6 +747,32 @@ export const TowingDashboard = () => {
       toast.error(error.response?.data?.detail || 'Fehler beim Speichern der Daten');
     } finally {
       setEditingJobData(false);
+    }
+  };
+
+  // NEW: Delete job
+  const handleDeleteJob = async () => {
+    if (!selectedJob) return;
+    
+    if (!window.confirm(`Auftrag ${selectedJob.job_number} wirklich löschen? Diese Aktion kann nicht rückgängig gemacht werden.`)) {
+      return;
+    }
+    
+    setDeletingJob(true);
+    try {
+      await axios.delete(`${API}/jobs/${selectedJob.id}`);
+      
+      // Remove from local state
+      setJobs(jobs.filter(j => j.id !== selectedJob.id));
+      setSelectedJob(null);
+      setJobDetailOpen(false);
+      
+      toast.success(`Auftrag ${selectedJob.job_number} wurde gelöscht`);
+    } catch (error) {
+      console.error('Error deleting job:', error);
+      toast.error(error.response?.data?.detail || 'Fehler beim Löschen des Auftrags');
+    } finally {
+      setDeletingJob(false);
     }
   };
 
