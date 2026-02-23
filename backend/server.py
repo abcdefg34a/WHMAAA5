@@ -1091,16 +1091,17 @@ async def forgot_password(data: PasswordResetRequest):
         "created_at": datetime.now(timezone.utc).isoformat()
     })
     
-    # TODO: Send email with reset link when AWS SES is configured
-    # For now, log the reset link (REMOVE IN PRODUCTION)
-    reset_link = f"/reset-password?token={reset_token}"
-    logger.info(f"Password reset link for {data.email}: {reset_link}")
-    print(f"\n{'='*50}")
-    print(f"PASSWORD RESET LINK (DEV ONLY)")
-    print(f"Email: {data.email}")
-    print(f"Token: {reset_token}")
-    print(f"Link: {reset_link}")
-    print(f"{'='*50}\n")
+    # Send password reset email via AWS SES
+    try:
+        email_service.send_password_reset_email(
+            to_email=user["email"],
+            reset_token=reset_token,
+            user_name=user.get("name", user["email"])
+        )
+        logger.info(f"Password reset email sent to {data.email}")
+    except Exception as e:
+        logger.error(f"Failed to send password reset email: {e}")
+        # Still return success to prevent email enumeration
     
     return {"message": "Falls ein Konto mit dieser E-Mail existiert, erhalten Sie einen Link zum Zurücksetzen."}
 
