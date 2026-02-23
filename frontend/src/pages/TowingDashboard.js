@@ -398,20 +398,25 @@ export const TowingDashboard = () => {
     }));
   };
 
-  // NEW: Handle new job photo upload
-  const handleNewJobPhotoUpload = (e) => {
+  // NEW: Handle new job photo upload with compression
+  const handleNewJobPhotoUpload = async (e) => {
     const files = Array.from(e.target.files);
     if (newJobPhotos.length + files.length > 5) {
       toast.error('Maximal 5 Fotos erlaubt');
       return;
     }
-    files.forEach(file => {
-      const reader = new FileReader();
-      reader.onloadend = () => {
-        setNewJobPhotos(prev => [...prev, reader.result]);
-      };
-      reader.readAsDataURL(file);
-    });
+    
+    toast.info('Fotos werden komprimiert...');
+    
+    for (const file of files) {
+      try {
+        const compressedImage = await compressImage(file, 1200, 0.7);
+        setNewJobPhotos(prev => [...prev, compressedImage]);
+      } catch (error) {
+        console.error('Compression error:', error);
+      }
+    }
+    toast.success('Fotos komprimiert und hinzugefügt');
   };
 
   // NEW: Remove photo from new job
