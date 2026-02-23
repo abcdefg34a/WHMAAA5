@@ -101,6 +101,7 @@ export const PortalPage = () => {
         payload.company_name = registerData.company_name;
         payload.address = registerData.address;
         payload.phone = registerData.phone;
+        payload.business_license = registerData.business_license;
       }
 
       await axios.post(`${API_URL}/api/auth/register`, payload);
