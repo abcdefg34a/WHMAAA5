@@ -1,11 +1,12 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useAuth } from '../contexts/AuthContext';
+import { useDeltaPolling } from '../hooks/useDeltaPolling';
 import axios from 'axios';
-import { 
+import {
   Car, MapPin, Camera, LogOut, FileText, Copy, CheckCircle,
   Clock, Truck, Phone, Building2, Download, X, Settings, Euro,
   Filter, CheckSquare, Square, ChevronDown, Calendar, Plus, Search,
-  Edit, Save
+  Edit, Save, Undo2
 } from 'lucide-react';
 import { Button } from '../components/ui/button';
 import { Input } from '../components/ui/input';
@@ -90,7 +91,8 @@ const compressImage = (file, maxWidth = 1200, quality = 0.7) => {
 export const TowingDashboard = () => {
   const { user, logout, updateUser } = useAuth();
   const [activeTab, setActiveTab] = useState('incoming');
-  const [jobs, setJobs] = useState([]);
+  const [initialJobs, setInitialJobs] = useState([]);
+  const { jobs, setJobs } = useDeltaPolling(initialJobs, user?.role);
   const [loading, setLoading] = useState(true);
   const [selectedJob, setSelectedJob] = useState(null);
   const [jobDetailOpen, setJobDetailOpen] = useState(false);
@@ -247,7 +249,7 @@ export const TowingDashboard = () => {
       if (filterDateTo) {
         params.append('date_to', filterDateTo);
       }
-      
+
       const countParams = new URLSearchParams();
       if (filterStatus && filterStatus !== 'all') {
         countParams.append('status', filterStatus);
@@ -258,12 +260,12 @@ export const TowingDashboard = () => {
       if (filterDateTo) {
         countParams.append('date_to', filterDateTo);
       }
-      
+
       const [jobsRes, countRes] = await Promise.all([
         axios.get(`${API}/jobs?${params.toString()}`),
         axios.get(`${API}/jobs/count/total?${countParams.toString()}`)
       ]);
-      setJobs(jobsRes.data);
+      setInitialJobs(jobsRes.data);
       setTotalJobs(countRes.data.total);
     } catch (error) {
       console.error('Error fetching jobs:', error);
@@ -279,8 +281,8 @@ export const TowingDashboard = () => {
   // Bulk selection handlers
   const toggleJobSelection = (jobId, event) => {
     event.stopPropagation();
-    setSelectedJobIds(prev => 
-      prev.includes(jobId) 
+    setSelectedJobIds(prev =>
+      prev.includes(jobId)
         ? prev.filter(id => id !== jobId)
         : [...prev, jobId]
     );
@@ -298,7 +300,7 @@ export const TowingDashboard = () => {
 
   const handleBulkStatusUpdate = async (newStatus) => {
     if (selectedJobIds.length === 0) return;
-    
+
     setBulkUpdating(true);
     try {
       const response = await axios.post(`${API}/jobs/bulk-update-status`, {
@@ -405,9 +407,9 @@ export const TowingDashboard = () => {
       toast.error('Maximal 5 Fotos erlaubt');
       return;
     }
-    
+
     toast.info('Fotos werden komprimiert...');
-    
+
     for (const file of files) {
       try {
         const compressedImage = await compressImage(file, 1200, 0.7);
@@ -431,8 +433,8 @@ export const TowingDashboard = () => {
       toast.error('Bitte wählen Sie eine Behörde aus');
       return;
     }
-    if (!newJobData.license_plate) {
-      toast.error('Bitte geben Sie ein Kennzeichen ein');
+    if (!newJobData.license_plate && !newJobData.vin) {
+      toast.error('Bitte geben Sie ein Kennzeichen oder eine FIN ein');
       return;
     }
     if (!newJobData.tow_reason) {
@@ -452,7 +454,13 @@ export const TowingDashboard = () => {
         estimated_vehicle_value: newJobData.estimated_vehicle_value ? parseFloat(newJobData.estimated_vehicle_value) : null
       };
 
-      await axios.post(`${API}/jobs`, payload);
+      const idempotencyKey = crypto.randomUUID(); // Build-in browser capability
+
+      await axios.post(`${API}/jobs`, payload, {
+        headers: {
+          'Idempotency-Key': idempotencyKey
+        }
+      });
       toast.success('Auftrag erfolgreich erstellt!');
       setCreateJobDialogOpen(false);
       fetchJobs();
@@ -503,7 +511,7 @@ export const TowingDashboard = () => {
       }
 
       // Update job with empty trip data
-      await axios.patch(`${API}/jobs/${selectedJob.id}`, { 
+      await axios.patch(`${API}/jobs/${selectedJob.id}`, {
         status: 'released',
         is_empty_trip: true,
         service_notes: serviceNotes,
@@ -515,9 +523,10 @@ export const TowingDashboard = () => {
       });
 
       toast.success('Leerfahrt erfasst!');
-      
+
       // Generate and download PDF
-      const pdfResponse = await axios.get(`${API}/jobs/${selectedJob.id}/pdf`, {
+      const tokenRes = await axios.get(`${API}/jobs/${selectedJob.id}/pdf/token`);
+      const pdfResponse = await axios.get(`${API}/jobs/${selectedJob.id}/pdf?token=${tokenRes.data.token}`, {
         responseType: 'blob'
       });
       const url = window.URL.createObjectURL(new Blob([pdfResponse.data]));
@@ -591,14 +600,26 @@ export const TowingDashboard = () => {
     setCompanyInfoDialogOpen(true);
   };
 
-  // NEW: Get current location for yard
+  // NEW: Get current location for yard and reverse geocode
   const handleGetYardLocation = () => {
     if (navigator.geolocation) {
       navigator.geolocation.getCurrentPosition(
-        (pos) => {
+        async (pos) => {
           setCompanyYardLat(pos.coords.latitude);
           setCompanyYardLng(pos.coords.longitude);
-          toast.success('Hof-Standort erfasst!');
+
+          try {
+            const geocodeRes = await axios.get(`https://nominatim.openstreetmap.org/reverse?format=json&lat=${pos.coords.latitude}&lon=${pos.coords.longitude}`);
+            if (geocodeRes.data && geocodeRes.data.display_name) {
+              setCompanyYardAddress(geocodeRes.data.display_name);
+              toast.success('Standort & Adresse erfasst!');
+            } else {
+              toast.success('Hof-Standort erfasst!');
+            }
+          } catch (e) {
+            console.error("Reverse geocoding error:", e);
+            toast.success('Hof-Standort erfasst (Adresse konnte nicht ermittelt werden)');
+          }
         },
         (error) => {
           toast.error('Standort konnte nicht ermittelt werden');
@@ -655,11 +676,11 @@ export const TowingDashboard = () => {
       if (servicePhotos && servicePhotos.length > 0) {
         updateData.service_photos = servicePhotos;
       }
-      
+
       await axios.patch(`${API}/jobs/${jobId}`, updateData);
       toast.success('Status aktualisiert');
       fetchJobs();
-      
+
       if (selectedJob?.id === jobId) {
         const response = await axios.get(`${API}/jobs/${jobId}`);
         setSelectedJob(response.data);
@@ -673,7 +694,7 @@ export const TowingDashboard = () => {
 
   const handleReleaseVehicle = async () => {
     if (!selectedJob) return;
-    
+
     if (!ownerFirstName || !ownerLastName || !paymentAmount) {
       toast.error('Bitte füllen Sie alle Pflichtfelder aus');
       return;
@@ -688,13 +709,13 @@ export const TowingDashboard = () => {
         payment_method: paymentMethod,
         payment_amount: parseFloat(paymentAmount)
       });
-      
+
       toast.success('Fahrzeug als abgeholt markiert');
       setReleaseDialogOpen(false);
       setJobDetailOpen(false);
       resetReleaseForm();
       fetchJobs();
-      
+
       // Download PDF
       downloadPDF(selectedJob.id, selectedJob.job_number);
     } catch (error) {
@@ -713,7 +734,7 @@ export const TowingDashboard = () => {
   const handlePhotoUpload = async (e) => {
     const files = Array.from(e.target.files);
     toast.info('Fotos werden komprimiert...');
-    
+
     for (const file of files) {
       try {
         const compressedImage = await compressImage(file, 1200, 0.7);
@@ -776,7 +797,7 @@ export const TowingDashboard = () => {
   // NEW: Save edited job data
   const handleSaveJobData = async () => {
     if (!selectedJob) return;
-    
+
     setEditingJobData(true);
     try {
       // Include coordinates if position was changed
@@ -785,13 +806,13 @@ export const TowingDashboard = () => {
         location_lat: editJobPosition ? editJobPosition[0] : editJobData.location_lat,
         location_lng: editJobPosition ? editJobPosition[1] : editJobData.location_lng
       };
-      
+
       const response = await axios.patch(`${API}/jobs/${selectedJob.id}/edit-data`, dataToSend);
-      
+
       // Update local state
       setSelectedJob(response.data);
       setJobs(jobs.map(j => j.id === selectedJob.id ? response.data : j));
-      
+
       toast.success('Daten erfolgreich aktualisiert');
       setEditJobDialogOpen(false);
     } catch (error) {
@@ -805,20 +826,20 @@ export const TowingDashboard = () => {
   // NEW: Delete job
   const handleDeleteJob = async () => {
     if (!selectedJob) return;
-    
+
     if (!window.confirm(`Auftrag ${selectedJob.job_number} wirklich löschen? Diese Aktion kann nicht rückgängig gemacht werden.`)) {
       return;
     }
-    
+
     setDeletingJob(true);
     try {
       await axios.delete(`${API}/jobs/${selectedJob.id}`);
-      
+
       // Remove from local state
       setJobs(jobs.filter(j => j.id !== selectedJob.id));
       setSelectedJob(null);
       setJobDetailOpen(false);
-      
+
       toast.success(`Auftrag ${selectedJob.job_number} wurde gelöscht`);
     } catch (error) {
       console.error('Error deleting job:', error);
@@ -867,7 +888,8 @@ export const TowingDashboard = () => {
 
   const downloadPDF = async (jobId, jobNumber) => {
     try {
-      const response = await axios.get(`${API}/jobs/${jobId}/pdf`, {
+      const tokenRes = await axios.get(`${API}/jobs/${jobId}/pdf/token`);
+      const response = await axios.get(`${API}/jobs/${jobId}/pdf?token=${tokenRes.data.token}`, {
         responseType: 'blob'
       });
       const url = window.URL.createObjectURL(new Blob([response.data]));
@@ -899,10 +921,10 @@ export const TowingDashboard = () => {
                 <p className="text-xs text-slate-500">{user?.company_name}</p>
               </div>
             </div>
-            
+
             <div className="flex items-center gap-3">
               {/* Service Code */}
-              <div 
+              <div
                 className="hidden md:flex items-center gap-2 bg-slate-100 px-3 py-2 rounded-lg cursor-pointer"
                 onClick={copyServiceCode}
               >
@@ -936,7 +958,7 @@ export const TowingDashboard = () => {
               >
                 <Building2 className="h-4 w-4" />
               </Button>
-              
+
               <Button
                 data-testid="logout-btn"
                 variant="outline"
@@ -1028,7 +1050,7 @@ export const TowingDashboard = () => {
                   </p>
                 </div>
               </div>
-              <Button 
+              <Button
                 className="bg-green-600 hover:bg-green-700 text-white"
                 onClick={openCreateJobDialog}
               >
@@ -1054,7 +1076,7 @@ export const TowingDashboard = () => {
                   <span className="bg-orange-500 text-white text-xs px-1.5 py-0.5 rounded-full">!</span>
                 )}
               </Button>
-              
+
               {hasActiveFilters && (
                 <Button variant="ghost" size="sm" onClick={clearFilters}>
                   Filter zurücksetzen
@@ -1201,69 +1223,68 @@ export const TowingDashboard = () => {
                 </div>
                 <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-4">
                   {filterJobs('incoming').map(job => (
-                    <Card 
-                      key={job.id} 
-                      className={`cursor-pointer hover:shadow-lg transition-shadow relative ${
-                        selectedJobIds.includes(job.id) ? 'ring-2 ring-blue-500 bg-blue-50' : ''
-                      }`}
+                    <Card
+                      key={job.id}
+                      className={`cursor-pointer hover:shadow-lg transition-shadow relative ${selectedJobIds.includes(job.id) ? 'ring-2 ring-blue-500 bg-blue-50' : ''
+                        }`}
                       onClick={() => openJobDetail(job)}
-                  >
-                    {/* Checkbox */}
-                    <button
-                      className="absolute top-2 right-2 z-10 p-1 rounded hover:bg-slate-100"
-                      onClick={(e) => toggleJobSelection(job.id, e)}
                     >
-                      {selectedJobIds.includes(job.id) ? (
-                        <CheckSquare className="h-5 w-5 text-blue-600" />
-                      ) : (
-                        <Square className="h-5 w-5 text-slate-400" />
-                      )}
-                    </button>
-                    <CardContent className="p-4 pr-10">
-                      <div className="flex justify-between items-start mb-3">
-                        <div>
-                          <p className="job-license-plate">{job.license_plate}</p>
-                          <p className="text-xs text-slate-500">{job.job_number}</p>
+                      {/* Checkbox */}
+                      <button
+                        className="absolute top-2 right-2 z-10 p-1 rounded hover:bg-slate-100"
+                        onClick={(e) => toggleJobSelection(job.id, e)}
+                      >
+                        {selectedJobIds.includes(job.id) ? (
+                          <CheckSquare className="h-5 w-5 text-blue-600" />
+                        ) : (
+                          <Square className="h-5 w-5 text-slate-400" />
+                        )}
+                      </button>
+                      <CardContent className="p-4 pr-10">
+                        <div className="flex justify-between items-start mb-3">
+                          <div>
+                            <p className="job-license-plate">{job.license_plate}</p>
+                            <p className="text-xs text-slate-500">{job.job_number}</p>
+                          </div>
+                          {getStatusBadge(job.status, job.is_empty_trip)}
                         </div>
-                        {getStatusBadge(job.status, job.is_empty_trip)}
-                      </div>
-                      <div className="space-y-2 text-sm">
-                        <div className="flex items-center gap-2 text-slate-600">
-                          <MapPin className="h-4 w-4 flex-shrink-0" />
-                          <span className="truncate">{job.location_address}</span>
+                        <div className="space-y-2 text-sm">
+                          <div className="flex items-center gap-2 text-slate-600">
+                            <MapPin className="h-4 w-4 flex-shrink-0" />
+                            <span className="truncate">{job.location_address}</span>
+                          </div>
+                          <div className="flex items-center gap-2 text-slate-600">
+                            <Clock className="h-4 w-4" />
+                            <span>{new Date(job.created_at).toLocaleString('de-DE')}</span>
+                          </div>
                         </div>
-                        <div className="flex items-center gap-2 text-slate-600">
-                          <Clock className="h-4 w-4" />
-                          <span>{new Date(job.created_at).toLocaleString('de-DE')}</span>
-                        </div>
-                      </div>
-                      <p className="mt-2 text-sm font-medium text-orange-600">
-                        {job.tow_reason}
-                      </p>
-                      {/* Show job type and sicherstellung details */}
-                      {job.job_type === 'sicherstellung' && (
-                        <div className="mt-2 p-2 bg-amber-50 border border-amber-200 rounded text-xs">
-                          <span className="font-semibold text-amber-800">Sicherstellung</span>
-                          {job.sicherstellung_reason && (
-                            <span className="text-amber-700"> • {
-                              {
-                                'betriebsmittel': 'Betriebsmittel',
-                                'gestohlen': 'Gestohlen/Fahndung',
-                                'eigentumssicherung': 'Eigentumssicherung',
-                                'technische_maengel': 'Techn. Mängel',
-                                'strafrechtlich': 'Strafrechtlich'
-                              }[job.sicherstellung_reason] || job.sicherstellung_reason
-                            }</span>
-                          )}
-                          {job.vehicle_category === 'over_3_5t' && (
-                            <span className="text-amber-700"> • ab 3,5t</span>
-                          )}
-                        </div>
-                      )}
-                    </CardContent>
-                  </Card>
-                ))}
-              </div>
+                        <p className="mt-2 text-sm font-medium text-orange-600">
+                          {job.tow_reason}
+                        </p>
+                        {/* Show job type and sicherstellung details */}
+                        {job.job_type === 'sicherstellung' && (
+                          <div className="mt-2 p-2 bg-amber-50 border border-amber-200 rounded text-xs">
+                            <span className="font-semibold text-amber-800">Sicherstellung</span>
+                            {job.sicherstellung_reason && (
+                              <span className="text-amber-700"> • {
+                                {
+                                  'betriebsmittel': 'Betriebsmittel',
+                                  'gestohlen': 'Gestohlen/Fahndung',
+                                  'eigentumssicherung': 'Eigentumssicherung',
+                                  'technische_maengel': 'Techn. Mängel',
+                                  'strafrechtlich': 'Strafrechtlich'
+                                }[job.sicherstellung_reason] || job.sicherstellung_reason
+                              }</span>
+                            )}
+                            {job.vehicle_category === 'over_3_5t' && (
+                              <span className="text-amber-700"> • ab 3,5t</span>
+                            )}
+                          </div>
+                        )}
+                      </CardContent>
+                    </Card>
+                  ))}
+                </div>
               </>
             )}
           </TabsContent>
@@ -1294,11 +1315,10 @@ export const TowingDashboard = () => {
                 </div>
                 <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-4">
                   {filterJobs('in_yard').map(job => (
-                    <Card 
-                      key={job.id} 
-                      className={`cursor-pointer hover:shadow-lg transition-shadow relative ${
-                        selectedJobIds.includes(job.id) ? 'ring-2 ring-blue-500 bg-blue-50' : ''
-                      }`}
+                    <Card
+                      key={job.id}
+                      className={`cursor-pointer hover:shadow-lg transition-shadow relative ${selectedJobIds.includes(job.id) ? 'ring-2 ring-blue-500 bg-blue-50' : ''
+                        }`}
                       onClick={() => openJobDetail(job)}
                     >
                       {/* Checkbox */}
@@ -1371,10 +1391,10 @@ export const TowingDashboard = () => {
             )}
           </TabsContent>
         </Tabs>
-        
+
         {/* Pagination */}
         {!loading && jobs.length > 0 && (
-          <Pagination 
+          <Pagination
             currentPage={currentPage}
             totalPages={Math.ceil(totalJobs / itemsPerPage)}
             totalItems={totalJobs}
@@ -1415,7 +1435,7 @@ export const TowingDashboard = () => {
                   <div className="w-11 h-6 bg-slate-200 peer-focus:outline-none peer-focus:ring-2 peer-focus:ring-blue-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600"></div>
                 </label>
               </div>
-              
+
               {timeBasedEnabled && (
                 <div className="grid grid-cols-2 gap-4 p-4 bg-blue-50 rounded-lg">
                   <div className="space-y-2">
@@ -1541,8 +1561,8 @@ export const TowingDashboard = () => {
             <div className="bg-slate-50 rounded-lg p-4">
               <p className="text-sm font-medium text-slate-700">Beispielrechnung (Standard)</p>
               <p className="text-sm text-slate-600 mt-1">
-                Fahrzeug 3 Tage im Hof: {parseFloat(towCost || 0).toFixed(2)} € + (3 × {parseFloat(dailyCost || 0).toFixed(2)} €) 
-                {processingFee ? ` + ${parseFloat(processingFee).toFixed(2)} € Bearbeitung` : ''} 
+                Fahrzeug 3 Tage im Hof: {parseFloat(towCost || 0).toFixed(2)} € + (3 × {parseFloat(dailyCost || 0).toFixed(2)} €)
+                {processingFee ? ` + ${parseFloat(processingFee).toFixed(2)} € Bearbeitung` : ''}
                 = <span className="font-bold">{(parseFloat(towCost || 0) + 3 * parseFloat(dailyCost || 0) + parseFloat(processingFee || 0)).toFixed(2)} €</span>
               </p>
             </div>
@@ -1608,7 +1628,7 @@ export const TowingDashboard = () => {
                     </Button>
                   )}
                   {!['pending', 'assigned', 'on_site'].includes(selectedJob.status) && <div />}
-                  
+
                   <Button
                     variant="outline"
                     size="sm"
@@ -1643,7 +1663,7 @@ export const TowingDashboard = () => {
                         <Label className="text-amber-700">Fahrzeugkategorie</Label>
                         <p className="font-medium">{
                           selectedJob.vehicle_category === 'under_3_5t' ? 'PKW/Krad bis 3,5t' :
-                          selectedJob.vehicle_category === 'over_3_5t' ? 'Fahrzeuge ab 3,5t' : '-'
+                            selectedJob.vehicle_category === 'over_3_5t' ? 'Fahrzeuge ab 3,5t' : '-'
                         }</p>
                       </div>
                       {selectedJob.ordering_authority && (
@@ -1690,7 +1710,20 @@ export const TowingDashboard = () => {
                       url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
                     />
                     <Marker position={[selectedJob.location_lat, selectedJob.location_lng]}>
-                      <Popup>{selectedJob.location_address}</Popup>
+                      <Popup>
+                        {(() => {
+                          let addr = selectedJob.location_address || '';
+                          // If it starts with coordinates like "52.379462, 9.724245 - Real Address"
+                          if (/^\s*[-+]?\d{1,2}\.\d+,\s*[-+]?\d{1,3}\.\d+\s*[-|:]\s*/.test(addr)) {
+                            addr = addr.replace(/^\s*[-+]?\d{1,2}\.\d+,\s*[-+]?\d{1,3}\.\d+\s*[-|:]\s*/, '').trim();
+                          }
+                          // If it's ONLY coordinates like "52.379462, 9.724245"
+                          else if (/^\s*[-+]?\d{1,2}\.\d+,\s*[-+]?\d{1,3}\.\d+\s*$/.test(addr)) {
+                            addr = "Keine genaue Adresse verfügbar";
+                          }
+                          return addr;
+                        })()}
+                      </Popup>
                     </Marker>
                   </MapContainer>
                 </div>
@@ -1739,33 +1772,47 @@ export const TowingDashboard = () => {
                         </p>
                       </div>
                     </div>
-                    <div className="flex items-center gap-3">
-                      <div className={`w-3 h-3 rounded-full ${selectedJob.towed_at ? 'bg-green-500' : 'bg-slate-300'}`}></div>
-                      <div className="flex-1">
-                        <p className="text-sm font-medium">3. Abgeschleppt</p>
-                        <p className="text-sm text-slate-500">
-                          {selectedJob.towed_at ? new Date(selectedJob.towed_at).toLocaleString('de-DE') : '-'}
-                        </p>
+                    {selectedJob.is_empty_trip ? (
+                      <div className="flex items-center gap-3">
+                        <div className={`w-3 h-3 rounded-full ${selectedJob.status === 'empty_trip' || selectedJob.status === 'released' ? 'bg-orange-500' : 'bg-slate-300'}`}></div>
+                        <div className="flex-1">
+                          <p className="text-sm font-medium">3. Leerfahrt verzeichnet</p>
+                          <p className="text-sm text-slate-500">
+                            {selectedJob.updated_at ? new Date(selectedJob.updated_at).toLocaleString('de-DE') : '-'}
+                          </p>
+                        </div>
                       </div>
-                    </div>
-                    <div className="flex items-center gap-3">
-                      <div className={`w-3 h-3 rounded-full ${selectedJob.in_yard_at ? 'bg-green-500' : 'bg-slate-300'}`}></div>
-                      <div className="flex-1">
-                        <p className="text-sm font-medium">4. Im Hof eingetroffen</p>
-                        <p className="text-sm text-slate-500">
-                          {selectedJob.in_yard_at ? new Date(selectedJob.in_yard_at).toLocaleString('de-DE') : '-'}
-                        </p>
-                      </div>
-                    </div>
-                    <div className="flex items-center gap-3">
-                      <div className={`w-3 h-3 rounded-full ${selectedJob.released_at ? 'bg-green-500' : 'bg-slate-300'}`}></div>
-                      <div className="flex-1">
-                        <p className="text-sm font-medium">5. Fahrzeug abgeholt</p>
-                        <p className="text-sm text-slate-500">
-                          {selectedJob.released_at ? new Date(selectedJob.released_at).toLocaleString('de-DE') : '-'}
-                        </p>
-                      </div>
-                    </div>
+                    ) : (
+                      <>
+                        <div className="flex items-center gap-3">
+                          <div className={`w-3 h-3 rounded-full ${selectedJob.towed_at ? 'bg-green-500' : 'bg-slate-300'}`}></div>
+                          <div className="flex-1">
+                            <p className="text-sm font-medium">3. Abgeschleppt</p>
+                            <p className="text-sm text-slate-500">
+                              {selectedJob.towed_at ? new Date(selectedJob.towed_at).toLocaleString('de-DE') : '-'}
+                            </p>
+                          </div>
+                        </div>
+                        <div className="flex items-center gap-3">
+                          <div className={`w-3 h-3 rounded-full ${selectedJob.in_yard_at ? 'bg-green-500' : 'bg-slate-300'}`}></div>
+                          <div className="flex-1">
+                            <p className="text-sm font-medium">4. Im Hof eingetroffen</p>
+                            <p className="text-sm text-slate-500">
+                              {selectedJob.in_yard_at ? new Date(selectedJob.in_yard_at).toLocaleString('de-DE') : '-'}
+                            </p>
+                          </div>
+                        </div>
+                        <div className="flex items-center gap-3">
+                          <div className={`w-3 h-3 rounded-full ${selectedJob.released_at ? 'bg-green-500' : 'bg-slate-300'}`}></div>
+                          <div className="flex-1">
+                            <p className="text-sm font-medium">5. Fahrzeug abgeholt</p>
+                            <p className="text-sm text-slate-500">
+                              {selectedJob.released_at ? new Date(selectedJob.released_at).toLocaleString('de-DE') : '-'}
+                            </p>
+                          </div>
+                        </div>
+                      </>
+                    )}
                   </div>
                 </div>
 
@@ -1775,14 +1822,14 @@ export const TowingDashboard = () => {
                     <Label className="text-slate-500 mb-2 block">Fotos der Behörde ({selectedJob.photos.length})</Label>
                     <div className="grid grid-cols-4 gap-2">
                       {selectedJob.photos.map((photo, idx) => (
-                        <div 
-                          key={idx} 
+                        <div
+                          key={idx}
                           className="relative aspect-square cursor-pointer hover:opacity-80 transition-opacity rounded-lg overflow-hidden border-2 border-slate-200 hover:border-orange-500"
                           onClick={() => openLightbox(selectedJob.photos, idx)}
                         >
-                          <img 
-                            src={photo} 
-                            alt={`Foto ${idx + 1}`} 
+                          <img
+                            src={photo}
+                            alt={`Foto ${idx + 1}`}
                             className="w-full h-full object-cover"
                           />
                           <div className="absolute inset-0 flex items-center justify-center bg-black/0 hover:bg-black/30 transition-colors">
@@ -1857,6 +1904,15 @@ export const TowingDashboard = () => {
                     {selectedJob.status === 'on_site' && (
                       <div className="flex gap-2">
                         <Button
+                          data-testid="status-stepback-btn"
+                          variant="outline"
+                          onClick={() => handleStatusUpdate(selectedJob.id, 'assigned')}
+                          className="text-slate-600 hover:text-slate-800"
+                        >
+                          <Undo2 className="h-4 w-4 mr-2" />
+                          Zurück
+                        </Button>
+                        <Button
                           data-testid="status-towed-btn"
                           onClick={() => handleStatusUpdate(selectedJob.id, 'towed')}
                           className="bg-red-500 hover:bg-red-600"
@@ -1876,33 +1932,55 @@ export const TowingDashboard = () => {
                       </div>
                     )}
                     {selectedJob.status === 'towed' && (
-                      <Button
-                        data-testid="status-in-yard-btn"
-                        onClick={() => handleStatusUpdate(selectedJob.id, 'in_yard')}
-                        className="bg-yellow-500 hover:bg-yellow-600"
-                      >
-                        <Building2 className="h-4 w-4 mr-2" />
-                        Im Hof angekommen
-                      </Button>
+                      <div className="flex gap-2">
+                        <Button
+                          data-testid="status-stepback-btn"
+                          variant="outline"
+                          onClick={() => handleStatusUpdate(selectedJob.id, 'on_site')}
+                          className="text-slate-600 hover:text-slate-800"
+                        >
+                          <Undo2 className="h-4 w-4 mr-2" />
+                          Zurück
+                        </Button>
+                        <Button
+                          data-testid="status-in-yard-btn"
+                          onClick={() => handleStatusUpdate(selectedJob.id, 'in_yard')}
+                          className="bg-yellow-500 hover:bg-yellow-600"
+                        >
+                          <Building2 className="h-4 w-4 mr-2" />
+                          Im Hof angekommen
+                        </Button>
+                      </div>
                     )}
                     {selectedJob.status === 'in_yard' && (
-                      <Button
-                        data-testid="status-release-btn"
-                        onClick={() => {
-                          setReleaseDialogOpen(true);
-                          fetchCalculatedCosts(selectedJob.id);
-                        }}
-                        className="bg-green-500 hover:bg-green-600"
-                      >
-                        <CheckCircle className="h-4 w-4 mr-2" />
-                        Fahrzeug freigeben
-                      </Button>
+                      <div className="flex gap-2">
+                        <Button
+                          data-testid="status-stepback-btn"
+                          variant="outline"
+                          onClick={() => handleStatusUpdate(selectedJob.id, 'towed')}
+                          className="text-slate-600 hover:text-slate-800"
+                        >
+                          <Undo2 className="h-4 w-4 mr-2" />
+                          Zurück
+                        </Button>
+                        <Button
+                          data-testid="status-release-btn"
+                          onClick={() => {
+                            setReleaseDialogOpen(true);
+                            fetchCalculatedCosts(selectedJob.id);
+                          }}
+                          className="bg-green-500 hover:bg-green-600"
+                        >
+                          <CheckCircle className="h-4 w-4 mr-2" />
+                          Fahrzeug freigeben
+                        </Button>
+                      </div>
                     )}
                   </div>
                 </div>
 
                 <a
-                  href={`https://www.google.com/maps/dir/?api=1&destination=${selectedJob.location_lat},${selectedJob.location_lng}`}
+                  href={`https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(selectedJob.location_address || `${selectedJob.location_lat},${selectedJob.location_lng}`)}`}
                   target="_blank"
                   rel="noopener noreferrer"
                   className="inline-flex items-center gap-2 text-orange-600 hover:text-orange-700"
@@ -1982,7 +2060,7 @@ export const TowingDashboard = () => {
             {/* Price Calculation Section */}
             <div className="space-y-3 p-4 bg-slate-50 rounded-lg border">
               <Label className="font-semibold">Kostenberechnung</Label>
-              
+
               {/* Calculated Costs from Backend */}
               {loadingCosts ? (
                 <div className="flex justify-center py-4">
@@ -2023,7 +2101,7 @@ export const TowingDashboard = () => {
                   </div>
                 </div>
               ) : null}
-              
+
               <div className="flex gap-2 mt-3">
                 <Button
                   type="button"
@@ -2159,7 +2237,7 @@ export const TowingDashboard = () => {
             {/* Payment Section */}
             <div className="space-y-4 p-4 bg-orange-50 border border-orange-200 rounded-lg">
               <h4 className="font-medium text-orange-800">Leerfahrt-Kosten</h4>
-              
+
               {/* Show configured empty trip fee */}
               {user?.empty_trip_fee > 0 && (
                 <div className="flex justify-between items-center text-sm">
@@ -2307,7 +2385,7 @@ export const TowingDashboard = () => {
                 <MapPin className="h-4 w-4" />
                 Hof-Adresse (für Fahrzeugabholung)
               </h4>
-              
+
               <div className="space-y-2">
                 <Label htmlFor="companyYardAddress">Adresse</Label>
                 <Input
@@ -2397,9 +2475,9 @@ export const TowingDashboard = () => {
                     </CardTitle>
                   </CardHeader>
                   <CardContent>
-                    <Select 
-                      value={newJobData.for_authority_id} 
-                      onValueChange={(value) => setNewJobData(prev => ({...prev, for_authority_id: value}))}
+                    <Select
+                      value={newJobData.for_authority_id}
+                      onValueChange={(value) => setNewJobData(prev => ({ ...prev, for_authority_id: value }))}
                     >
                       <SelectTrigger>
                         <SelectValue placeholder="Behörde auswählen..." />
@@ -2434,7 +2512,7 @@ export const TowingDashboard = () => {
                             name="newJobType"
                             value="towing"
                             checked={newJobData.job_type === 'towing'}
-                            onChange={(e) => setNewJobData(prev => ({...prev, job_type: e.target.value}))}
+                            onChange={(e) => setNewJobData(prev => ({ ...prev, job_type: e.target.value }))}
                             className="w-4 h-4"
                           />
                           <div>
@@ -2448,7 +2526,7 @@ export const TowingDashboard = () => {
                             name="newJobType"
                             value="sicherstellung"
                             checked={newJobData.job_type === 'sicherstellung'}
-                            onChange={(e) => setNewJobData(prev => ({...prev, job_type: e.target.value}))}
+                            onChange={(e) => setNewJobData(prev => ({ ...prev, job_type: e.target.value }))}
                             className="w-4 h-4"
                           />
                           <div>
@@ -2463,11 +2541,11 @@ export const TowingDashboard = () => {
                     {newJobData.job_type === 'sicherstellung' && (
                       <div className="space-y-4 p-4 bg-amber-50 border border-amber-200 rounded-lg">
                         <h4 className="font-semibold text-amber-800">Sicherstellungs-Details</h4>
-                        
+
                         <div className="grid grid-cols-2 gap-4">
                           <div className="space-y-2">
                             <Label>Grund der Sicherstellung *</Label>
-                            <Select value={newJobData.sicherstellung_reason} onValueChange={(val) => setNewJobData(prev => ({...prev, sicherstellung_reason: val}))}>
+                            <Select value={newJobData.sicherstellung_reason} onValueChange={(val) => setNewJobData(prev => ({ ...prev, sicherstellung_reason: val }))}>
                               <SelectTrigger>
                                 <SelectValue placeholder="Grund auswählen" />
                               </SelectTrigger>
@@ -2483,7 +2561,7 @@ export const TowingDashboard = () => {
 
                           <div className="space-y-2">
                             <Label>Fahrzeugkategorie</Label>
-                            <Select value={newJobData.vehicle_category} onValueChange={(val) => setNewJobData(prev => ({...prev, vehicle_category: val}))}>
+                            <Select value={newJobData.vehicle_category} onValueChange={(val) => setNewJobData(prev => ({ ...prev, vehicle_category: val }))}>
                               <SelectTrigger>
                                 <SelectValue />
                               </SelectTrigger>
@@ -2496,7 +2574,7 @@ export const TowingDashboard = () => {
 
                           <div className="space-y-2">
                             <Label>Anordnende Stelle</Label>
-                            <Select value={newJobData.ordering_authority} onValueChange={(val) => setNewJobData(prev => ({...prev, ordering_authority: val}))}>
+                            <Select value={newJobData.ordering_authority} onValueChange={(val) => setNewJobData(prev => ({ ...prev, ordering_authority: val }))}>
                               <SelectTrigger>
                                 <SelectValue placeholder="Stelle auswählen" />
                               </SelectTrigger>
@@ -2514,7 +2592,7 @@ export const TowingDashboard = () => {
                             <Input
                               type="number"
                               value={newJobData.estimated_vehicle_value}
-                              onChange={(e) => setNewJobData(prev => ({...prev, estimated_vehicle_value: e.target.value}))}
+                              onChange={(e) => setNewJobData(prev => ({ ...prev, estimated_vehicle_value: e.target.value }))}
                               placeholder="z.B. 15000"
                             />
                           </div>
@@ -2526,7 +2604,7 @@ export const TowingDashboard = () => {
                               type="checkbox"
                               id="newContactAttempts"
                               checked={newJobData.contact_attempts}
-                              onChange={(e) => setNewJobData(prev => ({...prev, contact_attempts: e.target.checked}))}
+                              onChange={(e) => setNewJobData(prev => ({ ...prev, contact_attempts: e.target.checked }))}
                               className="w-4 h-4"
                             />
                             <Label htmlFor="newContactAttempts" className="cursor-pointer">
@@ -2536,7 +2614,7 @@ export const TowingDashboard = () => {
                           {newJobData.contact_attempts && (
                             <Textarea
                               value={newJobData.contact_attempts_notes}
-                              onChange={(e) => setNewJobData(prev => ({...prev, contact_attempts_notes: e.target.value}))}
+                              onChange={(e) => setNewJobData(prev => ({ ...prev, contact_attempts_notes: e.target.value }))}
                               placeholder="Dokumentation der Kontaktversuche..."
                               rows={2}
                               className="mt-2"
@@ -2547,11 +2625,11 @@ export const TowingDashboard = () => {
                     )}
 
                     <div className="space-y-2">
-                      <Label htmlFor="newLicensePlate">Kennzeichen *</Label>
+                      <Label htmlFor="newLicensePlate">Kennzeichen (oder FIN) *</Label>
                       <Input
                         id="newLicensePlate"
                         value={newJobData.license_plate}
-                        onChange={(e) => setNewJobData(prev => ({...prev, license_plate: e.target.value.toUpperCase()}))}
+                        onChange={(e) => setNewJobData(prev => ({ ...prev, license_plate: e.target.value.toUpperCase() }))}
                         placeholder="B-AB 1234"
                         className="license-plate-input text-xl uppercase"
                       />
@@ -2561,24 +2639,33 @@ export const TowingDashboard = () => {
                       <Input
                         id="newVin"
                         value={newJobData.vin}
-                        onChange={(e) => setNewJobData(prev => ({...prev, vin: e.target.value.toUpperCase()}))}
+                        onChange={(e) => setNewJobData(prev => ({ ...prev, vin: e.target.value.toUpperCase() }))}
                         placeholder="WVWZZZ3CZWE123456"
                         className="font-mono uppercase"
                       />
                     </div>
                     <div className="space-y-2">
                       <Label htmlFor="newTowReason">Abschleppgrund *</Label>
-                      <Select value={newJobData.tow_reason} onValueChange={(val) => setNewJobData(prev => ({...prev, tow_reason: val}))}>
+                      <Select value={newJobData.tow_reason} onValueChange={(val) => setNewJobData(prev => ({ ...prev, tow_reason: val }))}>
                         <SelectTrigger>
                           <SelectValue placeholder="Grund auswählen" />
                         </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="Parken im absoluten Halteverbot">Parken im absoluten Halteverbot</SelectItem>
+                        <SelectContent className="max-h-[300px]">
+                          <SelectItem value="Parken im Parkverbot">Parken im Parkverbot</SelectItem>
+                          <SelectItem value="Parken in Feuerwehrzufahrt">Parken in Feuerwehrzufahrt</SelectItem>
                           <SelectItem value="Parken auf Behindertenparkplatz">Parken auf Behindertenparkplatz</SelectItem>
-                          <SelectItem value="Parken auf Feuerwehrzufahrt">Parken auf Feuerwehrzufahrt</SelectItem>
-                          <SelectItem value="Parken auf Gehweg">Parken auf Gehweg</SelectItem>
-                          <SelectItem value="Unerlaubtes Parken">Unerlaubtes Parken</SelectItem>
-                          <SelectItem value="Verkehrsbehinderung">Verkehrsbehinderung</SelectItem>
+                          <SelectItem value="Zugeparkte Ausfahrt">Zugeparkte Ausfahrt</SelectItem>
+                          <SelectItem value="Gefährdendes Parken">Gefährdendes Parken</SelectItem>
+                          <SelectItem value="Fahrzeug ohne gültige Zulassung im öffentlichen Raum">Fahrzeug ohne gültige Zulassung im öffentlichen Raum</SelectItem>
+                          <SelectItem value="Fahrzeug ohne Kennzeichen">Fahrzeug ohne Kennzeichen</SelectItem>
+                          <SelectItem value="Blockieren einer Feuerwehrzufahrt">Blockieren einer Feuerwehrzufahrt</SelectItem>
+                          <SelectItem value="Blockieren von Rettungswegen">Blockieren von Rettungswegen</SelectItem>
+                          <SelectItem value="Blockieren von Notausfahrten">Blockieren von Notausfahrten</SelectItem>
+                          <SelectItem value="Parken im Sicherheitsbereich von Polizei- oder Feuerwehreinsätzen">Parken im Sicherheitsbereich von Polizei- oder Feuerwehreinsätzen</SelectItem>
+                          <SelectItem value="Parken auf einem E-Auto-Ladeplatz ohne Ladevorgang">Parken auf einem E-Auto-Ladeplatz ohne Ladevorgang</SelectItem>
+                          <SelectItem value="Parken auf einem Carsharing-Parkplatz ohne Berechtigung">Parken auf einem Carsharing-Parkplatz ohne Berechtigung</SelectItem>
+                          <SelectItem value="Parken auf einem Bewohnerparkplatz ohne gültigen Ausweis">Parken auf einem Bewohnerparkplatz ohne gültigen Ausweis</SelectItem>
+                          <SelectItem value="Öl Verlust">Öl Verlust</SelectItem>
                           <SelectItem value="Sonstiges">Sonstiges</SelectItem>
                         </SelectContent>
                       </Select>
@@ -2588,7 +2675,7 @@ export const TowingDashboard = () => {
                       <Textarea
                         id="newNotes"
                         value={newJobData.notes}
-                        onChange={(e) => setNewJobData(prev => ({...prev, notes: e.target.value}))}
+                        onChange={(e) => setNewJobData(prev => ({ ...prev, notes: e.target.value }))}
                         placeholder="Zusätzliche Informationen..."
                         rows={3}
                       />
@@ -2622,7 +2709,7 @@ export const TowingDashboard = () => {
                       <Input
                         id="newLocationAddress"
                         value={newJobData.location_address}
-                        onChange={(e) => setNewJobData(prev => ({...prev, location_address: e.target.value}))}
+                        onChange={(e) => setNewJobData(prev => ({ ...prev, location_address: e.target.value }))}
                         placeholder="Straße, Hausnummer, PLZ, Stadt"
                       />
                     </div>
@@ -2754,8 +2841,8 @@ export const TowingDashboard = () => {
             {/* Main Image */}
             <div className="flex items-center justify-center min-h-[60vh] p-4">
               {lightboxPhoto && (
-                <img 
-                  src={lightboxPhoto} 
+                <img
+                  src={lightboxPhoto}
                   alt={`Foto ${lightboxIndex + 1}`}
                   className="max-w-full max-h-[80vh] object-contain rounded-lg"
                 />
@@ -2790,9 +2877,8 @@ export const TowingDashboard = () => {
                       setLightboxIndex(idx);
                       setLightboxPhoto(photo);
                     }}
-                    className={`w-16 h-16 rounded overflow-hidden border-2 transition-colors ${
-                      idx === lightboxIndex ? 'border-orange-500' : 'border-transparent hover:border-white/50'
-                    }`}
+                    className={`w-16 h-16 rounded overflow-hidden border-2 transition-colors ${idx === lightboxIndex ? 'border-orange-500' : 'border-transparent hover:border-white/50'
+                      }`}
                   >
                     <img src={photo} alt="" className="w-full h-full object-cover" />
                   </button>
@@ -2821,7 +2907,7 @@ export const TowingDashboard = () => {
               <Input
                 id="edit-license-plate"
                 value={editJobData.license_plate}
-                onChange={(e) => setEditJobData(prev => ({...prev, license_plate: e.target.value.toUpperCase()}))}
+                onChange={(e) => setEditJobData(prev => ({ ...prev, license_plate: e.target.value.toUpperCase() }))}
                 placeholder="z.B. B-AB 1234"
                 className="text-lg font-mono"
               />
@@ -2831,28 +2917,36 @@ export const TowingDashboard = () => {
               <Input
                 id="edit-vin"
                 value={editJobData.vin}
-                onChange={(e) => setEditJobData(prev => ({...prev, vin: e.target.value.toUpperCase()}))}
+                onChange={(e) => setEditJobData(prev => ({ ...prev, vin: e.target.value.toUpperCase() }))}
                 placeholder="17-stellige FIN"
                 className="font-mono"
               />
             </div>
             <div className="space-y-2">
               <Label htmlFor="edit-tow-reason">Abschleppgrund</Label>
-              <Select 
+              <Select
                 value={editJobData.tow_reason}
-                onValueChange={(value) => setEditJobData(prev => ({...prev, tow_reason: value}))}
+                onValueChange={(value) => setEditJobData(prev => ({ ...prev, tow_reason: value }))}
               >
                 <SelectTrigger>
                   <SelectValue placeholder="Grund auswählen..." />
                 </SelectTrigger>
-                <SelectContent>
+                <SelectContent className="max-h-[300px]">
                   <SelectItem value="Parken im Parkverbot">Parken im Parkverbot</SelectItem>
                   <SelectItem value="Parken in Feuerwehrzufahrt">Parken in Feuerwehrzufahrt</SelectItem>
-                  <SelectItem value="Parken auf Gehweg">Parken auf Gehweg</SelectItem>
-                  <SelectItem value="Parken in Halteverbotszone">Parken in Halteverbotszone</SelectItem>
                   <SelectItem value="Parken auf Behindertenparkplatz">Parken auf Behindertenparkplatz</SelectItem>
-                  <SelectItem value="Unfall/Panne">Unfall/Panne</SelectItem>
-                  <SelectItem value="Polizeiliche Anordnung">Polizeiliche Anordnung</SelectItem>
+                  <SelectItem value="Zugeparkte Ausfahrt">Zugeparkte Ausfahrt</SelectItem>
+                  <SelectItem value="Gefährdendes Parken">Gefährdendes Parken</SelectItem>
+                  <SelectItem value="Fahrzeug ohne gültige Zulassung im öffentlichen Raum">Fahrzeug ohne gültige Zulassung im öffentlichen Raum</SelectItem>
+                  <SelectItem value="Fahrzeug ohne Kennzeichen">Fahrzeug ohne Kennzeichen</SelectItem>
+                  <SelectItem value="Blockieren einer Feuerwehrzufahrt">Blockieren einer Feuerwehrzufahrt</SelectItem>
+                  <SelectItem value="Blockieren von Rettungswegen">Blockieren von Rettungswegen</SelectItem>
+                  <SelectItem value="Blockieren von Notausfahrten">Blockieren von Notausfahrten</SelectItem>
+                  <SelectItem value="Parken im Sicherheitsbereich von Polizei- oder Feuerwehreinsätzen">Parken im Sicherheitsbereich von Polizei- oder Feuerwehreinsätzen</SelectItem>
+                  <SelectItem value="Parken auf einem E-Auto-Ladeplatz ohne Ladevorgang">Parken auf einem E-Auto-Ladeplatz ohne Ladevorgang</SelectItem>
+                  <SelectItem value="Parken auf einem Carsharing-Parkplatz ohne Berechtigung">Parken auf einem Carsharing-Parkplatz ohne Berechtigung</SelectItem>
+                  <SelectItem value="Parken auf einem Bewohnerparkplatz ohne gültigen Ausweis">Parken auf einem Bewohnerparkplatz ohne gültigen Ausweis</SelectItem>
+                  <SelectItem value="Öl Verlust">Öl Verlust</SelectItem>
                   <SelectItem value="Sonstiges">Sonstiges</SelectItem>
                 </SelectContent>
               </Select>
@@ -2862,7 +2956,7 @@ export const TowingDashboard = () => {
               <Textarea
                 id="edit-notes"
                 value={editJobData.notes}
-                onChange={(e) => setEditJobData(prev => ({...prev, notes: e.target.value}))}
+                onChange={(e) => setEditJobData(prev => ({ ...prev, notes: e.target.value }))}
                 placeholder="Zusätzliche Informationen..."
                 rows={3}
               />
@@ -2876,7 +2970,7 @@ export const TowingDashboard = () => {
               </Label>
               <Input
                 value={editJobData.location_address}
-                onChange={(e) => setEditJobData(prev => ({...prev, location_address: e.target.value}))}
+                onChange={(e) => setEditJobData(prev => ({ ...prev, location_address: e.target.value }))}
                 placeholder="Adresse eingeben..."
               />
               <div className="h-48 rounded-lg overflow-hidden border">
@@ -2908,7 +3002,7 @@ export const TowingDashboard = () => {
                       );
                       const data = await response.json();
                       if (data.display_name) {
-                        setEditJobData(prev => ({...prev, location_address: data.display_name}));
+                        setEditJobData(prev => ({ ...prev, location_address: data.display_name }));
                       }
                     } catch (e) {
                       console.error('Reverse geocoding error:', e);
@@ -2923,7 +3017,7 @@ export const TowingDashboard = () => {
             <Button variant="outline" onClick={() => setEditJobDialogOpen(false)}>
               Abbrechen
             </Button>
-            <Button 
+            <Button
               onClick={handleSaveJobData}
               disabled={editingJobData}
               className="bg-blue-600 hover:bg-blue-700"

@@ -29,7 +29,11 @@ axios.interceptors.response.use(
       // Don't redirect if on public pages
       const publicPaths = ['/login', '/register', '/portal', '/forgot-password', '/reset-password', '/', '/datenschutz', '/impressum'];
       if (!publicPaths.includes(window.location.pathname)) {
-        window.location.href = '/';
+        if (window.location.pathname.startsWith('/admin')) {
+          window.location.href = '/login';
+        } else {
+          window.location.href = '/portal';
+        }
       }
     }
     return Promise.reject(error);

@@ -1,0 +1,1 @@
+2026-02-24 17:16:47,177 - server - ERROR - Error creating database indexes: bad auth : authentication failed, full error: {'ok': 0, 'errmsg': 'bad auth : authentication failed', 'code': 8000, 'codeName': 'AtlasError'}

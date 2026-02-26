@@ -1,8 +1,9 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useAuth } from '../contexts/AuthContext';
+import { useDeltaPolling } from '../hooks/useDeltaPolling';
 import axios from 'axios';
-import { 
-  Car, MapPin, Camera, Plus, LogOut, FileText, Menu, X, 
+import {
+  Car, MapPin, Camera, Plus, LogOut, FileText, Menu, X,
   Search, Clock, ChevronRight, Trash2, Link as LinkIcon, CheckCircle,
   Users, UserPlus, Lock, Unlock, Key, Badge, Download, Filter, Calendar, Settings
 } from 'lucide-react';
@@ -76,7 +77,8 @@ export const AuthorityDashboard = () => {
   const { user, logout } = useAuth();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [activeTab, setActiveTab] = useState('new');
-  const [jobs, setJobs] = useState([]);
+  const [initialJobs, setInitialJobs] = useState([]);
+  const { jobs, setJobs } = useDeltaPolling(initialJobs, user?.role);
   const [linkedServices, setLinkedServices] = useState([]);
   const [loading, setLoading] = useState(true);
   const [serviceCodeInput, setServiceCodeInput] = useState('');
@@ -155,7 +157,7 @@ export const AuthorityDashboard = () => {
       const params = new URLSearchParams();
       params.append('page', currentPage.toString());
       params.append('limit', itemsPerPage.toString());
-      
+
       // Add filter params
       if (filterStatus && filterStatus !== 'all') {
         params.append('status', filterStatus);
@@ -184,12 +186,12 @@ export const AuthorityDashboard = () => {
       if (filterService && filterService !== 'all') {
         countParams.append('service_id', filterService);
       }
-      
+
       const [jobsRes, countRes] = await Promise.all([
         axios.get(`${API}/jobs?${params.toString()}`),
         axios.get(`${API}/jobs/count/total${countParams.toString() ? '?' + countParams.toString() : ''}`)
       ]);
-      setJobs(jobsRes.data);
+      setInitialJobs(jobsRes.data);
       setTotalJobs(countRes.data.total);
     } catch (error) {
       console.error('Error fetching jobs:', error);
@@ -307,7 +309,7 @@ export const AuthorityDashboard = () => {
         async (pos) => {
           const { latitude, longitude } = pos.coords;
           setPosition([latitude, longitude]);
-          
+
           // Reverse geocoding with proper User-Agent for Nominatim policy compliance
           try {
             const response = await fetch(
@@ -339,7 +341,7 @@ export const AuthorityDashboard = () => {
     }
 
     toast.info('Fotos werden komprimiert...');
-    
+
     for (const file of files) {
       try {
         const compressedImage = await compressImage(file, 1200, 0.7);
@@ -357,10 +359,10 @@ export const AuthorityDashboard = () => {
 
   const handleSubmitJob = async (e) => {
     e.preventDefault();
-    
-    // Validierung: Kennzeichen und Grund sind Pflicht, Position ODER Adresse
-    if (!licensePlate || !towReason) {
-      toast.error('Bitte füllen Sie Kennzeichen und Abschleppgrund aus');
+
+    // Validierung: Kennzeichen ODER FIN und Grund sind Pflicht, Position ODER Adresse
+    if ((!licensePlate && !vin) || !towReason) {
+      toast.error('Bitte füllen Sie mindestens Kennzeichen oder FIN sowie den Abschleppgrund aus');
       return;
     }
 
@@ -401,9 +403,14 @@ export const AuthorityDashboard = () => {
         estimated_vehicle_value: jobType === 'sicherstellung' && estimatedVehicleValue ? parseFloat(estimatedVehicleValue) : null
       };
 
-      await axios.post(`${API}/jobs`, jobData);
+      const idempotencyKey = crypto.randomUUID();
+      await axios.post(`${API}/jobs`, jobData, {
+        headers: {
+          'Idempotency-Key': idempotencyKey
+        }
+      });
       toast.success('Auftrag erfolgreich erstellt');
-      
+
       // Reset form
       setLicensePlate('');
       setVin('');
@@ -420,7 +427,7 @@ export const AuthorityDashboard = () => {
       setContactAttempts(false);
       setContactAttemptsNotes('');
       setEstimatedVehicleValue('');
-      
+
       fetchJobs();
       setActiveTab('jobs');
     } catch (error) {
@@ -432,7 +439,7 @@ export const AuthorityDashboard = () => {
 
   const handleLinkService = async () => {
     if (!serviceCodeInput.trim()) return;
-    
+
     try {
       const response = await axios.post(`${API}/services/link`, { service_code: serviceCodeInput });
       toast.success(`${response.data.service_name} erfolgreich verknüpft`);
@@ -477,7 +484,7 @@ export const AuthorityDashboard = () => {
   // NEW: Save edited job data
   const handleSaveJobData = async () => {
     if (!selectedJobForEdit) return;
-    
+
     setEditingJobData(true);
     try {
       const dataToSend = {
@@ -485,12 +492,12 @@ export const AuthorityDashboard = () => {
         location_lat: editJobPosition ? editJobPosition[0] : editJobData.location_lat,
         location_lng: editJobPosition ? editJobPosition[1] : editJobData.location_lng
       };
-      
+
       const response = await axios.patch(`${API}/jobs/${selectedJobForEdit.id}/edit-data`, dataToSend);
-      
+
       // Update local state
       setJobs(jobs.map(j => j.id === selectedJobForEdit.id ? response.data : j));
-      
+
       toast.success('Daten erfolgreich aktualisiert');
       setEditJobDialogOpen(false);
     } catch (error) {
@@ -506,14 +513,14 @@ export const AuthorityDashboard = () => {
     if (!window.confirm(`Auftrag ${job.job_number} wirklich löschen? Diese Aktion kann nicht rückgängig gemacht werden.`)) {
       return;
     }
-    
+
     setDeletingJob(job.id);
     try {
       await axios.delete(`${API}/jobs/${job.id}`);
-      
+
       // Remove from local state
       setJobs(jobs.filter(j => j.id !== job.id));
-      
+
       toast.success(`Auftrag ${job.job_number} wurde gelöscht`);
     } catch (error) {
       console.error('Error deleting job:', error);
@@ -555,7 +562,7 @@ export const AuthorityDashboard = () => {
                 <p className="text-xs text-slate-500">{user?.authority_name}</p>
               </div>
             </div>
-            
+
             <div className="flex items-center gap-3">
               <span className="hidden md:block text-sm text-slate-600">
                 {user?.name}
@@ -665,7 +672,7 @@ export const AuthorityDashboard = () => {
                     {jobType === 'sicherstellung' && (
                       <div className="space-y-4 p-4 bg-amber-50 border border-amber-200 rounded-lg">
                         <h4 className="font-semibold text-amber-800">Sicherstellungs-Details</h4>
-                        
+
                         <div className="grid md:grid-cols-2 gap-4">
                           <div className="space-y-2">
                             <Label>Grund der Sicherstellung *</Label>
@@ -749,7 +756,7 @@ export const AuthorityDashboard = () => {
                     )}
 
                     <div className="space-y-2">
-                      <Label htmlFor="licensePlate">Kennzeichen *</Label>
+                      <Label htmlFor="licensePlate">Kennzeichen (oder FIN) *</Label>
                       <Input
                         data-testid="job-license-plate-input"
                         id="licensePlate"
@@ -757,7 +764,6 @@ export const AuthorityDashboard = () => {
                         onChange={(e) => setLicensePlate(e.target.value.toUpperCase())}
                         placeholder="B-AB 1234"
                         className="license-plate-input text-xl"
-                        required
                       />
                     </div>
                     <div className="space-y-2">
@@ -773,17 +779,26 @@ export const AuthorityDashboard = () => {
                     </div>
                     <div className="space-y-2">
                       <Label htmlFor="towReason">Abschleppgrund *</Label>
-                      <Select value={towReason} onValueChange={setTowReason} required>
-                        <SelectTrigger data-testid="job-tow-reason-select">
+                      <Select value={towReason} onValueChange={setTowReason}>
+                        <SelectTrigger>
                           <SelectValue placeholder="Grund auswählen" />
                         </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="Parken im absoluten Halteverbot">Parken im absoluten Halteverbot</SelectItem>
+                        <SelectContent className="max-h-[300px]">
+                          <SelectItem value="Parken im Parkverbot">Parken im Parkverbot</SelectItem>
+                          <SelectItem value="Parken in Feuerwehrzufahrt">Parken in Feuerwehrzufahrt</SelectItem>
                           <SelectItem value="Parken auf Behindertenparkplatz">Parken auf Behindertenparkplatz</SelectItem>
-                          <SelectItem value="Parken auf Feuerwehrzufahrt">Parken auf Feuerwehrzufahrt</SelectItem>
-                          <SelectItem value="Parken auf Gehweg">Parken auf Gehweg</SelectItem>
-                          <SelectItem value="Unerlaubtes Parken">Unerlaubtes Parken</SelectItem>
-                          <SelectItem value="Verkehrsbehinderung">Verkehrsbehinderung</SelectItem>
+                          <SelectItem value="Zugeparkte Ausfahrt">Zugeparkte Ausfahrt</SelectItem>
+                          <SelectItem value="Gefährdendes Parken">Gefährdendes Parken</SelectItem>
+                          <SelectItem value="Fahrzeug ohne gültige Zulassung">Fahrzeug ohne gültige Zulassung im öffentlichen Raum</SelectItem>
+                          <SelectItem value="Fahrzeug ohne Kennzeichen">Fahrzeug ohne Kennzeichen</SelectItem>
+                          <SelectItem value="Blockieren einer Feuerwehrzufahrt">Blockieren einer Feuerwehrzufahrt</SelectItem>
+                          <SelectItem value="Blockieren von Rettungswegen">Blockieren von Rettungswegen</SelectItem>
+                          <SelectItem value="Blockieren von Notausfahrten">Blockieren von Notausfahrten</SelectItem>
+                          <SelectItem value="Parken im Sicherheitsbereich">Parken im Sicherheitsbereich von Polizei- oder Feuerwehreinsätzen</SelectItem>
+                          <SelectItem value="Parken auf E-Auto-Ladeplatz">Parken auf einem E-Auto-Ladeplatz ohne Ladevorgang</SelectItem>
+                          <SelectItem value="Parken auf Carsharing-Parkplatz">Parken auf einem Carsharing-Parkplatz ohne Berechtigung</SelectItem>
+                          <SelectItem value="Parken auf Bewohnerparkplatz">Parken auf einem Bewohnerparkplatz ohne gültigen Ausweis</SelectItem>
+                          <SelectItem value="Öl Verlust">Öl Verlust</SelectItem>
                           <SelectItem value="Sonstiges">Sonstiges</SelectItem>
                         </SelectContent>
                       </Select>
@@ -976,7 +991,7 @@ export const AuthorityDashboard = () => {
                       <span className="bg-orange-500 text-white text-xs px-1.5 py-0.5 rounded-full">!</span>
                     )}
                   </Button>
-                  
+
                   {hasActiveFilters && (
                     <Button variant="ghost" size="sm" onClick={clearFilters}>
                       Filter zurücksetzen
@@ -1097,7 +1112,7 @@ export const AuthorityDashboard = () => {
                             Zugewiesen an: <span className="font-medium">{job.assigned_service_name}</span>
                           </p>
                         )}
-                        
+
                         {/* Timeline / Zeiterfassung */}
                         <div className="mt-4 pt-4 border-t">
                           <p className="text-xs font-semibold text-slate-500 mb-2">ZEITERFASSUNG</p>
@@ -1110,28 +1125,45 @@ export const AuthorityDashboard = () => {
                               <p className="font-medium text-slate-700">Vor Ort</p>
                               <p className="text-slate-500">{job.on_site_at ? new Date(job.on_site_at).toLocaleString('de-DE') : '-'}</p>
                             </div>
-                            <div className={`p-2 rounded ${job.towed_at ? 'bg-green-50 border border-green-200' : 'bg-slate-50'}`}>
-                              <p className="font-medium text-slate-700">Abgeschleppt</p>
-                              <p className="text-slate-500">{job.towed_at ? new Date(job.towed_at).toLocaleString('de-DE') : '-'}</p>
-                            </div>
-                            <div className={`p-2 rounded ${job.in_yard_at ? 'bg-green-50 border border-green-200' : 'bg-slate-50'}`}>
-                              <p className="font-medium text-slate-700">Im Hof</p>
-                              <p className="text-slate-500">{job.in_yard_at ? new Date(job.in_yard_at).toLocaleString('de-DE') : '-'}</p>
-                            </div>
-                            <div className={`p-2 rounded ${job.released_at ? 'bg-green-50 border border-green-200' : 'bg-slate-50'}`}>
-                              <p className="font-medium text-slate-700">Abgeholt</p>
-                              <p className="text-slate-500">{job.released_at ? new Date(job.released_at).toLocaleString('de-DE') : '-'}</p>
-                            </div>
+                            {job.is_empty_trip ? (
+                              <div className={`col-span-1 sm:col-span-3 p-2 rounded ${job.status === 'empty_trip' || job.status === 'released' ? 'bg-orange-50 border border-orange-200' : 'bg-slate-50'}`}>
+                                <p className="font-medium text-slate-700">Leerfahrt verzeichnet</p>
+                                <p className="text-slate-500">{job.updated_at ? new Date(job.updated_at).toLocaleString('de-DE') : '-'}</p>
+                              </div>
+                            ) : (
+                              <>
+                                <div className={`p-2 rounded ${job.towed_at ? 'bg-green-50 border border-green-200' : 'bg-slate-50'}`}>
+                                  <p className="font-medium text-slate-700">Abgeschleppt</p>
+                                  <p className="text-slate-500">{job.towed_at ? new Date(job.towed_at).toLocaleString('de-DE') : '-'}</p>
+                                </div>
+                                <div className={`p-2 rounded ${job.in_yard_at ? 'bg-green-50 border border-green-200' : 'bg-slate-50'}`}>
+                                  <p className="font-medium text-slate-700">Im Hof</p>
+                                  <p className="text-slate-500">{job.in_yard_at ? new Date(job.in_yard_at).toLocaleString('de-DE') : '-'}</p>
+                                </div>
+                                <div className={`p-2 rounded ${job.released_at ? 'bg-green-50 border border-green-200' : 'bg-slate-50'}`}>
+                                  <p className="font-medium text-slate-700">Abgeholt</p>
+                                  <p className="text-slate-500">{job.released_at ? new Date(job.released_at).toLocaleString('de-DE') : '-'}</p>
+                                </div>
+                              </>
+                            )}
                           </div>
                         </div>
-                        
+
                         {/* PDF Download Button - shows when job is released */}
                         {job.status === 'released' && (
                           <div className="mt-4 pt-4 border-t flex justify-end">
                             <Button
                               variant="outline"
                               size="sm"
-                              onClick={() => window.open(`${API}/jobs/${job.id}/pdf`, '_blank')}
+                              onClick={async () => {
+                                try {
+                                  const res = await axios.get(`${API}/jobs/${job.id}/pdf/token`);
+                                  window.open(`${API}/jobs/${job.id}/pdf?token=${res.data.token}`, '_blank');
+                                } catch (error) {
+                                  console.error('Error fetching PDF token:', error);
+                                  toast.error('PDF konnte nicht generiert werden');
+                                }
+                              }}
                               className="flex items-center gap-2"
                             >
                               <Download className="h-4 w-4" />
@@ -1139,7 +1171,7 @@ export const AuthorityDashboard = () => {
                             </Button>
                           </div>
                         )}
-                        
+
                         {/* Edit/Delete Buttons - only show if job is not released */}
                         {job.status !== 'released' && (
                           <div className="mt-4 pt-4 border-t flex justify-between items-center">
@@ -1164,7 +1196,7 @@ export const AuthorityDashboard = () => {
                             ) : (
                               <div />
                             )}
-                            
+
                             <Button
                               variant="outline"
                               size="sm"
@@ -1180,10 +1212,10 @@ export const AuthorityDashboard = () => {
                     ))}
                   </div>
                 )}
-                
+
                 {/* Pagination */}
                 {!loading && jobs.length > 0 && (
-                  <Pagination 
+                  <Pagination
                     currentPage={currentPage}
                     totalPages={Math.ceil(totalJobs / itemsPerPage)}
                     totalItems={totalJobs}
@@ -1247,8 +1279,8 @@ export const AuthorityDashboard = () => {
                 ) : (
                   <div className="space-y-3">
                     {linkedServices.map(service => (
-                      <div 
-                        key={service.id} 
+                      <div
+                        key={service.id}
                         className="flex items-center justify-between p-4 bg-slate-50 rounded-lg"
                       >
                         <div>
@@ -1302,16 +1334,14 @@ export const AuthorityDashboard = () => {
                   ) : (
                     <div className="space-y-3">
                       {employees.map(emp => (
-                        <div 
-                          key={emp.id} 
-                          className={`flex items-center justify-between p-4 border rounded-lg ${
-                            emp.is_blocked ? 'bg-red-50 border-red-200' : 'bg-white'
-                          }`}
+                        <div
+                          key={emp.id}
+                          className={`flex items-center justify-between p-4 border rounded-lg ${emp.is_blocked ? 'bg-red-50 border-red-200' : 'bg-white'
+                            }`}
                         >
                           <div className="flex items-center gap-4">
-                            <div className={`w-10 h-10 rounded-full flex items-center justify-center ${
-                              emp.is_blocked ? 'bg-red-200' : 'bg-blue-100'
-                            }`}>
+                            <div className={`w-10 h-10 rounded-full flex items-center justify-center ${emp.is_blocked ? 'bg-red-200' : 'bg-blue-100'
+                              }`}>
                               <Users className={`h-5 w-5 ${emp.is_blocked ? 'text-red-600' : 'text-blue-600'}`} />
                             </div>
                             <div>
@@ -1461,7 +1491,7 @@ export const AuthorityDashboard = () => {
               <Input
                 id="edit-license-plate"
                 value={editJobData.license_plate}
-                onChange={(e) => setEditJobData(prev => ({...prev, license_plate: e.target.value.toUpperCase()}))}
+                onChange={(e) => setEditJobData(prev => ({ ...prev, license_plate: e.target.value.toUpperCase() }))}
                 placeholder="z.B. B-AB 1234"
                 className="text-lg font-mono"
               />
@@ -1471,28 +1501,36 @@ export const AuthorityDashboard = () => {
               <Input
                 id="edit-vin"
                 value={editJobData.vin}
-                onChange={(e) => setEditJobData(prev => ({...prev, vin: e.target.value.toUpperCase()}))}
+                onChange={(e) => setEditJobData(prev => ({ ...prev, vin: e.target.value.toUpperCase() }))}
                 placeholder="17-stellige FIN"
                 className="font-mono"
               />
             </div>
             <div className="space-y-2">
               <Label htmlFor="edit-tow-reason">Abschleppgrund</Label>
-              <Select 
+              <Select
                 value={editJobData.tow_reason}
-                onValueChange={(value) => setEditJobData(prev => ({...prev, tow_reason: value}))}
+                onValueChange={(value) => setEditJobData(prev => ({ ...prev, tow_reason: value }))}
               >
                 <SelectTrigger>
                   <SelectValue placeholder="Grund auswählen..." />
                 </SelectTrigger>
-                <SelectContent>
+                <SelectContent className="max-h-[300px]">
                   <SelectItem value="Parken im Parkverbot">Parken im Parkverbot</SelectItem>
                   <SelectItem value="Parken in Feuerwehrzufahrt">Parken in Feuerwehrzufahrt</SelectItem>
-                  <SelectItem value="Parken auf Gehweg">Parken auf Gehweg</SelectItem>
-                  <SelectItem value="Parken in Halteverbotszone">Parken in Halteverbotszone</SelectItem>
                   <SelectItem value="Parken auf Behindertenparkplatz">Parken auf Behindertenparkplatz</SelectItem>
-                  <SelectItem value="Unfall/Panne">Unfall/Panne</SelectItem>
-                  <SelectItem value="Polizeiliche Anordnung">Polizeiliche Anordnung</SelectItem>
+                  <SelectItem value="Zugeparkte Ausfahrt">Zugeparkte Ausfahrt</SelectItem>
+                  <SelectItem value="Gefährdendes Parken">Gefährdendes Parken</SelectItem>
+                  <SelectItem value="Fahrzeug ohne gültige Zulassung">Fahrzeug ohne gültige Zulassung im öffentlichen Raum</SelectItem>
+                  <SelectItem value="Fahrzeug ohne Kennzeichen">Fahrzeug ohne Kennzeichen</SelectItem>
+                  <SelectItem value="Blockieren einer Feuerwehrzufahrt">Blockieren einer Feuerwehrzufahrt</SelectItem>
+                  <SelectItem value="Blockieren von Rettungswegen">Blockieren von Rettungswegen</SelectItem>
+                  <SelectItem value="Blockieren von Notausfahrten">Blockieren von Notausfahrten</SelectItem>
+                  <SelectItem value="Parken im Sicherheitsbereich">Parken im Sicherheitsbereich von Polizei- oder Feuerwehreinsätzen</SelectItem>
+                  <SelectItem value="Parken auf E-Auto-Ladeplatz">Parken auf einem E-Auto-Ladeplatz ohne Ladevorgang</SelectItem>
+                  <SelectItem value="Parken auf Carsharing-Parkplatz">Parken auf einem Carsharing-Parkplatz ohne Berechtigung</SelectItem>
+                  <SelectItem value="Parken auf Bewohnerparkplatz">Parken auf einem Bewohnerparkplatz ohne gültigen Ausweis</SelectItem>
+                  <SelectItem value="Öl Verlust">Öl Verlust</SelectItem>
                   <SelectItem value="Sonstiges">Sonstiges</SelectItem>
                 </SelectContent>
               </Select>
@@ -1502,7 +1540,7 @@ export const AuthorityDashboard = () => {
               <Textarea
                 id="edit-notes"
                 value={editJobData.notes}
-                onChange={(e) => setEditJobData(prev => ({...prev, notes: e.target.value}))}
+                onChange={(e) => setEditJobData(prev => ({ ...prev, notes: e.target.value }))}
                 placeholder="Zusätzliche Informationen..."
                 rows={2}
               />
@@ -1516,7 +1554,7 @@ export const AuthorityDashboard = () => {
               </Label>
               <Input
                 value={editJobData.location_address}
-                onChange={(e) => setEditJobData(prev => ({...prev, location_address: e.target.value}))}
+                onChange={(e) => setEditJobData(prev => ({ ...prev, location_address: e.target.value }))}
                 placeholder="Adresse eingeben..."
               />
               <div className="h-48 rounded-lg overflow-hidden border">
@@ -1530,8 +1568,8 @@ export const AuthorityDashboard = () => {
                     attribution='&copy; OpenStreetMap'
                     url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
                   />
-                  <LocationPicker 
-                    position={editJobPosition} 
+                  <LocationPicker
+                    position={editJobPosition}
                     setPosition={async (pos) => {
                       setEditJobPosition(pos);
                       setEditJobData(prev => ({
@@ -1547,12 +1585,12 @@ export const AuthorityDashboard = () => {
                         );
                         const data = await response.json();
                         if (data.display_name) {
-                          setEditJobData(prev => ({...prev, location_address: data.display_name}));
+                          setEditJobData(prev => ({ ...prev, location_address: data.display_name }));
                         }
                       } catch (e) {
                         console.error('Reverse geocoding error:', e);
                       }
-                    }} 
+                    }}
                   />
                 </MapContainer>
               </div>
@@ -1563,7 +1601,7 @@ export const AuthorityDashboard = () => {
             <Button variant="outline" onClick={() => setEditJobDialogOpen(false)}>
               Abbrechen
             </Button>
-            <Button 
+            <Button
               onClick={handleSaveJobData}
               disabled={editingJobData}
               className="bg-blue-600 hover:bg-blue-700"

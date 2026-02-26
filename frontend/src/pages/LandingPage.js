@@ -69,7 +69,7 @@ export const LandingPage = () => {
       </header>
 
       {/* Hero Section */}
-      <section 
+      <section
         className="hero-section relative py-24 md:py-32"
         style={{
           backgroundImage: 'url(https://images.unsplash.com/photo-1449824913935-59a10b8d2000?w=1600&q=80)',
@@ -79,7 +79,7 @@ export const LandingPage = () => {
       >
         <div className="hero-overlay absolute inset-0"></div>
         <div className="relative z-10 max-w-4xl mx-auto px-4 text-center">
-          <h1 
+          <h1
             className="text-4xl md:text-5xl lg:text-6xl font-black text-white mb-6"
             style={{ fontFamily: 'Chivo, sans-serif' }}
           >
@@ -106,18 +106,18 @@ export const LandingPage = () => {
                     type="text"
                     value={searchQuery}
                     onChange={(e) => setSearchQuery(e.target.value.toUpperCase())}
-                    placeholder="B AB 1234"
-                    className="text-2xl font-bold text-center py-3 px-4 w-64 border-0 outline-none tracking-wider"
+                    placeholder="B AB 1234 oder FIN..."
+                    className="text-xl md:text-2xl font-bold text-center py-3 px-4 w-full border-0 outline-none tracking-wider"
                     style={{ fontFamily: 'monospace' }}
                   />
                 </div>
               </div>
-              
+
               {/* Format Examples */}
               <p className="text-xs text-slate-500 text-center mb-3">
-                Format: <span className="font-mono bg-slate-100 px-1 rounded">B AB 1234</span> oder <span className="font-mono bg-slate-100 px-1 rounded">HH XY 999E</span> oder <span className="font-mono bg-slate-100 px-1 rounded">M A 1H</span>
+                Beispiele: <span className="font-mono bg-slate-100 px-1 rounded">B AB 1234</span>, <span className="font-mono bg-slate-100 px-1 rounded">HH XY 999E</span> oder 17-stellige FIN
               </p>
-              
+
               {/* Search Button */}
               <button
                 data-testid="vehicle-search-btn"
@@ -138,7 +138,7 @@ export const LandingPage = () => {
                 )}
               </button>
             </div>
-            
+
             {/* Pickup Hint */}
             <div className="mt-4 bg-amber-500/90 text-white px-4 py-3 rounded-lg text-sm">
               <p className="font-semibold flex items-center gap-2">
@@ -319,10 +319,28 @@ export const LandingPage = () => {
                             <span className="font-semibold text-orange-900">{searchResult.processing_fee?.toFixed(2)} €</span>
                           </div>
                         )}
+                        {searchResult.heavy_vehicle_surcharge > 0 && (
+                          <div className="flex justify-between py-1 border-b border-orange-200">
+                            <span className="text-orange-700">Schwerlastzuschlag (ab 3,5t)</span>
+                            <span className="font-semibold text-orange-900">{searchResult.heavy_vehicle_surcharge?.toFixed(2)} €</span>
+                          </div>
+                        )}
+                        {searchResult.empty_trip_fee > 0 && (
+                          <div className="flex justify-between py-1 border-b border-orange-200">
+                            <span className="text-orange-700">Leerfahrt</span>
+                            <span className="font-semibold text-orange-900">{searchResult.empty_trip_fee?.toFixed(2)} €</span>
+                          </div>
+                        )}
                         {searchResult.night_surcharge > 0 && (
                           <div className="flex justify-between py-1 border-b border-orange-200">
                             <span className="text-orange-700">Nachtzuschlag</span>
                             <span className="font-semibold text-orange-900">{searchResult.night_surcharge?.toFixed(2)} €</span>
+                          </div>
+                        )}
+                        {searchResult.weekend_surcharge > 0 && (
+                          <div className="flex justify-between py-1 border-b border-orange-200">
+                            <span className="text-orange-700">Wochenendzuschlag</span>
+                            <span className="font-semibold text-orange-900">{searchResult.weekend_surcharge?.toFixed(2)} €</span>
                           </div>
                         )}
                         <div className="flex justify-between py-2 mt-2 bg-orange-100 rounded-lg px-3">
@@ -349,9 +367,9 @@ export const LandingPage = () => {
                       {/* Interaktive Karte - zeigt Hof-Standort */}
                       {searchResult.yard_lat && searchResult.yard_lng && (
                         <div className="rounded-lg overflow-hidden border border-slate-200 mb-4" style={{ height: '250px' }}>
-                          <MapContainer 
-                            center={[searchResult.yard_lat, searchResult.yard_lng]} 
-                            zoom={15} 
+                          <MapContainer
+                            center={[searchResult.yard_lat, searchResult.yard_lng]}
+                            zoom={15}
                             style={{ height: '100%', width: '100%' }}
                             scrollWheelZoom={false}
                           >
@@ -450,14 +468,14 @@ export const LandingPage = () => {
             </div>
             <div className="flex flex-col md:flex-row items-center gap-4 md:gap-8">
               <div className="flex gap-6">
-                <a 
-                  href="/datenschutz" 
+                <a
+                  href="/datenschutz"
                   className="text-slate-400 hover:text-white text-sm transition-colors"
                 >
                   Datenschutz
                 </a>
-                <a 
-                  href="/impressum" 
+                <a
+                  href="/impressum"
                   className="text-slate-400 hover:text-white text-sm transition-colors"
                 >
                   Impressum

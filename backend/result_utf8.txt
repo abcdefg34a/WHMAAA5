@@ -1,0 +1,12 @@
+Starting Node.js Load Test: 300 connections for 5 seconds...
+
+==================================
+🚀 LOAD TEST RESULTS
+==================================
+Time Elapsed: 5.08s
+Total Requests: 4975
+Successful: 4975
+Errors: 0
+Throughput: 979.33 Req/s
+30-Min Extrapolation: 1.762.795,276 Updates
+==================================

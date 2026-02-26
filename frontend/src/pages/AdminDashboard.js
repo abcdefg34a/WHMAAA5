@@ -1,8 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { useAuth } from '../contexts/AuthContext';
 import axios from 'axios';
-import { 
-  Car, Search, LogOut, Users, Truck, Shield, Building2, 
+import {
+  Car, Search, LogOut, Users, Truck, Shield, Building2,
   CheckCircle, Clock, Download, Filter, BarChart3, AlertCircle,
   FileText, X, Eye, Lock, Unlock, Trash2, Key, MoreVertical,
   History, Database, FileSpreadsheet
@@ -34,12 +34,12 @@ export const AdminDashboard = () => {
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState('all');
-  
+
   // Pagination state
   const [currentPage, setCurrentPage] = useState(1);
   const [totalJobs, setTotalJobs] = useState(0);
   const itemsPerPage = 50;
-  
+
   // Approval dialog state
   const [selectedService, setSelectedService] = useState(null);
   const [selectedAuthority, setSelectedAuthority] = useState(null);
@@ -85,13 +85,13 @@ export const AdminDashboard = () => {
       params.append('limit', itemsPerPage.toString());
       if (searchQuery) params.append('search', searchQuery);
       if (statusFilter && statusFilter !== 'all') params.append('status', statusFilter);
-      
+
       const [statsRes, jobsRes, jobsCountRes, usersRes, pendingServicesRes, pendingAuthoritiesRes] = await Promise.all([
         axios.get(`${API}/admin/stats`),
         axios.get(`${API}/admin/jobs?${params.toString()}`),
-        axios.get(`${API}/admin/jobs/count?${new URLSearchParams({ 
-          ...(searchQuery && { search: searchQuery }), 
-          ...(statusFilter && statusFilter !== 'all' && { status: statusFilter }) 
+        axios.get(`${API}/admin/jobs/count?${new URLSearchParams({
+          ...(searchQuery && { search: searchQuery }),
+          ...(statusFilter && statusFilter !== 'all' && { status: statusFilter })
         }).toString()}`),
         axios.get(`${API}/admin/users`),
         axios.get(`${API}/admin/pending-services`),
@@ -151,12 +151,12 @@ export const AdminDashboard = () => {
       params.append('limit', itemsPerPage.toString());
       if (searchQuery) params.append('search', searchQuery);
       if (statusFilter && statusFilter !== 'all') params.append('status', statusFilter);
-      
+
       const [jobsRes, countRes] = await Promise.all([
         axios.get(`${API}/admin/jobs?${params.toString()}`),
-        axios.get(`${API}/admin/jobs/count?${new URLSearchParams({ 
-          ...(searchQuery && { search: searchQuery }), 
-          ...(statusFilter && statusFilter !== 'all' && { status: statusFilter }) 
+        axios.get(`${API}/admin/jobs/count?${new URLSearchParams({
+          ...(searchQuery && { search: searchQuery }),
+          ...(statusFilter && statusFilter !== 'all' && { status: statusFilter })
         }).toString()}`)
       ]);
       setJobs(jobsRes.data);
@@ -179,7 +179,7 @@ export const AdminDashboard = () => {
         approved,
         rejection_reason: approved ? null : rejectionReason
       });
-      
+
       toast.success(approved ? 'Abschleppdienst freigeschaltet' : 'Abschleppdienst abgelehnt');
       setApprovalDialogOpen(false);
       setSelectedService(null);
@@ -201,7 +201,7 @@ export const AdminDashboard = () => {
         approved,
         rejection_reason: approved ? null : rejectionReason
       });
-      
+
       toast.success(approved ? 'Behörde freigeschaltet' : 'Behörde abgelehnt');
       setAuthorityApprovalDialogOpen(false);
       setSelectedAuthority(null);
@@ -231,7 +231,7 @@ export const AdminDashboard = () => {
       toast.error('Passwort muss mindestens 8 Zeichen haben');
       return;
     }
-    
+
     setActionLoading(true);
     try {
       await axios.patch(`${API}/admin/users/${selectedUser.id}/password`, {
@@ -265,7 +265,7 @@ export const AdminDashboard = () => {
 
   const handleDeleteUser = async () => {
     if (!selectedUser) return;
-    
+
     setActionLoading(true);
     try {
       await axios.delete(`${API}/admin/users/${selectedUser.id}`);
@@ -340,8 +340,13 @@ export const AdminDashboard = () => {
     return null;
   };
 
-  const downloadPDF = (jobId) => {
-    window.open(`${API}/jobs/${jobId}/pdf`, '_blank');
+  const downloadPDF = async (jobId) => {
+    try {
+      const tokenRes = await axios.get(`${API}/jobs/${jobId}/pdf/token`);
+      window.open(`${API}/jobs/${jobId}/pdf?token=${tokenRes.data.token}`, '_blank');
+    } catch (error) {
+      toast.error('Fehler beim Herunterladen des PDFs');
+    }
   };
 
   return (
@@ -361,10 +366,10 @@ export const AdminDashboard = () => {
                 <p className="text-xs text-slate-500">Systemübersicht</p>
               </div>
             </div>
-            
+
             <div className="flex items-center gap-3">
               {stats?.pending_approvals > 0 && (
-                <div 
+                <div
                   className="bg-red-100 text-red-700 px-3 py-1 rounded-full text-sm font-medium cursor-pointer flex items-center gap-2"
                   onClick={() => setActiveTab('approvals')}
                 >
@@ -413,17 +418,17 @@ export const AdminDashboard = () => {
               <Users className="h-4 w-4" />
               Benutzer
             </TabsTrigger>
-            <TabsTrigger 
-              data-testid="tab-audit" 
-              value="audit" 
+            <TabsTrigger
+              data-testid="tab-audit"
+              value="audit"
               className="flex items-center gap-2"
             >
               <History className="h-4 w-4" />
               Audit-Log
             </TabsTrigger>
-            <TabsTrigger 
-              data-testid="tab-system" 
-              value="system" 
+            <TabsTrigger
+              data-testid="tab-system"
+              value="system"
               className="flex items-center gap-2"
             >
               <Database className="h-4 w-4" />
@@ -468,7 +473,7 @@ export const AdminDashboard = () => {
                       </div>
                     </CardContent>
                   </Card>
-                  
+
                   <Card>
                     <CardContent className="pt-6">
                       <div className="flex items-center gap-4">
@@ -482,7 +487,7 @@ export const AdminDashboard = () => {
                       </div>
                     </CardContent>
                   </Card>
-                  
+
                   <Card>
                     <CardContent className="pt-6">
                       <div className="flex items-center gap-4">
@@ -496,7 +501,7 @@ export const AdminDashboard = () => {
                       </div>
                     </CardContent>
                   </Card>
-                  
+
                   <Card>
                     <CardContent className="pt-6">
                       <div className="flex items-center gap-4">
@@ -525,7 +530,7 @@ export const AdminDashboard = () => {
                       <p className="stat-label">Registrierte Behörden</p>
                     </CardContent>
                   </Card>
-                  
+
                   <Card>
                     <CardHeader>
                       <CardTitle className="flex items-center gap-2">
@@ -573,8 +578,8 @@ export const AdminDashboard = () => {
                         </h3>
                         <div className="space-y-4">
                           {pendingAuthorities.map(authority => (
-                            <div 
-                              key={authority.id} 
+                            <div
+                              key={authority.id}
                               className="border border-blue-200 rounded-lg p-4 hover:shadow-md transition-shadow bg-blue-50"
                             >
                               <div className="flex justify-between items-start">
@@ -605,7 +610,7 @@ export const AdminDashboard = () => {
                                     </div>
                                   </div>
                                 </div>
-                                <Button 
+                                <Button
                                   onClick={() => openAuthorityApprovalDialog(authority)}
                                   className="bg-blue-600 hover:bg-blue-700"
                                 >
@@ -628,8 +633,8 @@ export const AdminDashboard = () => {
                         </h3>
                         <div className="space-y-4">
                           {pendingServices.map(service => (
-                            <div 
-                              key={service.id} 
+                            <div
+                              key={service.id}
                               className="border border-orange-200 rounded-lg p-4 hover:shadow-md transition-shadow bg-orange-50"
                             >
                               <div className="flex justify-between items-start">
@@ -660,7 +665,7 @@ export const AdminDashboard = () => {
                                     </div>
                                   </div>
                                 </div>
-                                <Button 
+                                <Button
                                   onClick={() => openApprovalDialog(service)}
                                   className="bg-orange-500 hover:bg-orange-600"
                                 >
@@ -781,10 +786,10 @@ export const AdminDashboard = () => {
                     </table>
                   </div>
                 )}
-                
+
                 {/* Pagination */}
                 {!loading && jobs.length > 0 && (
-                  <Pagination 
+                  <Pagination
                     currentPage={currentPage}
                     totalPages={Math.ceil(totalJobs / itemsPerPage)}
                     totalItems={totalJobs}
@@ -861,7 +866,7 @@ export const AdminDashboard = () => {
                                           Entsperren
                                         </DropdownMenuItem>
                                       ) : (
-                                        <DropdownMenuItem 
+                                        <DropdownMenuItem
                                           onClick={() => handleBlockUser(u, true)}
                                           className="text-orange-600"
                                         >
@@ -870,7 +875,7 @@ export const AdminDashboard = () => {
                                         </DropdownMenuItem>
                                       )}
                                       <DropdownMenuSeparator />
-                                      <DropdownMenuItem 
+                                      <DropdownMenuItem
                                         onClick={() => openDeleteDialog(u)}
                                         className="text-red-600"
                                       >
@@ -981,7 +986,7 @@ export const AdminDashboard = () => {
                     <p className="text-sm text-slate-500">Audit-Einträge</p>
                   </div>
                 </div>
-                
+
                 {/* Export */}
                 <div className="pt-4 border-t">
                   <h4 className="font-semibold mb-3">Daten exportieren</h4>
@@ -1048,7 +1053,7 @@ export const AdminDashboard = () => {
                 <div>
                   <Label className="text-slate-500">Preise</Label>
                   <p className="font-medium">
-                    Anfahrt: {selectedService.tow_cost?.toFixed(2) || '0.00'} € | 
+                    Anfahrt: {selectedService.tow_cost?.toFixed(2) || '0.00'} € |
                     Standkosten: {selectedService.daily_cost?.toFixed(2) || '0.00'} €/Tag
                   </p>
                 </div>
@@ -1059,16 +1064,16 @@ export const AdminDashboard = () => {
                 {selectedService.business_license ? (
                   <div className="border rounded-lg p-4 bg-slate-50">
                     {selectedService.business_license.startsWith('data:image') ? (
-                      <img 
-                        src={selectedService.business_license} 
-                        alt="Gewerbenachweis" 
+                      <img
+                        src={selectedService.business_license}
+                        alt="Gewerbenachweis"
                         className="max-w-full max-h-96 mx-auto rounded"
                       />
                     ) : selectedService.business_license.startsWith('data:application/pdf') ? (
                       <div className="text-center">
                         <FileText className="h-16 w-16 text-slate-400 mx-auto mb-2" />
                         <p className="text-sm text-slate-600">PDF-Dokument</p>
-                        <a 
+                        <a
                           href={selectedService.business_license}
                           download="gewerbenachweis.pdf"
                           className="text-orange-600 hover:text-orange-700 text-sm font-medium"
@@ -1176,7 +1181,7 @@ export const AdminDashboard = () => {
               Benutzer löschen
             </AlertDialogTitle>
             <AlertDialogDescription>
-              Sind Sie sicher, dass Sie <strong>{selectedUser?.name}</strong> ({selectedUser?.email}) 
+              Sind Sie sicher, dass Sie <strong>{selectedUser?.name}</strong> ({selectedUser?.email})
               permanent löschen möchten? Diese Aktion kann nicht rückgängig gemacht werden.
             </AlertDialogDescription>
           </AlertDialogHeader>

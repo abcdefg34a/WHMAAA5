@@ -30,7 +30,12 @@ const ProtectedRoute = ({ children, allowedRoles }) => {
   }
 
   if (!user) {
-    return <Navigate to="/login" replace />;
+    // Redirect admins to /login, everybody else to /portal
+    const path = window.location.pathname;
+    if (path.startsWith('/admin')) {
+      return <Navigate to="/login" replace />;
+    }
+    return <Navigate to="/portal" replace />;
   }
 
   if (allowedRoles && !allowedRoles.includes(user.role)) {
@@ -71,69 +76,69 @@ function AppRoutes() {
       {/* Public Routes */}
       <Route path="/" element={<LandingPage />} />
       <Route path="/portal" element={<PortalPage />} />
-      
-      <Route 
-        path="/login" 
+
+      <Route
+        path="/login"
         element={
           <PublicRoute>
             <LoginPage />
           </PublicRoute>
-        } 
+        }
       />
-      
-      <Route 
-        path="/register" 
+
+      <Route
+        path="/register"
         element={
           <PublicRoute>
             <RegisterPage />
           </PublicRoute>
-        } 
+        }
       />
 
-      <Route 
-        path="/forgot-password" 
+      <Route
+        path="/forgot-password"
         element={
           <PublicRoute>
             <ForgotPasswordPage />
           </PublicRoute>
-        } 
+        }
       />
 
-      <Route 
-        path="/reset-password" 
+      <Route
+        path="/reset-password"
         element={
           <PublicRoute>
             <ResetPasswordPage />
           </PublicRoute>
-        } 
+        }
       />
 
       {/* Protected Routes */}
-      <Route 
-        path="/authority" 
+      <Route
+        path="/authority"
         element={
           <ProtectedRoute allowedRoles={['authority']}>
             <AuthorityDashboard />
           </ProtectedRoute>
-        } 
+        }
       />
 
-      <Route 
-        path="/towing" 
+      <Route
+        path="/towing"
         element={
           <ProtectedRoute allowedRoles={['towing_service']}>
             <TowingDashboard />
           </ProtectedRoute>
-        } 
+        }
       />
 
-      <Route 
-        path="/admin" 
+      <Route
+        path="/admin"
         element={
           <ProtectedRoute allowedRoles={['admin']}>
             <AdminDashboard />
           </ProtectedRoute>
-        } 
+        }
       />
 
       {/* Legal Pages */}

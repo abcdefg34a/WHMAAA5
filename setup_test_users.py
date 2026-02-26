@@ -7,7 +7,7 @@ import asyncio
 import aiohttp
 import json
 
-API_URL = "https://vehicle-recovery-7.preview.emergentagent.com/api"
+API_URL = "http://localhost:8000/api"
 
 async def create_test_users():
     """Create the test users needed for testing"""

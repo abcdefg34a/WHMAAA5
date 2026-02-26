@@ -1,4 +1,4 @@
-from fastapi import FastAPI, APIRouter, HTTPException, Depends, UploadFile, File, Form, status, Request
+from fastapi import FastAPI, APIRouter, HTTPException, Depends, UploadFile, File, Form, status, Request, BackgroundTasks
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from fastapi.responses import FileResponse, StreamingResponse
 from dotenv import load_dotenv
@@ -580,7 +580,7 @@ class AdminBlockUserRequest(BaseModel):
 
 # Job Models
 class JobCreate(BaseModel):
-    license_plate: str
+    license_plate: Optional[str] = None
     vin: Optional[str] = None
     tow_reason: str
     location_address: str
@@ -632,7 +632,7 @@ class BulkStatusUpdate(BaseModel):
 class JobResponse(BaseModel):
     id: str
     job_number: str
-    license_plate: str
+    license_plate: Optional[str] = None
     vin: Optional[str] = None
     tow_reason: str
     location_address: str
@@ -695,7 +695,10 @@ class VehicleSearchResult(BaseModel):
     daily_cost: Optional[float] = None
     days_in_yard: Optional[int] = None
     processing_fee: Optional[float] = None  # Bearbeitungsgebühr
+    empty_trip_fee: Optional[float] = None  # Leerfahrt
     night_surcharge: Optional[float] = None  # Nachtzuschlag
+    weekend_surcharge: Optional[float] = None  # Wochenendzuschlag
+    heavy_vehicle_surcharge: Optional[float] = None  # Schwerlast ab 3,5t
     total_cost: Optional[float] = None
     # Location coordinates for map - REMOVED, using yard coordinates instead
     location_lat: Optional[float] = None
@@ -750,7 +753,20 @@ def check_rate_limit(identifier: str) -> tuple[bool, int]:
     Returns (is_allowed, seconds_until_reset)
     """
     current_time = time.time()
-    # Clean old attempts
+    
+    # NEW: Global cleanup to prevent memory exhaustion by botnets
+    if len(login_attempts) > 10000:
+        keys_to_delete = []
+        for k, attempts in list(login_attempts.items()):
+            valid_attempts = [t for t in attempts if current_time - t < RATE_LIMIT_WINDOW]
+            if not valid_attempts:
+                keys_to_delete.append(k)
+            else:
+                login_attempts[k] = valid_attempts
+        for k in keys_to_delete:
+            login_attempts.pop(k, None)
+
+    # Clean old attempts for this specific user/IP
     login_attempts[identifier] = [
         t for t in login_attempts[identifier] 
         if current_time - t < RATE_LIMIT_WINDOW
@@ -760,6 +776,9 @@ def check_rate_limit(identifier: str) -> tuple[bool, int]:
         oldest_attempt = min(login_attempts[identifier])
         seconds_remaining = int(RATE_LIMIT_WINDOW - (current_time - oldest_attempt))
         return False, seconds_remaining
+        
+    if len(login_attempts[identifier]) == 0:
+        login_attempts.pop(identifier, None)
     
     return True, 0
 
@@ -769,7 +788,8 @@ def record_login_attempt(identifier: str):
 
 def clear_login_attempts(identifier: str):
     """Clear login attempts after successful login"""
-    login_attempts[identifier] = []
+    if identifier in login_attempts:
+        del login_attempts[identifier]
 
 def generate_reset_token() -> str:
     """Generate a secure password reset token"""
@@ -924,7 +944,7 @@ class PasswordResetConfirm(BaseModel):
     new_password: str
 
 @api_router.post("/auth/register", response_model=TokenResponse)
-async def register(data: UserRegister, request: Request):
+async def register(data: UserRegister, request: Request, background_tasks: BackgroundTasks):
     # Check if email exists
     existing = await db.users.find_one({"email": data.email})
     if existing:
@@ -987,14 +1007,15 @@ async def register(data: UserRegister, request: Request):
         "approval_required": data.role in [UserRole.TOWING_SERVICE, UserRole.AUTHORITY]
     })
     
-    # Send registration confirmation email
+    # Send registration confirmation email via BackgroundTasks
     try:
-        email_service.send_registration_confirmation(
+        background_tasks.add_task(
+            email_service.send_registration_confirmation,
             to_email=data.email,
             user_name=data.name,
             role=data.role
         )
-        logger.info(f"Registration confirmation email sent to {data.email}")
+        logger.info(f"Registration confirmation email queued for {data.email}")
     except Exception as e:
         logger.error(f"Failed to send registration email: {e}")
     
@@ -1082,7 +1103,7 @@ async def login(data: UserLogin, request: Request):
 # ==================== PASSWORD RESET ====================
 
 @api_router.post("/auth/forgot-password")
-async def forgot_password(data: PasswordResetRequest):
+async def forgot_password(data: PasswordResetRequest, background_tasks: BackgroundTasks):
     """Request password reset - sends email with reset link"""
     user = await db.users.find_one({"email": data.email})
     
@@ -1104,14 +1125,15 @@ async def forgot_password(data: PasswordResetRequest):
         "created_at": datetime.now(timezone.utc).isoformat()
     })
     
-    # Send password reset email via AWS SES
+    # Send password reset email via BackgroundTasks
     try:
-        email_service.send_password_reset_email(
+        background_tasks.add_task(
+            email_service.send_password_reset_email,
             to_email=user["email"],
             reset_token=reset_token,
             user_name=user.get("name", user["email"])
         )
-        logger.info(f"Password reset email sent to {data.email}")
+        logger.info(f"Password reset email queued for {data.email}")
     except Exception as e:
         logger.error(f"Failed to send password reset email: {e}")
         # Still return success to prevent email enumeration
@@ -1400,6 +1422,7 @@ async def calculate_job_costs(job_id: str, user: dict = Depends(get_current_user
     total = 0.0
     
     # Check if time-based pricing is enabled
+    time_based_applied = False
     if service.get("time_based_enabled") and job.get("accepted_at") and job.get("in_yard_at"):
         accepted = datetime.fromisoformat(job["accepted_at"].replace("Z", "+00:00"))
         in_yard = datetime.fromisoformat(job["in_yard_at"].replace("Z", "+00:00"))
@@ -1412,13 +1435,15 @@ async def calculate_job_costs(job_id: str, user: dict = Depends(get_current_user
         if first_hh > 0:
             breakdown.append({"label": "Erste halbe Stunde", "amount": first_hh})
             total += first_hh
-        
-        if half_hours > 1 and add_hh > 0:
-            additional = (half_hours - 1) * add_hh
-            breakdown.append({"label": f"{half_hours - 1} × weitere halbe Stunde", "amount": additional})
-            total += additional
-    else:
-        # Standard pricing
+            time_based_applied = True
+            
+            if half_hours > 1 and add_hh > 0:
+                additional = (half_hours - 1) * add_hh
+                breakdown.append({"label": f"{half_hours - 1} × weitere halbe Stunde", "amount": additional})
+                total += additional
+                
+    if not time_based_applied:
+        # Standard pricing fallback
         tow_cost = service.get("tow_cost", 0) or 0
         if tow_cost > 0:
             breakdown.append({"label": "Anfahrt/Abschleppen", "amount": tow_cost})
@@ -1686,7 +1711,7 @@ async def sync_authority_service_links(user: dict = Depends(get_current_user)):
     return {"message": f"Synchronisierung abgeschlossen. {updated_count} Verknüpfungen aktualisiert."}
 
 @api_router.post("/admin/approve-service/{service_id}")
-async def approve_service(service_id: str, data: ApproveServiceRequest, user: dict = Depends(get_current_user)):
+async def approve_service(service_id: str, data: ApproveServiceRequest, background_tasks: BackgroundTasks, user: dict = Depends(get_current_user)):
     if user["role"] != UserRole.ADMIN:
         raise HTTPException(status_code=403, detail="Admin only")
     
@@ -1705,14 +1730,15 @@ async def approve_service(service_id: str, data: ApproveServiceRequest, user: di
             "company_name": service["company_name"]
         })
         
-        # Send approval email
+        # Send approval email via BackgroundTasks
         try:
-            email_service.send_account_approved_email(
+            background_tasks.add_task(
+                email_service.send_account_approved_email,
                 to_email=service["email"],
                 user_name=service.get("name", service["company_name"]),
                 role=UserRole.TOWING_SERVICE
             )
-            logger.info(f"Approval email sent to {service['email']}")
+            logger.info(f"Approval email queued for {service['email']}")
         except Exception as e:
             logger.error(f"Failed to send approval email: {e}")
         
@@ -1731,7 +1757,7 @@ async def approve_service(service_id: str, data: ApproveServiceRequest, user: di
         return {"message": f"{service['company_name']} wurde abgelehnt"}
 
 @api_router.post("/admin/approve-authority/{authority_id}")
-async def approve_authority(authority_id: str, data: ApproveServiceRequest, user: dict = Depends(get_current_user)):
+async def approve_authority(authority_id: str, data: ApproveServiceRequest, background_tasks: BackgroundTasks, user: dict = Depends(get_current_user)):
     """Approve or reject an authority registration"""
     if user["role"] != UserRole.ADMIN:
         raise HTTPException(status_code=403, detail="Admin only")
@@ -1751,14 +1777,15 @@ async def approve_authority(authority_id: str, data: ApproveServiceRequest, user
             "authority_name": authority["authority_name"]
         })
         
-        # Send approval email
+        # Send approval email via BackgroundTasks
         try:
-            email_service.send_account_approved_email(
+            background_tasks.add_task(
+                email_service.send_account_approved_email,
                 to_email=authority["email"],
                 user_name=authority.get("name", authority["authority_name"]),
                 role=UserRole.AUTHORITY
             )
-            logger.info(f"Authority approval email sent to {authority['email']}")
+            logger.info(f"Authority approval email queued for {authority['email']}")
         except Exception as e:
             logger.error(f"Failed to send authority approval email: {e}")
         
@@ -1779,11 +1806,23 @@ async def approve_authority(authority_id: str, data: ApproveServiceRequest, user
 # ==================== JOB ROUTES ====================
 
 @api_router.post("/jobs", response_model=JobResponse)
-async def create_job(data: JobCreate, user: dict = Depends(get_current_user)):
+async def create_job(
+    data: JobCreate, 
+    user: dict = Depends(get_current_user),
+    idempotency_key: Optional[str] = Header(None, alias="Idempotency-Key")
+):
     # Allow authorities, admins, and towing services to create jobs
     if user["role"] not in [UserRole.AUTHORITY, UserRole.ADMIN, UserRole.TOWING_SERVICE]:
         raise HTTPException(status_code=403, detail="Keine Berechtigung zum Erstellen von Aufträgen")
     
+    # ========== IDEMPOTENCY CHECK ==========
+    if idempotency_key:
+        existing_job = await db.jobs.find_one({"idempotency_key": idempotency_key})
+        if existing_job:
+            # If the exact same request was already processed, just return the existing result (200 OK)
+            # This prevents duplicate inserts if the user clicked "Save" 5 times in panic.
+            return JobResponse(**existing_job)
+            
     # ========== DUPLICATE LICENSE PLATE CHECK ==========
     # Check if there's an active job with the same license plate
     # A job is considered "active" if it's not in 'released' status
@@ -1902,7 +1941,8 @@ async def create_job(data: JobCreate, user: dict = Depends(get_current_user)):
         "is_empty_trip": False,
         "calculated_costs": None,
         # NEW: Track if job was created by towing service
-        "created_by_service": user["role"] == UserRole.TOWING_SERVICE
+        "created_by_service": user["role"] == UserRole.TOWING_SERVICE,
+        "idempotency_key": idempotency_key
     }
     
     await db.jobs.insert_one(job_doc)
@@ -2019,6 +2059,31 @@ async def get_jobs_count(
     count = await db.jobs.count_documents(query)
     return {"total": count}
 
+@api_router.get("/jobs/updates")
+async def get_jobs_updates(
+    since: str,
+    user: dict = Depends(get_current_user)
+):
+    """Delta polling endpoint: Returns jobs updated since the given ISO timestamp"""
+    query = {"updated_at": {"$gt": since}}
+    
+    # Filter by role
+    if user["role"] == UserRole.AUTHORITY:
+        if user.get("is_main_authority"):
+            query["authority_id"] = user["id"]
+        else:
+            query["created_by_id"] = user["id"]
+    elif user["role"] == UserRole.TOWING_SERVICE:
+        query["assigned_service_id"] = user["id"]
+        
+    jobs = await db.jobs.find(query, {"_id": 0}).sort("updated_at", 1).limit(500).to_list(1000)
+    current_time = datetime.now(timezone.utc).isoformat()
+    
+    return {
+        "serverNow": current_time,
+        "changedOrders": [JobResponse(**j) for j in jobs]
+    }
+
 @api_router.get("/jobs/{job_id}", response_model=JobResponse)
 async def get_job(job_id: str, user: dict = Depends(get_current_user)):
     job = await db.jobs.find_one({"id": job_id}, {"_id": 0})
@@ -2056,15 +2121,30 @@ async def update_job(job_id: str, data: JobUpdate, user: dict = Depends(get_curr
         update_data["status"] = data.status
         if data.status == JobStatus.ON_SITE:
             update_data["on_site_at"] = now
+            # Clear future steps
+            update_data["towed_at"] = None
+            update_data["in_yard_at"] = None
+            update_data["released_at"] = None
             # Set accepted_at when service first accepts the job
             if not job.get("accepted_at"):
                 update_data["accepted_at"] = now
         elif data.status == JobStatus.TOWED:
             update_data["towed_at"] = now
+            # Clear future steps
+            update_data["in_yard_at"] = None
+            update_data["released_at"] = None
         elif data.status == JobStatus.IN_YARD:
             update_data["in_yard_at"] = now
+            # Clear future steps
+            update_data["released_at"] = None
         elif data.status == JobStatus.RELEASED:
             update_data["released_at"] = now
+        elif data.status == JobStatus.ASSIGNED:
+            # Clear all forward steps
+            update_data["on_site_at"] = None
+            update_data["towed_at"] = None
+            update_data["in_yard_at"] = None
+            update_data["released_at"] = None
     
     if data.is_empty_trip is not None:
         update_data["is_empty_trip"] = data.is_empty_trip
@@ -2361,7 +2441,27 @@ async def search_vehicle(q: str):
             tow_cost = service.get("tow_cost", 0) or 0
             daily_cost = service.get("daily_cost", 0) or 0
             processing_fee = service.get("processing_fee", 0) or 0
-            night_surcharge = service.get("night_surcharge", 0) or 0
+            empty_trip_fee = 0
+            heavy_vehicle_surcharge = 0
+            night_surcharge = 0
+            weekend_surcharge = 0
+            
+            # Empty trip fee
+            if job.get("is_empty_trip"):
+                empty_trip_fee = service.get("empty_trip_fee", 0) or 0
+                
+            # Heavy vehicle surcharge
+            if job.get("vehicle_category") == "over_3_5t":
+                heavy_vehicle_surcharge = service.get("heavy_vehicle_surcharge", 0) or 0
+                
+            # Night and Weekend surcharges
+            if job.get("towed_at"):
+                towed_time = datetime.fromisoformat(job["towed_at"].replace("Z", "+00:00"))
+                hour = towed_time.hour
+                if hour >= 22 or hour < 6:
+                    night_surcharge = service.get("night_surcharge", 0) or 0
+                if towed_time.weekday() >= 5:
+                    weekend_surcharge = service.get("weekend_surcharge", 0) or 0
             
             # Calculate days in yard
             if job.get("in_yard_at"):
@@ -2371,7 +2471,7 @@ async def search_vehicle(q: str):
             
             # Calculate total cost including all fees
             standkosten = daily_cost * days_in_yard
-            total_cost = tow_cost + standkosten + processing_fee + night_surcharge
+            total_cost = tow_cost + standkosten + processing_fee + empty_trip_fee + heavy_vehicle_surcharge + night_surcharge + weekend_surcharge
     
     return VehicleSearchResult(
         found=True,
@@ -2391,7 +2491,10 @@ async def search_vehicle(q: str):
         daily_cost=daily_cost,
         days_in_yard=days_in_yard,
         processing_fee=processing_fee,
+        empty_trip_fee=empty_trip_fee if 'empty_trip_fee' in locals() else None,
         night_surcharge=night_surcharge,
+        weekend_surcharge=weekend_surcharge if 'weekend_surcharge' in locals() else None,
+        heavy_vehicle_surcharge=heavy_vehicle_surcharge if 'heavy_vehicle_surcharge' in locals() else None,
         total_cost=total_cost,
         location_lat=job.get("location_lat"),
         location_lng=job.get("location_lng"),
@@ -2626,9 +2729,47 @@ def wrap_text(text, max_length=60):
         lines.append(current_line)
     return "\n".join(lines)
 
+@api_router.get("/jobs/{job_id}/pdf/token")
+async def get_pdf_download_token(job_id: str, user: dict = Depends(get_current_user)):
+    """Generate a short-lived token to download a PDF (requires auth)"""
+    job = await db.jobs.find_one({"id": job_id}, {"_id": 0})
+    if not job:
+        raise HTTPException(status_code=404, detail="Job not found")
+        
+    # Check permissions
+    if user["role"] == UserRole.AUTHORITY:
+        if user.get("is_main_authority"):
+            if job.get("authority_id") != user["id"]:
+                raise HTTPException(status_code=403, detail="Keine Berechtigung für diesen Auftrag")
+        else:
+            if job.get("created_by_id") != user["id"] and job.get("authority_id") != user.get("parent_authority_id"):
+                raise HTTPException(status_code=403, detail="Keine Berechtigung für diesen Auftrag")
+    elif user["role"] == UserRole.TOWING_SERVICE:
+        if job.get("assigned_service_id") != user["id"]:
+            raise HTTPException(status_code=403, detail="Keine Berechtigung für diesen Auftrag")
+            
+    # Generate 5-minute token
+    expiration = datetime.now(timezone.utc) + timedelta(minutes=5)
+    payload = {
+        "job_id": job_id,
+        "action": "download_pdf",
+        "exp": expiration
+    }
+    
+    token = jwt.encode(payload, JWT_SECRET, algorithm=JWT_ALGORITHM)
+    return {"token": token}
+
 @api_router.get("/jobs/{job_id}/pdf")
-async def generate_pdf(job_id: str):
-    """Generate PDF - public endpoint (no auth required)"""
+async def generate_pdf(job_id: str, token: str):
+    """Generate PDF - secured by short-lived token"""
+    try:
+        payload = jwt.decode(token, JWT_SECRET, algorithms=[JWT_ALGORITHM])
+        if payload.get("job_id") != job_id or payload.get("action") != "download_pdf":
+            raise HTTPException(status_code=403, detail="Ungültiger Token")
+    except jwt.ExpiredSignatureError:
+        raise HTTPException(status_code=403, detail="Token abgelaufen (nur 5 min gültig)")
+    except jwt.InvalidTokenError:
+        raise HTTPException(status_code=403, detail="Ungültiger Token")
     job = await db.jobs.find_one({"id": job_id}, {"_id": 0})
     if not job:
         raise HTTPException(status_code=404, detail="Job not found")
@@ -2864,8 +3005,20 @@ async def generate_pdf(job_id: str):
     
     # ===== FUNDORT =====
     story.append(Paragraph("Fundort", heading_style))
+    # Clean up address if it contains raw coordinates at the beginning
+    display_address = job['location_address']
+    if display_address and re.match(r'^\s*[-+]?\d{1,2}\.\d+,\s*[-+]?\d{1,3}\.\d+\s*[-|:]\s*', display_address):
+        # Extract everything after the coordinates
+        parts = re.split(r'^\s*[-+]?\d{1,2}\.\d+,\s*[-+]?\d{1,3}\.\d+\s*[-|:]\s*', display_address, 1)
+        if len(parts) > 1 and parts[1].strip():
+            display_address = parts[1].strip()
+            
+    # Also handle the exact case the user showed: "52.379462, 9.724245" where address is just coords
+    if display_address and re.match(r'^\s*[-+]?\d{1,2}\.\d+,\s*[-+]?\d{1,3}\.\d+\s*$', display_address):
+        display_address = "Keine genaue Adresse verfügbar (nur Koordinaten)"
+
     location_data = [
-        [Paragraph("<b>Adresse</b>", cell_style), Paragraph(wrap_text(job['location_address'], 55), cell_style)],
+        [Paragraph("<b>Adresse</b>", cell_style), Paragraph(wrap_text(display_address, 55), cell_style)],
         [Paragraph("<b>Koordinaten</b>", cell_style), Paragraph(f"{job['location_lat']:.6f}, {job['location_lng']:.6f}", cell_style)],
     ]
     location_table = Table(location_data, colWidths=[4.5*cm, 12.5*cm])
@@ -2897,23 +3050,33 @@ async def generate_pdf(job_id: str):
             Paragraph("2. Vor Ort angekommen", cell_style), 
             Paragraph(format_datetime(job.get('on_site_at')), cell_style),
             Paragraph("✓" if job.get('on_site_at') else "-", cell_style)
-        ],
-        [
-            Paragraph("3. Abgeschleppt", cell_style), 
-            Paragraph(format_datetime(job.get('towed_at')), cell_style),
-            Paragraph("✓" if job.get('towed_at') else "-", cell_style)
-        ],
-        [
-            Paragraph("4. Im Hof eingetroffen", cell_style), 
-            Paragraph(format_datetime(job.get('in_yard_at')), cell_style),
-            Paragraph("✓" if job.get('in_yard_at') else "-", cell_style)
-        ],
-        [
-            Paragraph("5. Fahrzeug abgeholt", cell_style), 
-            Paragraph(format_datetime(job.get('released_at')), cell_style),
-            Paragraph("✓" if job.get('released_at') else "-", cell_style)
-        ],
+        ]
     ]
+
+    if job.get('is_empty_trip'):
+        timeline_data.append([
+            Paragraph("3. Leerfahrt verzeichnet", cell_style),
+            Paragraph(format_datetime(job.get('updated_at')), cell_style),
+            Paragraph("✓" if job.get('status') in ['empty_trip', 'released'] else "-", cell_style)
+        ])
+    else:
+        timeline_data.extend([
+            [
+                Paragraph("3. Abgeschleppt", cell_style), 
+                Paragraph(format_datetime(job.get('towed_at')), cell_style),
+                Paragraph("✓" if job.get('towed_at') else "-", cell_style)
+            ],
+            [
+                Paragraph("4. Im Hof eingetroffen", cell_style), 
+                Paragraph(format_datetime(job.get('in_yard_at')), cell_style),
+                Paragraph("✓" if job.get('in_yard_at') else "-", cell_style)
+            ],
+            [
+                Paragraph("5. Fahrzeug abgeholt", cell_style), 
+                Paragraph(format_datetime(job.get('released_at')), cell_style),
+                Paragraph("✓" if job.get('released_at') else "-", cell_style)
+            ]
+        ])
     timeline_table = Table(timeline_data, colWidths=[6*cm, 8*cm, 3*cm])
     timeline_table.setStyle(TableStyle([
         ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#f97316')),  # Orange header
@@ -2950,7 +3113,8 @@ async def generate_pdf(job_id: str):
         story.append(owner_table)
     
     # ===== ZAHLUNGSINFORMATIONEN =====
-    if job.get('payment_method'):
+    has_payment = job.get('payment_method') and not (job.get('is_empty_trip') and job.get('payment_amount', 0) == 0)
+    if has_payment:
         story.append(Paragraph("Zahlungsinformationen", heading_style))
         payment_method_text = "Bar" if job['payment_method'] == 'cash' else "Kartenzahlung"
         payment_data = [
@@ -3497,11 +3661,15 @@ async def root():
 # Include router
 app.include_router(api_router)
 
+_allowed_origins = os.environ.get('CORS_ORIGINS', 'http://localhost:3000').split(',')
+if "http://localhost:3000" not in _allowed_origins:
+    _allowed_origins.append("http://localhost:3000")
+
 # CORS
 app.add_middleware(
     CORSMiddleware,
     allow_credentials=True,
-    allow_origins=os.environ.get('CORS_ORIGINS', '*').split(','),
+    allow_origins=_allowed_origins,
     allow_methods=["*"],
     allow_headers=["*"],
 )
@@ -3518,6 +3686,11 @@ async def startup_event():
         await db.jobs.create_index("assigned_service_id")
         await db.jobs.create_index("job_number")
         await db.jobs.create_index([("license_plate", 1), ("status", 1)])  # Compound index
+        
+        # Polling performance indices
+        await db.jobs.create_index([("authority_id", 1), ("updated_at", 1)])
+        await db.jobs.create_index([("created_by_id", 1), ("updated_at", 1)])
+        await db.jobs.create_index([("assigned_service_id", 1), ("updated_at", 1)])
         
         # Indexes for users collection
         await db.users.create_index("email", unique=True)
