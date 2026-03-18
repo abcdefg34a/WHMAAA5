@@ -79,7 +79,11 @@ MAX_IMAGE_SIZE = (1920, 1080)  # Max dimensions
 JPEG_QUALITY = 75  # Quality for JPEG compression
 
 # DSGVO Data Retention Settings (in days)
-DSGVO_RETENTION_DAYS = int(os.environ.get('DSGVO_RETENTION_DAYS', 180))  # 6 months default
+DSGVO_RETENTION_DAYS = int(os.environ.get('DSGVO_RETENTION_DAYS', 180))  # 6 months default for personal data
+
+# Steuerrechtliche Aufbewahrungsfristen (in Jahren)
+# § 147 AO / § 257 HGB: Rechnungen und Buchungsbelege müssen 10 Jahre aufbewahrt werden
+INVOICE_RETENTION_YEARS = int(os.environ.get('INVOICE_RETENTION_YEARS', 10))  # 10 years for invoices
 
 # APScheduler instance (will be started in startup_event)
 scheduler = AsyncIOScheduler()
@@ -3861,31 +3865,93 @@ async def get_upload(filename: str):
 async def root():
     return {"message": "Abschlepp-Management API", "version": "1.0.0"}
 
-# ==================== DSGVO DATA CLEANUP ====================
+# ==================== DSGVO DATA CLEANUP & STEUERRECHTLICHE AUFBEWAHRUNG ====================
+
+"""
+DATENSCHUTZ- UND AUFBEWAHRUNGSKONZEPT:
+
+1. DSGVO (Datenschutz-Grundverordnung):
+   - Personenbezogene Daten werden nach 6 Monaten (180 Tage) anonymisiert
+   - Betrifft: Kennzeichen, FIN, Halterdaten, Fotos
+   
+2. Steuerrecht (§ 147 AO / § 257 HGB):
+   - Rechnungen und Buchungsbelege: 10 Jahre Aufbewahrungspflicht
+   - Betrifft: Rechnungsnummer, Beträge, Zahlungsdaten, Auftraggeber (Behörde), Dienstleister
+   
+3. Ablauf:
+   - Nach 6 Monaten: Personenbezogene Daten anonymisiert, Rechnungsdaten bleiben
+   - Nach 10 Jahren: Gesamter Datensatz kann gelöscht werden
+"""
+
+# Felder die ANONYMISIERT werden (personenbezogen)
+PERSONAL_DATA_FIELDS = [
+    "license_plate",      # Kennzeichen
+    "vin",                # Fahrzeug-Identifizierungsnummer
+    "owner_name",         # Haltername
+    "owner_address",      # Halteradresse
+    "owner_phone",        # Haltertelefon
+    "driver_name",        # Fahrername (bei Leerfahrt)
+    "driver_address",     # Fahreradresse
+    "vehicle_brand",      # Fahrzeugmarke (kann identifizierend sein)
+    "vehicle_model",      # Fahrzeugmodell
+    "vehicle_color",      # Fahrzeugfarbe
+    "location_address",   # Abschleppstandort (kann sensibel sein)
+]
+
+# Felder die BEHALTEN werden (für Rechnungen/Steuer)
+INVOICE_DATA_FIELDS = [
+    "id",                 # Interne ID
+    "job_number",         # Rechnungsnummer
+    "created_at",         # Erstellungsdatum
+    "released_at",        # Freigabedatum
+    "tow_cost",           # Abschleppkosten
+    "daily_cost",         # Standgebühren
+    "total_cost",         # Gesamtkosten
+    "processing_fee",     # Bearbeitungsgebühr
+    "payment_method",     # Zahlungsart
+    "payment_received",   # Zahlung erhalten
+    "paid_amount",        # Bezahlter Betrag
+    "authority_id",       # Auftraggeber-ID
+    "authority_name",     # Auftraggeber (für Rechnung)
+    "assigned_service_id", # Dienstleister-ID
+    "service_name",       # Dienstleister (für Rechnung)
+    "tow_reason",         # Abschleppgrund (für Buchungszweck)
+    "status",             # Status
+    "is_sicherstellung",  # Sicherstellung-Flag
+    "days_in_yard",       # Standtage
+]
+
 
 async def dsgvo_data_cleanup():
     """
-    DSGVO-konformer Cronjob zur automatischen Anonymisierung von Fahrzeugdaten.
-    Läuft täglich um 03:00 Uhr und anonymisiert alle Aufträge, die älter als 
-    DSGVO_RETENTION_DAYS (Standard: 6 Monate = 180 Tage) sind und den Status "released" haben.
+    DSGVO-konformer Cronjob zur automatischen Anonymisierung von personenbezogenen Daten.
+    
+    WICHTIG: Unterscheidet zwischen:
+    - Personenbezogene Daten → nach 6 Monaten anonymisieren
+    - Rechnungsdaten → 10 Jahre aufbewahren (Steuerrecht)
+    
+    Läuft täglich um 03:00 Uhr.
     """
-    logger.info(f"DSGVO Data Cleanup gestartet - Retention: {DSGVO_RETENTION_DAYS} Tage")
+    logger.info(f"DSGVO Data Cleanup gestartet - Personendaten-Retention: {DSGVO_RETENTION_DAYS} Tage, Rechnungs-Retention: {INVOICE_RETENTION_YEARS} Jahre")
     
     try:
-        cutoff_date = datetime.now(timezone.utc) - timedelta(days=DSGVO_RETENTION_DAYS)
-        cutoff_date_str = cutoff_date.isoformat()
+        cutoff_date_personal = datetime.now(timezone.utc) - timedelta(days=DSGVO_RETENTION_DAYS)
+        cutoff_date_str = cutoff_date_personal.isoformat()
         
-        # Find all released jobs older than retention period that haven't been anonymized yet
+        # Find all released jobs older than personal data retention period
+        # that haven't been anonymized yet
         query = {
             "status": "released",
             "released_at": {"$lt": cutoff_date_str},
-            "anonymized": {"$ne": True}  # Skip already anonymized jobs
+            "personal_data_anonymized": {"$ne": True}  # New flag to track personal data anonymization
         }
         
         jobs_to_anonymize = await db.jobs.find(query).to_list(length=1000)
         
         if not jobs_to_anonymize:
             logger.info("DSGVO Cleanup: Keine Aufträge zur Anonymisierung gefunden.")
+            # Still run invoice cleanup
+            await invoice_data_cleanup()
             return
         
         anonymized_count = 0
@@ -3894,23 +3960,21 @@ async def dsgvo_data_cleanup():
             job_id = job.get("id") or str(job.get("_id"))
             original_plate = job.get("license_plate", "")
             
-            # Anonymize personal and vehicle identification data
+            # Anonymize ONLY personal data fields, keep invoice data
             anonymization_data = {
-                "license_plate": "*** (Anonymisiert durch System)",
-                "vin": "*** (Anonymisiert durch System)",
-                "owner_name": "*** (Anonymisiert durch System)" if job.get("owner_name") else None,
-                "owner_address": "*** (Anonymisiert durch System)" if job.get("owner_address") else None,
-                "owner_phone": "*** (Anonymisiert durch System)" if job.get("owner_phone") else None,
-                "driver_name": "*** (Anonymisiert durch System)" if job.get("driver_name") else None,
-                "driver_address": "*** (Anonymisiert durch System)" if job.get("driver_address") else None,
+                "personal_data_anonymized": True,
+                "personal_data_anonymized_at": datetime.now(timezone.utc).isoformat(),
+                "original_license_plate_hash": str(hash(original_plate)),  # Keep hash for audit trail
                 "photos": [],  # Clear photos as they may contain personal data
+                # Legacy flag for backwards compatibility
                 "anonymized": True,
                 "anonymized_at": datetime.now(timezone.utc).isoformat(),
-                "original_license_plate_hash": str(hash(original_plate))  # Keep hash for audit trail
             }
             
-            # Remove None values
-            anonymization_data = {k: v for k, v in anonymization_data.items() if v is not None}
+            # Anonymize each personal data field that exists
+            for field in PERSONAL_DATA_FIELDS:
+                if job.get(field):
+                    anonymization_data[field] = "*** (DSGVO-Anonymisiert)"
             
             await db.jobs.update_one(
                 {"id": job_id} if job.get("id") else {"_id": job["_id"]},
@@ -3920,19 +3984,85 @@ async def dsgvo_data_cleanup():
             anonymized_count += 1
         
         # Log the cleanup action to audit log
-        await log_audit("DSGVO_DATA_CLEANUP", "SYSTEM", "Automatischer DSGVO Cronjob", {
+        await log_audit("DSGVO_PERSONAL_DATA_CLEANUP", "SYSTEM", "Automatischer DSGVO Cronjob", {
             "jobs_anonymized": anonymized_count,
-            "retention_days": DSGVO_RETENTION_DAYS,
-            "cutoff_date": cutoff_date_str
+            "personal_data_retention_days": DSGVO_RETENTION_DAYS,
+            "invoice_retention_years": INVOICE_RETENTION_YEARS,
+            "cutoff_date": cutoff_date_str,
+            "note": "Personenbezogene Daten anonymisiert, Rechnungsdaten bleiben erhalten (§ 147 AO)"
         })
         
-        logger.info(f"DSGVO Cleanup abgeschlossen: {anonymized_count} Aufträge anonymisiert.")
+        logger.info(f"DSGVO Cleanup abgeschlossen: {anonymized_count} Aufträge - Personendaten anonymisiert, Rechnungsdaten erhalten.")
+        
+        # Also run invoice cleanup for very old records
+        await invoice_data_cleanup()
         
     except Exception as e:
         logger.error(f"DSGVO Cleanup Fehler: {e}", exc_info=True)
         await log_audit("DSGVO_CLEANUP_ERROR", "SYSTEM", "Automatischer DSGVO Cronjob", {
             "error": str(e)
         })
+
+
+async def invoice_data_cleanup():
+    """
+    Steuerrechtlicher Cleanup: Löscht vollständige Datensätze nach 10 Jahren.
+    
+    Nach Ablauf der steuerrechtlichen Aufbewahrungsfrist (10 Jahre) können
+    auch die Rechnungsdaten gelöscht werden.
+    """
+    try:
+        cutoff_date_invoice = datetime.now(timezone.utc) - timedelta(days=INVOICE_RETENTION_YEARS * 365)
+        cutoff_date_str = cutoff_date_invoice.isoformat()
+        
+        # Find all jobs older than invoice retention period
+        query = {
+            "released_at": {"$lt": cutoff_date_str},
+            "invoice_data_deleted": {"$ne": True}
+        }
+        
+        jobs_to_delete = await db.jobs.find(query).to_list(length=1000)
+        
+        if not jobs_to_delete:
+            logger.info("Steuerrecht Cleanup: Keine Aufträge zur Löschung gefunden (alle jünger als 10 Jahre).")
+            return
+        
+        deleted_count = 0
+        archived_job_numbers = []
+        
+        for job in jobs_to_delete:
+            job_id = job.get("id") or str(job.get("_id"))
+            job_number = job.get("job_number", "Unbekannt")
+            archived_job_numbers.append(job_number)
+            
+            # Option 1: Vollständig löschen
+            # await db.jobs.delete_one({"id": job_id} if job.get("id") else {"_id": job["_id"]})
+            
+            # Option 2: Markieren als gelöscht (empfohlen für Audit-Trail)
+            await db.jobs.update_one(
+                {"id": job_id} if job.get("id") else {"_id": job["_id"]},
+                {"$set": {
+                    "invoice_data_deleted": True,
+                    "invoice_data_deleted_at": datetime.now(timezone.utc).isoformat(),
+                    "deletion_reason": f"Steuerrechtliche Aufbewahrungsfrist ({INVOICE_RETENTION_YEARS} Jahre) abgelaufen"
+                }}
+            )
+            
+            deleted_count += 1
+        
+        if deleted_count > 0:
+            await log_audit("STEUERRECHT_DATA_CLEANUP", "SYSTEM", "Automatischer Steuerrecht Cronjob", {
+                "jobs_marked_deleted": deleted_count,
+                "retention_years": INVOICE_RETENTION_YEARS,
+                "cutoff_date": cutoff_date_str,
+                "job_numbers": archived_job_numbers[:50],  # Log first 50 for reference
+                "note": "Aufbewahrungsfrist nach § 147 AO / § 257 HGB abgelaufen"
+            })
+            
+            logger.info(f"Steuerrecht Cleanup: {deleted_count} Aufträge zur Löschung markiert (älter als {INVOICE_RETENTION_YEARS} Jahre).")
+        
+    except Exception as e:
+        logger.error(f"Steuerrecht Cleanup Fehler: {e}", exc_info=True)
 
 
 # Admin endpoint to manually trigger DSGVO cleanup (for testing)
@@ -3945,44 +4075,80 @@ async def trigger_dsgvo_cleanup(user: dict = Depends(get_current_user)):
     await dsgvo_data_cleanup()
     
     return {
-        "message": "DSGVO Cleanup wurde gestartet",
-        "retention_days": DSGVO_RETENTION_DAYS
+        "message": "DSGVO & Steuerrecht Cleanup wurde gestartet",
+        "personal_data_retention_days": DSGVO_RETENTION_DAYS,
+        "invoice_retention_years": INVOICE_RETENTION_YEARS,
+        "note": "Personendaten werden nach 6 Monaten anonymisiert, Rechnungsdaten nach 10 Jahren gelöscht"
     }
 
 
 # Admin endpoint to get DSGVO status/info
 @api_router.get("/admin/dsgvo-status")
 async def get_dsgvo_status(user: dict = Depends(get_current_user)):
-    """Zeigt den Status der DSGVO-Datenhaltung"""
+    """Zeigt den Status der DSGVO- und steuerrechtlichen Datenhaltung"""
     if user["role"] != "admin":
         raise HTTPException(status_code=403, detail="Nur für Administratoren")
     
-    cutoff_date = datetime.now(timezone.utc) - timedelta(days=DSGVO_RETENTION_DAYS)
+    now = datetime.now(timezone.utc)
+    cutoff_date_personal = now - timedelta(days=DSGVO_RETENTION_DAYS)
+    cutoff_date_invoice = now - timedelta(days=INVOICE_RETENTION_YEARS * 365)
     
-    # Count jobs that would be anonymized
-    pending_anonymization = await db.jobs.count_documents({
+    # Count jobs pending personal data anonymization (older than 6 months)
+    pending_personal_anonymization = await db.jobs.count_documents({
         "status": "released",
-        "released_at": {"$lt": cutoff_date.isoformat()},
-        "anonymized": {"$ne": True}
+        "released_at": {"$lt": cutoff_date_personal.isoformat()},
+        "personal_data_anonymized": {"$ne": True}
     })
     
-    # Count already anonymized jobs
-    already_anonymized = await db.jobs.count_documents({
-        "anonymized": True
+    # Count already anonymized jobs (personal data)
+    personal_data_anonymized = await db.jobs.count_documents({
+        "personal_data_anonymized": True
     })
     
-    # Get last cleanup from audit log
-    last_cleanup = await db.audit_logs.find_one(
-        {"action": "DSGVO_DATA_CLEANUP"},
+    # Count jobs pending invoice deletion (older than 10 years)
+    pending_invoice_deletion = await db.jobs.count_documents({
+        "released_at": {"$lt": cutoff_date_invoice.isoformat()},
+        "invoice_data_deleted": {"$ne": True}
+    })
+    
+    # Count deleted invoice data
+    invoice_data_deleted = await db.jobs.count_documents({
+        "invoice_data_deleted": True
+    })
+    
+    # Get last cleanups from audit log
+    last_personal_cleanup = await db.audit_logs.find_one(
+        {"action": {"$in": ["DSGVO_PERSONAL_DATA_CLEANUP", "DSGVO_DATA_CLEANUP"]}},
+        sort=[("timestamp", -1)]
+    )
+    
+    last_invoice_cleanup = await db.audit_logs.find_one(
+        {"action": "STEUERRECHT_DATA_CLEANUP"},
         sort=[("timestamp", -1)]
     )
     
     return {
-        "retention_days": DSGVO_RETENTION_DAYS,
-        "cutoff_date": cutoff_date.isoformat(),
-        "pending_anonymization": pending_anonymization,
-        "already_anonymized": already_anonymized,
-        "last_cleanup": last_cleanup["timestamp"] if last_cleanup else None,
+        # DSGVO (Personal Data)
+        "dsgvo": {
+            "retention_days": DSGVO_RETENTION_DAYS,
+            "retention_months": DSGVO_RETENTION_DAYS // 30,
+            "cutoff_date": cutoff_date_personal.isoformat(),
+            "pending_anonymization": pending_personal_anonymization,
+            "already_anonymized": personal_data_anonymized,
+            "last_cleanup": last_personal_cleanup["timestamp"] if last_personal_cleanup else None,
+            "description": "Personenbezogene Daten (Kennzeichen, Halterdaten, Fotos)"
+        },
+        # Steuerrecht (Invoice Data)
+        "steuerrecht": {
+            "retention_years": INVOICE_RETENTION_YEARS,
+            "retention_days": INVOICE_RETENTION_YEARS * 365,
+            "cutoff_date": cutoff_date_invoice.isoformat(),
+            "pending_deletion": pending_invoice_deletion,
+            "already_deleted": invoice_data_deleted,
+            "last_cleanup": last_invoice_cleanup["timestamp"] if last_invoice_cleanup else None,
+            "legal_basis": "§ 147 AO / § 257 HGB",
+            "description": "Rechnungsdaten (Beträge, Rechnungsnummer, Zahlungen)"
+        },
         "scheduler_running": scheduler.running
     }
 
