@@ -1417,15 +1417,37 @@ async def get_towing_services(user: dict = Depends(get_current_user)):
             linked_ids = user.get("linked_services", [])
         else:
             # Employee - get linked services from parent authority
-            parent = await db.users.find_one({"id": user.get("parent_authority_id")})
-            linked_ids = parent.get("linked_services", []) if parent else []
+            parent_id = user.get("parent_authority_id")
+            if parent_id:
+                # Try to find by UUID id first, then by MongoDB _id
+                parent = await db.users.find_one({"id": parent_id})
+                if not parent:
+                    # Try with ObjectId
+                    try:
+                        from bson.objectid import ObjectId
+                        parent = await db.users.find_one({"_id": ObjectId(parent_id)})
+                    except:
+                        parent = None
+                linked_ids = parent.get("linked_services", []) if parent else []
+            else:
+                linked_ids = []
         
         if not linked_ids:
             return []
         services = await db.users.find(
-            {"id": {"$in": linked_ids}, "role": UserRole.TOWING_SERVICE, "approval_status": ApprovalStatus.APPROVED},
-            {"_id": 0, "password": 0}
+            {"id": {"$in": linked_ids}, "role": UserRole.TOWING_SERVICE, "approval_status": ApprovalStatus.APPROVED}
         ).to_list(100)
+        # Ensure id field exists for each service
+        result = []
+        for s in services:
+            if "id" not in s and "_id" in s:
+                s["id"] = str(s.pop("_id"))
+            elif "_id" in s:
+                s.pop("_id")
+            if "password" in s:
+                s.pop("password")
+            result.append(UserResponse(**s))
+        return result
     else:
         # Admin sees all approved services
         services = await db.users.find(
