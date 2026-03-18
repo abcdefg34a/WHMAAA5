@@ -1,0 +1,769 @@
+// ============================================================================
+// ABSCHLEPPAPP - PRISMA SCHEMA
+// PostgreSQL / Supabase
+// ============================================================================
+// Dieses Schema ersetzt die MongoDB-Struktur durch ein sauberes relationales
+// Datenmodell für die Abschlepp-Management-Anwendung.
+// ============================================================================
+
+generator client {
+  provider             = "prisma-client-py"
+  recursive_type_depth = 5
+  interface            = "asyncio"
+}
+
+datasource db {
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
+}
+
+// ============================================================================
+// ENUMS
+// ============================================================================
+
+enum UserRole {
+  ADMIN
+  AUTHORITY_USER
+  TOWING_COMPANY_USER
+}
+
+enum ApprovalStatus {
+  PENDING
+  APPROVED
+  REJECTED
+}
+
+enum JobStatus {
+  PENDING
+  ASSIGNED
+  ON_SITE
+  TOWED
+  IN_YARD
+  RELEASED
+  CANCELLED
+}
+
+enum JobType {
+  TOWING
+  SICHERSTELLUNG
+}
+
+enum VehicleCategory {
+  UNDER_3_5T
+  OVER_3_5T
+}
+
+enum PaymentMethod {
+  CASH
+  CARD
+  INVOICE
+  BANK_TRANSFER
+}
+
+enum PhotoType {
+  AUTHORITY_PHOTO
+  SERVICE_PHOTO
+  RELEASE_PHOTO
+}
+
+enum AuditAction {
+  LOGIN
+  LOGIN_FAILED
+  LOGIN_2FA
+  LOGOUT
+  REGISTER
+  USER_APPROVED
+  USER_REJECTED
+  USER_BLOCKED
+  USER_UNBLOCKED
+  PASSWORD_RESET
+  PASSWORD_CHANGED
+  TWO_FA_ENABLED
+  TWO_FA_DISABLED
+  JOB_CREATED
+  JOB_UPDATED
+  JOB_STATUS_CHANGED
+  JOB_ASSIGNED
+  JOB_ACCEPTED
+  JOB_REJECTED
+  JOB_RELEASED
+  SERVICE_LINKED
+  SERVICE_UNLINKED
+  EMPLOYEE_CREATED
+  EMPLOYEE_DELETED
+  INVOICE_CREATED
+  INVOICE_PAID
+  DSGVO_PERSONAL_DATA_CLEANUP
+  STEUERRECHT_DATA_CLEANUP
+  SETTINGS_UPDATED
+}
+
+// ============================================================================
+// 1. USERS - Zentrale Benutzertabelle für alle Rollen
+// ============================================================================
+
+model User {
+  id                   String         @id @default(uuid())
+  email                String         @unique
+  passwordHash         String         @map("password_hash")
+  role                 UserRole
+  name                 String
+  
+  // Authentifizierung & Sicherheit
+  emailVerified        Boolean        @default(false) @map("email_verified")
+  totpEnabled          Boolean        @default(false) @map("totp_enabled")
+  totpSecret           String?        @map("totp_secret")
+  isBlocked            Boolean        @default(false) @map("is_blocked")
+  
+  // Timestamps
+  createdAt            DateTime       @default(now()) @map("created_at")
+  updatedAt            DateTime       @updatedAt @map("updated_at")
+  lastLoginAt          DateTime?      @map("last_login_at")
+  blockedAt            DateTime?      @map("blocked_at")
+  
+  // Relationen
+  sessions             Session[]
+  passwordResetTokens  PasswordResetToken[]
+  emailVerifyTokens    EmailVerificationToken[]
+  auditLogs            AuditLog[]
+  
+  // Behörden-Benutzer Relation
+  authorityUser        AuthorityUser?
+  
+  // Abschleppdienst-Benutzer Relation
+  towingCompanyUser    TowingCompanyUser?
+  
+  @@index([email])
+  @@index([role])
+  @@index([createdAt])
+  @@map("users")
+}
+
+// ============================================================================
+// 2. SESSIONS - Für JWT Refresh Tokens
+// ============================================================================
+
+model Session {
+  id           String   @id @default(uuid())
+  userId       String   @map("user_id")
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  refreshToken String   @unique @map("refresh_token")
+  userAgent    String?  @map("user_agent")
+  ipAddress    String?  @map("ip_address")
+  
+  expiresAt    DateTime @map("expires_at")
+  createdAt    DateTime @default(now()) @map("created_at")
+  
+  @@index([userId])
+  @@index([refreshToken])
+  @@index([expiresAt])
+  @@map("sessions")
+}
+
+// ============================================================================
+// 3. PASSWORD RESET TOKENS
+// ============================================================================
+
+model PasswordResetToken {
+  id        String   @id @default(uuid())
+  userId    String   @map("user_id")
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  token     String   @unique
+  expiresAt DateTime @map("expires_at")
+  usedAt    DateTime? @map("used_at")
+  
+  createdAt DateTime @default(now()) @map("created_at")
+  
+  @@index([token])
+  @@index([userId])
+  @@map("password_reset_tokens")
+}
+
+// ============================================================================
+// 4. EMAIL VERIFICATION TOKENS
+// ============================================================================
+
+model EmailVerificationToken {
+  id        String   @id @default(uuid())
+  userId    String   @map("user_id")
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  token     String   @unique
+  expiresAt DateTime @map("expires_at")
+  usedAt    DateTime? @map("used_at")
+  
+  createdAt DateTime @default(now()) @map("created_at")
+  
+  @@index([token])
+  @@index([userId])
+  @@map("email_verification_tokens")
+}
+
+// ============================================================================
+// 5. AUTHORITIES - Behörden-Organisationen
+// ============================================================================
+
+model Authority {
+  id              String         @id @default(uuid())
+  name            String         // z.B. "Ordnungsamt Berlin-Mitte"
+  department      String?        // Abteilung
+  
+  // Adresse (optional)
+  street          String?
+  city            String?
+  zipCode         String?        @map("zip_code")
+  state           String?        // Bundesland
+  
+  // Kontakt
+  phone           String?
+  email           String?
+  
+  // Genehmigung durch Admin
+  approvalStatus  ApprovalStatus @default(PENDING) @map("approval_status")
+  approvedAt      DateTime?      @map("approved_at")
+  rejectedAt      DateTime?      @map("rejected_at")
+  rejectionReason String?        @map("rejection_reason")
+  
+  // Timestamps
+  createdAt       DateTime       @default(now()) @map("created_at")
+  updatedAt       DateTime       @updatedAt @map("updated_at")
+  
+  // Relationen
+  users           AuthorityUser[]
+  towingLinks     AuthorityTowingCompanyLink[]
+  jobs            TowingJob[]
+  
+  @@index([name])
+  @@index([approvalStatus])
+  @@index([city])
+  @@map("authorities")
+}
+
+// ============================================================================
+// 6. AUTHORITY_USERS - Behörden-Benutzer (Haupt-Account und Mitarbeiter)
+// ============================================================================
+
+model AuthorityUser {
+  id              String    @id @default(uuid())
+  userId          String    @unique @map("user_id")
+  user            User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  authorityId     String    @map("authority_id")
+  authority       Authority @relation(fields: [authorityId], references: [id], onDelete: Cascade)
+  
+  // Dienstnummer (automatisch generiert)
+  dienstnummer    String    @unique
+  
+  // Haupt-Account vs Mitarbeiter
+  isMainAccount   Boolean   @default(false) @map("is_main_account")
+  
+  // Für Mitarbeiter: Referenz zum Haupt-Account
+  parentUserId    String?   @map("parent_user_id")
+  parentUser      AuthorityUser? @relation("EmployeeHierarchy", fields: [parentUserId], references: [id])
+  employees       AuthorityUser[] @relation("EmployeeHierarchy")
+  
+  // Timestamps
+  createdAt       DateTime  @default(now()) @map("created_at")
+  updatedAt       DateTime  @updatedAt @map("updated_at")
+  
+  // Relationen zu Jobs (erstellt von diesem Benutzer)
+  createdJobs     TowingJob[] @relation("JobCreator")
+  
+  @@index([authorityId])
+  @@index([dienstnummer])
+  @@index([isMainAccount])
+  @@map("authority_users")
+}
+
+// ============================================================================
+// 7. AUTHORITY_TOWING_COMPANY_LINKS - Verknüpfung Behörde <-> Abschleppdienst
+// ============================================================================
+
+model AuthorityTowingCompanyLink {
+  id               String        @id @default(uuid())
+  
+  authorityId      String        @map("authority_id")
+  authority        Authority     @relation(fields: [authorityId], references: [id], onDelete: Cascade)
+  
+  towingCompanyId  String        @map("towing_company_id")
+  towingCompany    TowingCompany @relation(fields: [towingCompanyId], references: [id], onDelete: Cascade)
+  
+  // Wer hat verknüpft
+  linkedByUserId   String?       @map("linked_by_user_id")
+  
+  // Timestamps
+  linkedAt         DateTime      @default(now()) @map("linked_at")
+  
+  @@unique([authorityId, towingCompanyId])
+  @@index([authorityId])
+  @@index([towingCompanyId])
+  @@map("authority_towing_company_links")
+}
+
+// ============================================================================
+// 8. TOWING_COMPANIES - Abschleppunternehmen
+// ============================================================================
+
+model TowingCompany {
+  id               String         @id @default(uuid())
+  companyName      String         @map("company_name")
+  
+  // Kontakt
+  phone            String
+  email            String?
+  website          String?
+  
+  // Firmenadresse
+  street           String?
+  city             String?
+  zipCode          String?        @map("zip_code")
+  state            String?        // Bundesland
+  
+  // Hofadresse (wo Fahrzeuge stehen)
+  yardStreet       String?        @map("yard_street")
+  yardCity         String?        @map("yard_city")
+  yardZipCode      String?        @map("yard_zip_code")
+  yardLat          Float?         @map("yard_lat")
+  yardLng          Float?         @map("yard_lng")
+  
+  // Öffnungszeiten
+  openingHours     String?        @map("opening_hours")
+  
+  // Verknüpfungscode (6-stellig, für Behörden zum Verknüpfen)
+  serviceCode      String         @unique @map("service_code")
+  
+  // Gewerbeanmeldung (Pfad in Supabase Storage)
+  businessLicensePath String?     @map("business_license_path")
+  
+  // Genehmigung durch Admin
+  approvalStatus   ApprovalStatus @default(PENDING) @map("approval_status")
+  approvedAt       DateTime?      @map("approved_at")
+  rejectedAt       DateTime?      @map("rejected_at")
+  rejectionReason  String?        @map("rejection_reason")
+  
+  // Timestamps
+  createdAt        DateTime       @default(now()) @map("created_at")
+  updatedAt        DateTime       @updatedAt @map("updated_at")
+  
+  // Relationen
+  users            TowingCompanyUser[]
+  authorityLinks   AuthorityTowingCompanyLink[]
+  pricing          TowingCompanyPricing?
+  jobs             TowingJob[]
+  invoices         Invoice[]
+  
+  @@index([companyName])
+  @@index([serviceCode])
+  @@index([approvalStatus])
+  @@index([city])
+  @@map("towing_companies")
+}
+
+// ============================================================================
+// 9. TOWING_COMPANY_PRICING - Preiskonfiguration je Abschleppdienst
+// ============================================================================
+
+model TowingCompanyPricing {
+  id                     String        @id @default(uuid())
+  
+  towingCompanyId        String        @unique @map("towing_company_id")
+  towingCompany          TowingCompany @relation(fields: [towingCompanyId], references: [id], onDelete: Cascade)
+  
+  // Standardpreise
+  towCost                Float?        @map("tow_cost")        // Abschleppkosten
+  dailyCost              Float?        @map("daily_cost")      // Standgebühren pro Tag
+  processingFee          Float?        @map("processing_fee")  // Bearbeitungsgebühr
+  emptyTripFee           Float?        @map("empty_trip_fee")  // Leerfahrt-Pauschale
+  
+  // Zuschläge
+  nightSurcharge         Float?        @map("night_surcharge")         // Nachtzuschlag
+  weekendSurcharge       Float?        @map("weekend_surcharge")       // Wochenendzuschlag
+  heavyVehicleSurcharge  Float?        @map("heavy_vehicle_surcharge") // >3,5t Zuschlag
+  
+  // Zeitbasierte Abrechnung
+  timeBasedEnabled       Boolean       @default(false) @map("time_based_enabled")
+  firstHalfHour          Float?        @map("first_half_hour")
+  additionalHalfHour     Float?        @map("additional_half_hour")
+  
+  // Timestamps
+  createdAt              DateTime      @default(now()) @map("created_at")
+  updatedAt              DateTime      @updatedAt @map("updated_at")
+  
+  @@map("towing_company_pricing")
+}
+
+// ============================================================================
+// 10. TOWING_COMPANY_USERS - Abschleppdienst-Benutzer
+// ============================================================================
+
+model TowingCompanyUser {
+  id               String        @id @default(uuid())
+  userId           String        @unique @map("user_id")
+  user             User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  towingCompanyId  String        @map("towing_company_id")
+  towingCompany    TowingCompany @relation(fields: [towingCompanyId], references: [id], onDelete: Cascade)
+  
+  // Ist Hauptbenutzer (kann andere Benutzer verwalten)
+  isAdmin          Boolean       @default(false) @map("is_admin")
+  
+  // Timestamps
+  createdAt        DateTime      @default(now()) @map("created_at")
+  updatedAt        DateTime      @updatedAt @map("updated_at")
+  
+  @@index([towingCompanyId])
+  @@map("towing_company_users")
+}
+
+// ============================================================================
+// 11. TOWING_JOBS - Abschleppaufträge
+// ============================================================================
+
+model TowingJob {
+  id                    String          @id @default(uuid())
+  jobNumber             String          @unique @map("job_number")
+  
+  // Fahrzeugdaten (werden bei DSGVO-Cleanup anonymisiert)
+  licensePlate          String?         @map("license_plate")
+  vin                   String?
+  vehicleBrand          String?         @map("vehicle_brand")
+  vehicleModel          String?         @map("vehicle_model")
+  vehicleColor          String?         @map("vehicle_color")
+  
+  // Standort (wo das Fahrzeug abgeschleppt wurde)
+  locationAddress       String          @map("location_address")
+  locationLat           Float?          @map("location_lat")
+  locationLng           Float?          @map("location_lng")
+  
+  // Auftragsdetails
+  towReason             String          @map("tow_reason")
+  jobType               JobType         @default(TOWING) @map("job_type")
+  status                JobStatus       @default(PENDING)
+  
+  // Notizen
+  authorityNotes        String?         @map("authority_notes")
+  serviceNotes          String?         @map("service_notes")
+  
+  // Sicherstellung-spezifische Felder
+  sicherstellungReason  String?         @map("sicherstellung_reason")
+  vehicleCategory       VehicleCategory? @map("vehicle_category")
+  orderingAuthority     String?         @map("ordering_authority")
+  contactAttempts       Boolean?        @map("contact_attempts")
+  contactAttemptsNotes  String?         @map("contact_attempts_notes")
+  estimatedVehicleValue Float?          @map("estimated_vehicle_value")
+  
+  // Leerfahrt
+  isEmptyTrip           Boolean         @default(false) @map("is_empty_trip")
+  
+  // Relationen - Behörde
+  authorityId           String          @map("authority_id")
+  authority             Authority       @relation(fields: [authorityId], references: [id])
+  
+  createdByUserId       String?         @map("created_by_user_id")
+  createdByUser         AuthorityUser?  @relation("JobCreator", fields: [createdByUserId], references: [id])
+  
+  createdByServiceFlag  Boolean         @default(false) @map("created_by_service")
+  
+  // Relationen - Abschleppdienst
+  towingCompanyId       String?         @map("towing_company_id")
+  towingCompany         TowingCompany?  @relation(fields: [towingCompanyId], references: [id])
+  
+  // Halter/Abholer-Daten (werden bei DSGVO-Cleanup anonymisiert)
+  ownerFirstName        String?         @map("owner_first_name")
+  ownerLastName         String?         @map("owner_last_name")
+  ownerStreet           String?         @map("owner_street")
+  ownerCity             String?         @map("owner_city")
+  ownerZipCode          String?         @map("owner_zip_code")
+  ownerPhone            String?         @map("owner_phone")
+  ownerEmail            String?         @map("owner_email")
+  
+  // Zahlung
+  paymentMethod         PaymentMethod?  @map("payment_method")
+  paymentAmount         Float?          @map("payment_amount")
+  paymentReceivedAt     DateTime?       @map("payment_received_at")
+  
+  // Berechnete Kosten (als JSON für Flexibilität)
+  calculatedCosts       Json?           @map("calculated_costs")
+  
+  // Timestamps für Workflow
+  createdAt             DateTime        @default(now()) @map("created_at")
+  updatedAt             DateTime        @updatedAt @map("updated_at")
+  assignedAt            DateTime?       @map("assigned_at")
+  acceptedAt            DateTime?       @map("accepted_at")
+  rejectedAt            DateTime?       @map("rejected_at")
+  onSiteAt              DateTime?       @map("on_site_at")
+  towedAt               DateTime?       @map("towed_at")
+  inYardAt              DateTime?       @map("in_yard_at")
+  releasedAt            DateTime?       @map("released_at")
+  cancelledAt           DateTime?       @map("cancelled_at")
+  
+  // DSGVO-Felder
+  personalDataAnonymized   Boolean      @default(false) @map("personal_data_anonymized")
+  personalDataAnonymizedAt DateTime?    @map("personal_data_anonymized_at")
+  invoiceDataDeleted       Boolean      @default(false) @map("invoice_data_deleted")
+  invoiceDataDeletedAt     DateTime?    @map("invoice_data_deleted_at")
+  
+  // Relationen
+  photos                TowingJobPhoto[]
+  events                TowingJobEvent[]
+  invoices              Invoice[]
+  
+  @@index([jobNumber])
+  @@index([licensePlate])
+  @@index([vin])
+  @@index([status])
+  @@index([authorityId])
+  @@index([towingCompanyId])
+  @@index([createdAt])
+  @@index([releasedAt])
+  @@index([personalDataAnonymized])
+  @@map("towing_jobs")
+}
+
+// ============================================================================
+// 12. TOWING_JOB_PHOTOS - Fotos zu Aufträgen
+// ============================================================================
+
+model TowingJobPhoto {
+  id          String    @id @default(uuid())
+  
+  jobId       String    @map("job_id")
+  job         TowingJob @relation(fields: [jobId], references: [id], onDelete: Cascade)
+  
+  // Foto-Typ (von Behörde, Abschleppdienst, oder bei Freigabe)
+  photoType   PhotoType @map("photo_type")
+  
+  // Pfad in Supabase Storage
+  storagePath String    @map("storage_path")
+  
+  // Metadaten
+  fileName    String?   @map("file_name")
+  mimeType    String?   @map("mime_type")
+  fileSize    Int?      @map("file_size")
+  
+  // Wer hat hochgeladen
+  uploadedByUserId String? @map("uploaded_by_user_id")
+  
+  // Timestamps
+  createdAt   DateTime  @default(now()) @map("created_at")
+  
+  // DSGVO - Foto gelöscht?
+  isDeleted   Boolean   @default(false) @map("is_deleted")
+  deletedAt   DateTime? @map("deleted_at")
+  
+  @@index([jobId])
+  @@index([photoType])
+  @@map("towing_job_photos")
+}
+
+// ============================================================================
+// 13. TOWING_JOB_EVENTS - Ereignis-Log für jeden Auftrag
+// ============================================================================
+
+model TowingJobEvent {
+  id          String    @id @default(uuid())
+  
+  jobId       String    @map("job_id")
+  job         TowingJob @relation(fields: [jobId], references: [id], onDelete: Cascade)
+  
+  // Ereignis-Typ (Status-Änderung, Notiz, etc.)
+  eventType   String    @map("event_type")
+  
+  // Vorheriger und neuer Status (bei Status-Änderungen)
+  fromStatus  JobStatus? @map("from_status")
+  toStatus    JobStatus? @map("to_status")
+  
+  // Beschreibung / Notizen
+  description String?
+  
+  // Wer hat das Ereignis ausgelöst
+  triggeredByUserId String? @map("triggered_by_user_id")
+  triggeredByName   String? @map("triggered_by_name")
+  
+  // Metadaten (JSON für zusätzliche Infos)
+  metadata    Json?
+  
+  // Timestamps
+  createdAt   DateTime  @default(now()) @map("created_at")
+  
+  @@index([jobId])
+  @@index([eventType])
+  @@index([createdAt])
+  @@map("towing_job_events")
+}
+
+// ============================================================================
+// 14. INVOICES - Rechnungen
+// ============================================================================
+
+model Invoice {
+  id                   String        @id @default(uuid())
+  invoiceNumber        String        @unique @map("invoice_number")
+  
+  // Relationen
+  jobId                String        @map("job_id")
+  job                  TowingJob     @relation(fields: [jobId], references: [id])
+  
+  towingCompanyId      String        @map("towing_company_id")
+  towingCompany        TowingCompany @relation(fields: [towingCompanyId], references: [id])
+  
+  // Beträge
+  subtotal             Float
+  taxRate              Float         @default(19.0) @map("tax_rate")
+  taxAmount            Float         @map("tax_amount")
+  totalAmount          Float         @map("total_amount")
+  
+  // Einzelposten (als JSON für Flexibilität)
+  lineItems            Json          @map("line_items")
+  
+  // Status
+  isPaid               Boolean       @default(false) @map("is_paid")
+  paidAt               DateTime?     @map("paid_at")
+  paymentMethod        PaymentMethod? @map("payment_method")
+  
+  // PDF in Supabase Storage
+  pdfPath              String?       @map("pdf_path")
+  
+  // Timestamps
+  createdAt            DateTime      @default(now()) @map("created_at")
+  updatedAt            DateTime      @updatedAt @map("updated_at")
+  
+  // Kundendaten (separate Tabelle für DSGVO)
+  customerData         InvoiceCustomerData?
+  
+  @@index([invoiceNumber])
+  @@index([jobId])
+  @@index([towingCompanyId])
+  @@index([createdAt])
+  @@index([isPaid])
+  @@map("invoices")
+}
+
+// ============================================================================
+// 15. INVOICE_CUSTOMER_DATA - Kundendaten auf Rechnung (DSGVO-sensitiv)
+// ============================================================================
+
+model InvoiceCustomerData {
+  id          String   @id @default(uuid())
+  
+  invoiceId   String   @unique @map("invoice_id")
+  invoice     Invoice  @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
+  
+  // Kundendaten (werden nach 10 Jahren gelöscht)
+  firstName   String?  @map("first_name")
+  lastName    String?  @map("last_name")
+  street      String?
+  city        String?
+  zipCode     String?  @map("zip_code")
+  phone       String?
+  email       String?
+  
+  // DSGVO
+  isAnonymized Boolean  @default(false) @map("is_anonymized")
+  anonymizedAt DateTime? @map("anonymized_at")
+  
+  @@map("invoice_customer_data")
+}
+
+// ============================================================================
+// 16. ORDER_DOCUMENTS - Auftrags-Dokumente (PDFs etc.)
+// ============================================================================
+
+model OrderDocument {
+  id            String    @id @default(uuid())
+  
+  // Kann zu Job oder Invoice gehören
+  jobId         String?   @map("job_id")
+  invoiceId     String?   @map("invoice_id")
+  
+  // Dokument-Typ
+  documentType  String    @map("document_type")
+  documentName  String    @map("document_name")
+  
+  // Pfad in Supabase Storage
+  storagePath   String    @map("storage_path")
+  
+  // Metadaten
+  mimeType      String?   @map("mime_type")
+  fileSize      Int?      @map("file_size")
+  
+  // Timestamps
+  createdAt     DateTime  @default(now()) @map("created_at")
+  
+  @@index([jobId])
+  @@index([invoiceId])
+  @@index([documentType])
+  @@map("order_documents")
+}
+
+// ============================================================================
+// 17. AUDIT_LOGS - Vollständiges Audit-Log
+// ============================================================================
+
+model AuditLog {
+  id            String      @id @default(uuid())
+  
+  // Aktion
+  action        AuditAction
+  
+  // Wer hat die Aktion ausgeführt
+  userId        String?     @map("user_id")
+  user          User?       @relation(fields: [userId], references: [id], onDelete: SetNull)
+  userEmail     String?     @map("user_email")
+  userName      String?     @map("user_name")
+  
+  // Welche Entität wurde betroffen
+  entityType    String?     @map("entity_type")
+  entityId      String?     @map("entity_id")
+  
+  // Details (JSON)
+  details       Json?
+  
+  // Request-Infos
+  ipAddress     String?     @map("ip_address")
+  userAgent     String?     @map("user_agent")
+  
+  // Timestamps
+  createdAt     DateTime    @default(now()) @map("created_at")
+  
+  @@index([action])
+  @@index([userId])
+  @@index([entityType, entityId])
+  @@index([createdAt])
+  @@map("audit_logs")
+}
+
+// ============================================================================
+// 18. SYSTEM_SETTINGS - Globale Einstellungen
+// ============================================================================
+
+model SystemSettings {
+  id                     String   @id @default(uuid())
+  key                    String   @unique
+  value                  String
+  description            String?
+  
+  updatedAt              DateTime @updatedAt @map("updated_at")
+  updatedByUserId        String?  @map("updated_by_user_id")
+  
+  @@map("system_settings")
+}
+
+// ============================================================================
+// 19. INVOICE_COUNTERS - Für Rechnungsnummern-Generierung
+// ============================================================================
+
+model InvoiceCounter {
+  id              String   @id @default(uuid())
+  towingCompanyId String   @unique @map("towing_company_id")
+  year            Int
+  lastNumber      Int      @default(0) @map("last_number")
+  
+  updatedAt       DateTime @updatedAt @map("updated_at")
+  
+  @@unique([towingCompanyId, year])
+  @@map("invoice_counters")
+}
