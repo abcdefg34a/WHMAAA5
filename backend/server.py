@@ -1672,6 +1672,36 @@ async def get_jobs_count(user = Depends(get_current_user)):
     count = await prisma.towingjob.count(where=where)
     return {"total": count}
 
+@api_router.get("/jobs/updates")
+async def get_job_updates_polling(since: Optional[str] = None, user = Depends(get_current_user)):
+    """Get recent job updates for polling - MUST be before /jobs/{job_id}"""
+    where = {}
+    
+    if user.role == UserRole.AUTHORITY_USER and user.authorityUser:
+        where['authorityId'] = user.authorityUser.authorityId
+    elif user.role == UserRole.TOWING_COMPANY_USER and user.towingCompanyUser:
+        where['towingCompanyId'] = user.towingCompanyUser.towingCompanyId
+    
+    if since:
+        try:
+            since_dt = datetime.fromisoformat(since.replace('Z', '+00:00'))
+            where['updatedAt'] = {'gt': since_dt}
+        except:
+            pass
+    
+    jobs = await prisma.towingjob.find_many(
+        where=where,
+        order={'updatedAt': 'desc'},
+        take=50
+    )
+    
+    return [{
+        'id': j.id,
+        'job_number': j.jobNumber,
+        'status': safe_enum_value(j.status),
+        'updated_at': j.updatedAt.isoformat() if j.updatedAt else None
+    } for j in jobs]
+
 @api_router.get("/admin/jobs")
 async def get_admin_jobs(
     page: int = 1,
@@ -2902,36 +2932,6 @@ async def reset_employee_password(employee_id: str, data: dict, user = Depends(g
     )
     
     return {"message": "Passwort zurückgesetzt"}
-
-@api_router.get("/jobs/updates")
-async def get_job_updates(since: Optional[str] = None, user = Depends(get_current_user)):
-    """Get recent job updates for polling"""
-    where = {}
-    
-    if user.role == UserRole.AUTHORITY_USER and user.authorityUser:
-        where['authorityId'] = user.authorityUser.authorityId
-    elif user.role == UserRole.TOWING_COMPANY_USER and user.towingCompanyUser:
-        where['towingCompanyId'] = user.towingCompanyUser.towingCompanyId
-    
-    if since:
-        try:
-            since_dt = datetime.fromisoformat(since.replace('Z', '+00:00'))
-            where['updatedAt'] = {'gt': since_dt}
-        except:
-            pass
-    
-    jobs = await prisma.towingjob.find_many(
-        where=where,
-        order={'updatedAt': 'desc'},
-        take=50
-    )
-    
-    return [{
-        'id': j.id,
-        'job_number': j.jobNumber,
-        'status': safe_enum_value(j.status),
-        'updated_at': j.updatedAt.isoformat() if j.updatedAt else None
-    } for j in jobs]
 
 @api_router.post("/jobs/bulk-update-status")
 async def bulk_update_status(data: dict, user = Depends(get_current_user)):
