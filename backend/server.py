@@ -659,14 +659,14 @@ class JobResponse(BaseModel):
     license_plate: Optional[str] = None
     vin: Optional[str] = None
     tow_reason: str
-    location_address: str
-    location_lat: float
-    location_lng: float
+    location_address: Optional[str] = None
+    location_lat: Optional[float] = None
+    location_lng: Optional[float] = None
     photos: List[str] = []
     notes: Optional[str] = None
     status: str
-    created_by_id: str
-    created_by_name: str
+    created_by_id: Optional[str] = None
+    created_by_name: Optional[str] = None
     created_by_authority: Optional[str] = None
     created_by_dienstnummer: Optional[str] = None
     authority_id: Optional[str] = None
@@ -699,6 +699,10 @@ class JobResponse(BaseModel):
     calculated_costs: Optional[dict] = None
     # NEW: Track if created by towing service
     created_by_service: Optional[bool] = False
+    # DSGVO anonymization flags
+    anonymized: Optional[bool] = None
+    personal_data_anonymized: Optional[bool] = None
+    personal_data_anonymized_at: Optional[str] = None
 
 class VehicleSearchResult(BaseModel):
     found: bool
@@ -2766,8 +2770,16 @@ async def get_all_jobs(
         ]
     
     skip = (page - 1) * limit
-    jobs = await db.jobs.find(query, {"_id": 0}).sort("created_at", -1).skip(skip).limit(limit).to_list(limit)
-    return [JobResponse(**j) for j in jobs]
+    jobs = await db.jobs.find(query).sort("created_at", -1).skip(skip).limit(limit).to_list(limit)
+    result = []
+    for j in jobs:
+        # Ensure id field exists
+        if "id" not in j and "_id" in j:
+            j["id"] = str(j.pop("_id"))
+        elif "_id" in j:
+            j.pop("_id")
+        result.append(JobResponse(**j))
+    return result
 
 @api_router.get("/admin/jobs/count")
 async def get_all_jobs_count(
@@ -2806,8 +2818,16 @@ async def get_all_users(user: dict = Depends(get_current_user)):
     if user["role"] != UserRole.ADMIN:
         raise HTTPException(status_code=403, detail="Admin only")
     
-    users = await db.users.find({}, {"_id": 0, "password": 0}).to_list(1000)
-    return [UserResponse(**u) for u in users]
+    users = await db.users.find({}, {"password": 0}).to_list(1000)
+    result = []
+    for u in users:
+        # Ensure id field exists
+        if "id" not in u and "_id" in u:
+            u["id"] = str(u.pop("_id"))
+        elif "_id" in u:
+            u.pop("_id")
+        result.append(UserResponse(**u))
+    return result
 
 # ==================== ADMIN USER MANAGEMENT ====================
 
