@@ -1237,17 +1237,26 @@ export const AuthorityDashboard = () => {
           <TabsContent value="services">
             <Card>
               <CardHeader className="flex flex-row items-center justify-between">
-                <CardTitle>Verknüpfte Abschleppdienste</CardTitle>
-                <Dialog open={linkDialogOpen} onOpenChange={setLinkDialogOpen}>
-                  <DialogTrigger asChild>
-                    <Button data-testid="add-service-btn" className="bg-slate-900 hover:bg-slate-800">
-                      <Plus className="h-4 w-4 mr-2" />
-                      Hinzufügen
-                    </Button>
-                  </DialogTrigger>
-                  <DialogContent>
-                    <DialogHeader>
-                      <DialogTitle>Abschleppdienst verknüpfen</DialogTitle>
+                <div>
+                  <CardTitle>Verknüpfte Abschleppdienste</CardTitle>
+                  {!user?.is_main_authority && (
+                    <p className="text-sm text-slate-500 mt-1">
+                      Die Verknüpfungen werden vom Haupt-Account verwaltet
+                    </p>
+                  )}
+                </div>
+                {/* Only main authority can add services */}
+                {user?.is_main_authority && (
+                  <Dialog open={linkDialogOpen} onOpenChange={setLinkDialogOpen}>
+                    <DialogTrigger asChild>
+                      <Button data-testid="add-service-btn" className="bg-slate-900 hover:bg-slate-800">
+                        <Plus className="h-4 w-4 mr-2" />
+                        Hinzufügen
+                      </Button>
+                    </DialogTrigger>
+                    <DialogContent>
+                      <DialogHeader>
+                        <DialogTitle>Abschleppdienst verknüpfen</DialogTitle>
                       <DialogDescription>
                         Geben Sie den 6-stelligen Code des Abschleppdienstes ein
                       </DialogDescription>
@@ -1272,15 +1281,22 @@ export const AuthorityDashboard = () => {
                     </div>
                   </DialogContent>
                 </Dialog>
+                )}
               </CardHeader>
               <CardContent>
                 {linkedServices.length === 0 ? (
                   <div className="empty-state">
                     <LinkIcon className="empty-state-icon" />
                     <p>Noch keine Abschleppdienste verknüpft</p>
-                    <p className="text-sm mt-2">
-                      Bitten Sie Ihren Abschleppdienst um den 6-stelligen Verknüpfungscode
-                    </p>
+                    {user?.is_main_authority ? (
+                      <p className="text-sm mt-2">
+                        Bitten Sie Ihren Abschleppdienst um den 6-stelligen Verknüpfungscode
+                      </p>
+                    ) : (
+                      <p className="text-sm mt-2">
+                        Der Haupt-Account hat noch keine Abschleppdienste verknüpft
+                      </p>
+                    )}
                   </div>
                 ) : (
                   <div className="space-y-3">
@@ -1292,15 +1308,21 @@ export const AuthorityDashboard = () => {
                         <div>
                           <p className="font-medium">{service.company_name}</p>
                           <p className="text-sm text-slate-500">{service.phone}</p>
+                          {service.address && (
+                            <p className="text-sm text-slate-500">{service.address}</p>
+                          )}
                         </div>
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          onClick={() => handleUnlinkService(service.id)}
-                          className="text-red-600 hover:text-red-700 hover:bg-red-50"
-                        >
-                          <Trash2 className="h-4 w-4" />
-                        </Button>
+                        {/* Only main authority can unlink services */}
+                        {user?.is_main_authority && (
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => handleUnlinkService(service.id)}
+                            className="text-red-600 hover:text-red-700 hover:bg-red-50"
+                          >
+                            <Trash2 className="h-4 w-4" />
+                          </Button>
+                        )}
                       </div>
                     ))}
                   </div>
