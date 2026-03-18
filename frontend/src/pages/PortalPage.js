@@ -9,6 +9,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../co
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '../components/ui/tabs';
 import { toast } from 'sonner';
 import axios from 'axios';
+import { SkipLink } from '../components/accessibility';
 
 const API_URL = process.env.REACT_APP_BACKEND_URL;
 
@@ -239,25 +240,29 @@ export const PortalPage = () => {
 
   return (
     <div className="min-h-screen bg-slate-100">
+      {/* Skip-Link für Barrierefreiheit (BITV 2.0) */}
+      <SkipLink targetId="main-content" label="Zum Hauptinhalt springen" />
+      
       {/* Header */}
-      <header className="bg-white border-b border-slate-200">
+      <header className="bg-white border-b border-slate-200" role="banner">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex justify-between items-center h-16">
-            <div className="flex items-center gap-2">
-              <Car className="h-8 w-8 text-slate-900" />
+            <a href="/" className="flex items-center gap-2" aria-label="AbschleppPortal - Zur Startseite">
+              <Car className="h-8 w-8 text-slate-900" aria-hidden="true" />
               <span className="font-bold text-xl text-slate-900" style={{ fontFamily: 'Chivo, sans-serif' }}>
                 AbschleppPortal
               </span>
               <span className="ml-2 px-2 py-1 bg-slate-200 text-slate-600 text-xs rounded">
                 Interner Bereich
               </span>
-            </div>
+            </a>
             <Button
               variant="ghost"
               onClick={() => navigate('/')}
               className="flex items-center gap-2"
+              aria-label="Zur Startseite navigieren"
             >
-              <ArrowLeft className="h-4 w-4" />
+              <ArrowLeft className="h-4 w-4" aria-hidden="true" />
               Zur Startseite
             </Button>
           </div>
@@ -265,7 +270,7 @@ export const PortalPage = () => {
       </header>
 
       {/* Main Content */}
-      <main className="max-w-2xl mx-auto px-4 py-12">
+      <main id="main-content" tabIndex={-1} className="max-w-2xl mx-auto px-4 py-12" role="main">
         <div className="text-center mb-8">
           <h1 className="text-3xl font-bold text-slate-900 mb-3" style={{ fontFamily: 'Chivo, sans-serif' }}>
             Portal für Behörden & Abschleppdienste
@@ -275,15 +280,15 @@ export const PortalPage = () => {
           </p>
         </div>
 
-        <Card className="shadow-xl">
+        <Card className="shadow-xl" role="region" aria-label="Anmelde- und Registrierungsbereich">
           <Tabs defaultValue="login" className="w-full">
-            <TabsList className="grid w-full grid-cols-2">
+            <TabsList className="grid w-full grid-cols-2" aria-label="Anmeldung oder Registrierung wählen">
               <TabsTrigger value="login" className="flex items-center gap-2">
-                <LogIn className="h-4 w-4" />
+                <LogIn className="h-4 w-4" aria-hidden="true" />
                 Anmelden
               </TabsTrigger>
               <TabsTrigger value="register" className="flex items-center gap-2">
-                <UserPlus className="h-4 w-4" />
+                <UserPlus className="h-4 w-4" aria-hidden="true" />
                 Registrieren
               </TabsTrigger>
             </TabsList>
@@ -297,9 +302,9 @@ export const PortalPage = () => {
                 </CardDescription>
               </CardHeader>
               <CardContent>
-                <form onSubmit={handleLogin} className="space-y-4">
+                <form onSubmit={handleLogin} className="space-y-4" aria-label="Anmeldeformular">
                   {loginError && (
-                    <div className="bg-red-50 text-red-700 px-4 py-3 rounded-md text-sm">
+                    <div className="bg-red-50 text-red-700 px-4 py-3 rounded-md text-sm" role="alert" aria-live="assertive">
                       {loginError}
                     </div>
                   )}
@@ -307,7 +312,7 @@ export const PortalPage = () => {
                   {!loginRequires2FA ? (
                     <>
                       <div className="space-y-2">
-                        <Label htmlFor="login-email">E-Mail</Label>
+                        <Label htmlFor="login-email">E-Mail <span className="text-red-500" aria-hidden="true">*</span></Label>
                         <Input
                           id="login-email"
                           type="email"
@@ -317,6 +322,7 @@ export const PortalPage = () => {
                           required
                           autoComplete="email"
                           className="h-12"
+                          aria-required="true"
                         />
                       </div>
 

@@ -3,6 +3,7 @@ import "@/App.css";
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import { AuthProvider, useAuth } from "./contexts/AuthContext";
 import { Toaster } from "./components/ui/sonner";
+import { LiveRegionProvider } from "./components/accessibility";
 
 // Pages
 import LandingPage from "./pages/LandingPage";
@@ -16,6 +17,7 @@ import TowingDashboard from "./pages/TowingDashboard";
 import AdminDashboard from "./pages/AdminDashboard";
 import DatenschutzPage from "./pages/DatenschutzPage";
 import ImpressumPage from "./pages/ImpressumPage";
+import BarrierefreiheitPage from "./pages/BarrierefreiheitPage";
 
 // Protected Route Component
 const ProtectedRoute = ({ children, allowedRoles }) => {
@@ -144,6 +146,7 @@ function AppRoutes() {
       {/* Legal Pages */}
       <Route path="/datenschutz" element={<DatenschutzPage />} />
       <Route path="/impressum" element={<ImpressumPage />} />
+      <Route path="/barrierefreiheit" element={<BarrierefreiheitPage />} />
 
       {/* Fallback */}
       <Route path="*" element={<Navigate to="/" replace />} />
@@ -154,12 +157,14 @@ function AppRoutes() {
 function App() {
   return (
     <AuthProvider>
-      <div className="App">
-        <BrowserRouter>
-          <AppRoutes />
-        </BrowserRouter>
-        <Toaster position="top-right" />
-      </div>
+      <LiveRegionProvider>
+        <div className="App" lang="de">
+          <BrowserRouter>
+            <AppRoutes />
+          </BrowserRouter>
+          <Toaster position="top-right" />
+        </div>
+      </LiveRegionProvider>
     </AuthProvider>
   );
 }

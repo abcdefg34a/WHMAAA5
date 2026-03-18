@@ -6,6 +6,7 @@ import { Button } from '../components/ui/button';
 import { Input } from '../components/ui/input';
 import { Label } from '../components/ui/label';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../components/ui/card';
+import { SkipLink } from '../components/accessibility';
 
 export const LoginPage = () => {
   const navigate = useNavigate();
@@ -68,19 +69,23 @@ export const LoginPage = () => {
         background: 'linear-gradient(135deg, #F8FAFC 0%, #E2E8F0 100%)'
       }}
     >
+      {/* Skip-Link für Barrierefreiheit */}
+      <SkipLink targetId="login-form" label="Zum Anmeldeformular springen" />
+      
       <div className="w-full max-w-md">
         <Link 
           to="/" 
           className="inline-flex items-center gap-2 text-slate-600 hover:text-slate-900 mb-8"
+          aria-label="Zurück zur Startseite"
         >
-          <ArrowLeft className="h-4 w-4" />
+          <ArrowLeft className="h-4 w-4" aria-hidden="true" />
           Zurück zur Startseite
         </Link>
 
-        <Card className="shadow-xl border-slate-200">
+        <Card className="shadow-xl border-slate-200" role="region" aria-label="Anmeldebereich">
           <CardHeader className="text-center pb-2">
             <div className="flex justify-center mb-4">
-              <div className="bg-slate-900 p-3 rounded-xl">
+              <div className="bg-slate-900 p-3 rounded-xl" aria-hidden="true">
                 <Car className="h-8 w-8 text-white" />
               </div>
             </div>
@@ -88,15 +93,17 @@ export const LoginPage = () => {
               Admin-Anmeldung
             </CardTitle>
             <CardDescription>
-              Nur für Administratoren - Behörden und Abschleppdienste nutzen bitte das <a href="/portal" className="text-orange-600 hover:text-orange-700">Portal</a>
+              Nur für Administratoren - Behörden und Abschleppdienste nutzen bitte das <a href="/portal" className="text-orange-600 hover:text-orange-700 underline">Portal</a>
             </CardDescription>
           </CardHeader>
           <CardContent>
-            <form onSubmit={handleSubmit} className="space-y-4">
+            <form id="login-form" onSubmit={handleSubmit} className="space-y-4" tabIndex={-1} aria-label="Anmeldeformular">
               {error && (
                 <div 
                   data-testid="login-error"
                   className="bg-red-50 text-red-700 px-4 py-3 rounded-md text-sm"
+                  role="alert"
+                  aria-live="assertive"
                 >
                   {error}
                 </div>
@@ -105,7 +112,7 @@ export const LoginPage = () => {
               {!requires2FA ? (
                 <>
                   <div className="space-y-2">
-                    <Label htmlFor="email">E-Mail</Label>
+                    <Label htmlFor="email">E-Mail <span className="text-red-500" aria-hidden="true">*</span></Label>
                     <Input
                       data-testid="login-email-input"
                       id="email"
@@ -116,13 +123,16 @@ export const LoginPage = () => {
                       required
                       autoComplete="email"
                       className="h-12"
+                      aria-required="true"
+                      aria-describedby="email-hint"
                     />
+                    <p id="email-hint" className="sr-only">Geben Sie Ihre E-Mail-Adresse ein</p>
                   </div>
 
                   <div className="space-y-2">
                     <div className="flex items-center justify-between">
-                      <Label htmlFor="password">Passwort</Label>
-                      <Link to="/forgot-password" className="text-sm text-orange-600 hover:text-orange-700">
+                      <Label htmlFor="password">Passwort <span className="text-red-500" aria-hidden="true">*</span></Label>
+                      <Link to="/forgot-password" className="text-sm text-orange-600 hover:text-orange-700 underline underline-offset-2">
                         Passwort vergessen?
                       </Link>
                     </div>

@@ -7,6 +7,7 @@ import { Card, CardContent } from '../components/ui/card';
 import { MapContainer, TileLayer, Marker, Popup } from 'react-leaflet';
 import 'leaflet/dist/leaflet.css';
 import L from 'leaflet';
+import { SkipLink } from '../components/accessibility';
 
 // Fix Leaflet default marker icon
 delete L.Icon.Default.prototype._getIconUrl;
@@ -53,16 +54,19 @@ export const LandingPage = () => {
 
   return (
     <div className="min-h-screen bg-slate-50">
+      {/* Skip-Link für Barrierefreiheit (BITV 2.0) */}
+      <SkipLink targetId="main-content" label="Zum Hauptinhalt springen" />
+      
       {/* Header */}
-      <header className="bg-white border-b border-slate-200">
+      <header className="bg-white border-b border-slate-200" role="banner">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex justify-between items-center h-16">
-            <div className="flex items-center gap-2">
-              <Car className="h-8 w-8 text-slate-900" />
+            <a href="/" className="flex items-center gap-2" aria-label="AbschleppPortal - Zur Startseite">
+              <Car className="h-8 w-8 text-slate-900" aria-hidden="true" />
               <span className="font-bold text-xl text-slate-900" style={{ fontFamily: 'Chivo, sans-serif' }}>
                 AbschleppPortal
               </span>
-            </div>
+            </a>
             {/* Login button removed - access only via /portal */}
           </div>
         </div>
@@ -70,14 +74,18 @@ export const LandingPage = () => {
 
       {/* Hero Section */}
       <section
+        id="main-content"
+        tabIndex={-1}
         className="hero-section relative py-24 md:py-32"
         style={{
           backgroundImage: 'url(https://images.unsplash.com/photo-1449824913935-59a10b8d2000?w=1600&q=80)',
           backgroundSize: 'cover',
           backgroundPosition: 'center'
         }}
+        role="region"
+        aria-label="Fahrzeugsuche"
       >
-        <div className="hero-overlay absolute inset-0"></div>
+        <div className="hero-overlay absolute inset-0" aria-hidden="true"></div>
         <div className="relative z-10 max-w-4xl mx-auto px-4 text-center">
           <h1
             className="text-4xl md:text-5xl lg:text-6xl font-black text-white mb-6"
@@ -90,18 +98,20 @@ export const LandingPage = () => {
           </p>
 
           {/* Search Form - German License Plate Format */}
-          <form onSubmit={handleSearch} className="max-w-xl mx-auto">
+          <form onSubmit={handleSearch} className="max-w-xl mx-auto" role="search" aria-label="Fahrzeugsuche">
             <div className="bg-white rounded-lg p-4 shadow-lg">
               {/* License Plate Visual Format */}
               <div className="flex items-center justify-center mb-3">
                 <div className="flex items-center bg-white border-2 border-slate-300 rounded-md overflow-hidden">
                   {/* EU Field */}
-                  <div className="bg-blue-700 text-white px-2 py-3 flex flex-col items-center">
+                  <div className="bg-blue-700 text-white px-2 py-3 flex flex-col items-center" aria-hidden="true">
                     <div className="text-xs">★★★</div>
                     <div className="font-bold text-sm">D</div>
                   </div>
                   {/* Input Field */}
+                  <label htmlFor="vehicle-search" className="sr-only">Kennzeichen oder FIN eingeben</label>
                   <input
+                    id="vehicle-search"
                     data-testid="vehicle-search-input"
                     type="text"
                     value={searchQuery}
@@ -109,12 +119,14 @@ export const LandingPage = () => {
                     placeholder="B AB 1234 oder FIN..."
                     className="text-xl md:text-2xl font-bold text-center py-3 px-4 w-full border-0 outline-none tracking-wider"
                     style={{ fontFamily: 'monospace' }}
+                    aria-describedby="search-format-hint"
+                    autoComplete="off"
                   />
                 </div>
               </div>
 
               {/* Format Examples */}
-              <p className="text-xs text-slate-500 text-center mb-3">
+              <p id="search-format-hint" className="text-xs text-slate-500 text-center mb-3">
                 Beispiele: <span className="font-mono bg-slate-100 px-1 rounded">B AB 1234</span>, <span className="font-mono bg-slate-100 px-1 rounded">HH XY 999E</span> oder 17-stellige FIN
               </p>
 
@@ -123,26 +135,27 @@ export const LandingPage = () => {
                 data-testid="vehicle-search-btn"
                 type="submit"
                 disabled={searching}
-                className="w-full bg-orange-500 hover:bg-orange-600 text-white py-3 px-6 rounded-lg font-semibold flex items-center justify-center gap-2 transition-colors"
+                className="w-full bg-orange-500 hover:bg-orange-600 text-white py-3 px-6 rounded-lg font-semibold flex items-center justify-center gap-2 transition-colors touch-target"
+                aria-busy={searching}
               >
                 {searching ? (
                   <>
-                    <div className="loading-spinner"></div>
-                    Suche läuft...
+                    <div className="loading-spinner" aria-hidden="true"></div>
+                    <span>Suche läuft...</span>
                   </>
                 ) : (
                   <>
-                    <Search className="h-5 w-5" />
-                    Fahrzeug suchen
+                    <Search className="h-5 w-5" aria-hidden="true" />
+                    <span>Fahrzeug suchen</span>
                   </>
                 )}
               </button>
             </div>
 
             {/* Pickup Hint */}
-            <div className="mt-4 bg-amber-500/90 text-white px-4 py-3 rounded-lg text-sm">
+            <div className="mt-4 bg-amber-500/90 text-white px-4 py-3 rounded-lg text-sm" role="note" aria-label="Hinweis zur Abholung">
               <p className="font-semibold flex items-center gap-2">
-                <FileText className="h-4 w-4" />
+                <FileText className="h-4 w-4" aria-hidden="true" />
                 Bei Treffer zur Abholung mitbringen:
               </p>
               <ul className="mt-1 ml-6 list-disc text-amber-100">
@@ -153,34 +166,36 @@ export const LandingPage = () => {
           </form>
 
           {error && (
-            <p className="mt-4 text-red-400">{error}</p>
+            <div role="alert" aria-live="assertive" className="mt-4 bg-red-500/20 text-red-200 px-4 py-3 rounded-lg">
+              <p className="font-medium">{error}</p>
+            </div>
           )}
         </div>
       </section>
 
       {/* Search Result */}
       {searchResult && (
-        <section className="py-12 px-4">
+        <section className="py-12 px-4" aria-label="Suchergebnis" role="region" aria-live="polite">
           <div className="max-w-4xl mx-auto">
             {searchResult.found ? (
-              <Card data-testid="search-result-found" className="border-2 border-orange-500">
+              <Card data-testid="search-result-found" className="border-2 border-orange-500" role="article" aria-label="Fahrzeug gefunden">
                 <CardContent className="p-6 md:p-8">
                   <div className="flex items-start gap-4 mb-6">
-                    <div className="bg-orange-100 p-3 rounded-lg">
+                    <div className="bg-orange-100 p-3 rounded-lg" aria-hidden="true">
                       <Car className="h-8 w-8 text-orange-600" />
                     </div>
                     <div>
                       <h2 className="text-2xl font-bold text-slate-900" style={{ fontFamily: 'Chivo, sans-serif' }}>
                         Fahrzeug gefunden!
                       </h2>
-                      <p className="text-slate-600">Auftragsnummer: {searchResult.job_number}</p>
+                      <p className="text-slate-600">Auftragsnummer: <span className="font-mono">{searchResult.job_number}</span></p>
                     </div>
                   </div>
 
                   <div className="grid md:grid-cols-2 gap-6 mb-6">
                     <div className="space-y-4">
                       <div className="flex items-center gap-3">
-                        <div className="bg-slate-100 p-2 rounded">
+                        <div className="bg-slate-100 p-2 rounded" aria-hidden="true">
                           <Car className="h-5 w-5 text-slate-600" />
                         </div>
                         <div>
@@ -190,20 +205,20 @@ export const LandingPage = () => {
                       </div>
 
                       <div className="flex items-center gap-3">
-                        <div className={`px-3 py-1 rounded-full text-sm font-medium status-${searchResult.status}`}>
-                          {getStatusText(searchResult.status)}
+                        <div className={`px-3 py-1 rounded-full text-sm font-medium status-${searchResult.status}`} role="status">
+                          <span className="sr-only">Status: </span>{getStatusText(searchResult.status)}
                         </div>
                       </div>
 
                       {searchResult.towed_at && (
                         <div className="flex items-center gap-3">
-                          <div className="bg-slate-100 p-2 rounded">
+                          <div className="bg-slate-100 p-2 rounded" aria-hidden="true">
                             <Clock className="h-5 w-5 text-slate-600" />
                           </div>
                           <div>
                             <p className="text-sm text-slate-500">Abgeschleppt am</p>
                             <p className="font-medium">
-                              {new Date(searchResult.towed_at).toLocaleString('de-DE')}
+                              <time dateTime={searchResult.towed_at}>{new Date(searchResult.towed_at).toLocaleString('de-DE')}</time>
                             </p>
                           </div>
                         </div>
@@ -457,34 +472,40 @@ export const LandingPage = () => {
       </section>
 
       {/* Footer */}
-      <footer className="bg-slate-900 text-white py-12 px-4">
+      <footer className="bg-slate-900 text-white py-12 px-4" role="contentinfo">
         <div className="max-w-7xl mx-auto">
           <div className="flex flex-col md:flex-row justify-between items-center gap-6">
             <div className="flex items-center gap-2">
-              <Car className="h-8 w-8" />
+              <Car className="h-8 w-8" aria-hidden="true" />
               <span className="font-bold text-xl" style={{ fontFamily: 'Chivo, sans-serif' }}>
                 AbschleppPortal
               </span>
             </div>
-            <div className="flex flex-col md:flex-row items-center gap-4 md:gap-8">
+            <nav className="flex flex-col md:flex-row items-center gap-4 md:gap-8" aria-label="Rechtliche Hinweise">
               <div className="flex gap-6">
                 <a
                   href="/datenschutz"
-                  className="text-slate-400 hover:text-white text-sm transition-colors"
+                  className="text-slate-400 hover:text-white text-sm transition-colors underline underline-offset-2"
                 >
                   Datenschutz
                 </a>
                 <a
                   href="/impressum"
-                  className="text-slate-400 hover:text-white text-sm transition-colors"
+                  className="text-slate-400 hover:text-white text-sm transition-colors underline underline-offset-2"
                 >
                   Impressum
+                </a>
+                <a
+                  href="/barrierefreiheit"
+                  className="text-slate-400 hover:text-white text-sm transition-colors underline underline-offset-2"
+                >
+                  Barrierefreiheit
                 </a>
               </div>
               <p className="text-slate-400 text-sm">
                 © {new Date().getFullYear()} AbschleppPortal. Alle Rechte vorbehalten.
               </p>
-            </div>
+            </nav>
           </div>
         </div>
       </footer>

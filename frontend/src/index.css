@@ -186,3 +186,164 @@ code {
 .scan-line {
     animation: scan 2s linear infinite;
 }
+
+/* ==================== BARRIEREFREIHEIT (BITV 2.0 / WCAG 2.1) ==================== */
+
+/* Skip-Link für Tastaturnavigation */
+.skip-link {
+    position: absolute;
+    top: -100px;
+    left: 50%;
+    transform: translateX(-50%);
+    background: hsl(var(--primary));
+    color: hsl(var(--primary-foreground));
+    padding: 1rem 2rem;
+    border-radius: 0 0 0.5rem 0.5rem;
+    z-index: 9999;
+    font-weight: 600;
+    text-decoration: none;
+    transition: top 0.3s ease;
+}
+
+.skip-link:focus {
+    top: 0;
+    outline: 3px solid hsl(var(--secondary));
+    outline-offset: 2px;
+}
+
+/* Verbesserte Fokus-Indikatoren für alle interaktiven Elemente */
+*:focus-visible {
+    outline: 3px solid hsl(var(--secondary));
+    outline-offset: 2px;
+}
+
+/* Fokus-Indikatoren für Buttons */
+button:focus-visible,
+[role="button"]:focus-visible,
+a:focus-visible {
+    outline: 3px solid hsl(var(--secondary));
+    outline-offset: 2px;
+    box-shadow: 0 0 0 4px rgba(249, 115, 22, 0.25);
+}
+
+/* Fokus-Indikatoren für Formularelemente */
+input:focus-visible,
+textarea:focus-visible,
+select:focus-visible,
+[contenteditable="true"]:focus-visible {
+    outline: 3px solid hsl(var(--secondary));
+    outline-offset: 0;
+    border-color: hsl(var(--secondary));
+}
+
+/* Hochkontrast-Modus Unterstützung */
+@media (prefers-contrast: high) {
+    :root {
+        --border: 0 0% 0%;
+        --ring: 0 0% 0%;
+    }
+    
+    button, a, input, select, textarea {
+        border-width: 2px;
+    }
+}
+
+/* Reduzierte Bewegung für Nutzer mit vestibulären Störungen */
+@media (prefers-reduced-motion: reduce) {
+    *,
+    *::before,
+    *::after {
+        animation-duration: 0.01ms !important;
+        animation-iteration-count: 1 !important;
+        transition-duration: 0.01ms !important;
+    }
+    
+    .scan-line {
+        animation: none;
+    }
+}
+
+/* Mindestgröße für Touchziele (44x44px nach WCAG 2.5.5) */
+.touch-target {
+    min-width: 44px;
+    min-height: 44px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+}
+
+/* Visuell versteckt, aber für Screenreader zugänglich */
+.sr-only {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    padding: 0;
+    margin: -1px;
+    overflow: hidden;
+    clip: rect(0, 0, 0, 0);
+    white-space: nowrap;
+    border-width: 0;
+}
+
+/* Fokus innerhalb von Gruppen (für Tabellen, Listen) */
+.focus-within-highlight:focus-within {
+    background-color: hsl(var(--accent));
+}
+
+/* Live-Region für dynamische Ankündigungen */
+.live-region {
+    position: absolute;
+    left: -10000px;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+}
+
+/* Verbesserte Link-Sichtbarkeit */
+a:not([class]) {
+    text-decoration: underline;
+    text-underline-offset: 2px;
+}
+
+a:not([class]):hover {
+    text-decoration-thickness: 2px;
+}
+
+/* Fehleranzeige für Formulare */
+.form-error {
+    color: hsl(var(--destructive));
+    font-weight: 500;
+}
+
+.form-error::before {
+    content: "⚠ ";
+}
+
+/* Erfolgsmeldung */
+.form-success {
+    color: hsl(var(--status-released));
+    font-weight: 500;
+}
+
+.form-success::before {
+    content: "✓ ";
+}
+
+/* Verbesserte Tabellennavigation */
+table:focus-within {
+    outline: 2px solid hsl(var(--secondary));
+    outline-offset: 2px;
+}
+
+th, td {
+    padding: 0.75rem;
+}
+
+/* Verbesserte Dialogzugänglichkeit */
+[role="dialog"] {
+    outline: none;
+}
+
+[role="dialog"]:focus-visible {
+    box-shadow: 0 0 0 4px hsl(var(--secondary));
+}
