@@ -1407,27 +1407,23 @@ async def get_audit_logs(
     
     total = await prisma.auditlog.count(where=where)
     
-    return {
-        "logs": [
-            {
-                "id": log.id,
-                "action": safe_enum_value(log.action) if log.action else None,
-                "user_id": log.userId,
-                "user_email": log.userEmail,
-                "user_name": log.userName,
-                "entity_type": log.entityType,
-                "entity_id": log.entityId,
-                "details": log.details,
-                "ip_address": log.ipAddress,
-                "timestamp": log.createdAt.isoformat() if log.createdAt else None,
-                "created_at": log.createdAt.isoformat() if log.createdAt else None
-            }
-            for log in logs
-        ],
-        "total": total,
-        "page": page,
-        "limit": limit
-    }
+    # Return array directly for frontend compatibility
+    return [
+        {
+            "id": log.id,
+            "action": safe_enum_value(log.action) if log.action else None,
+            "user_id": log.userId,
+            "user_email": log.userEmail,
+            "user_name": log.userName,
+            "entity_type": log.entityType,
+            "entity_id": log.entityId,
+            "details": log.details,
+            "ip_address": log.ipAddress,
+            "timestamp": log.createdAt.isoformat() if log.createdAt else None,
+            "created_at": log.createdAt.isoformat() if log.createdAt else None
+        }
+        for log in logs
+    ]
 
 @api_router.get("/admin/dsgvo-status")
 async def get_dsgvo_status(user = Depends(require_admin)):
@@ -2622,6 +2618,365 @@ async def generate_job_pdf(job_id: str, user = Depends(get_current_user)):
         media_type="application/pdf",
         headers={"Content-Disposition": f"attachment; filename=auftrag_{job.jobNumber}.pdf"}
     )
+
+# PDF Token for secure download
+pdf_tokens: Dict[str, dict] = {}
+
+@api_router.get("/jobs/{job_id}/pdf/token")
+async def get_pdf_token(job_id: str, user = Depends(get_current_user)):
+    """Generate a temporary token for PDF download"""
+    job = await prisma.towingjob.find_unique(where={'id': job_id})
+    if not job:
+        raise HTTPException(status_code=404, detail="Auftrag nicht gefunden")
+    
+    # Generate token
+    token = ''.join(random.choices(string.ascii_letters + string.digits, k=32))
+    expiry = datetime.now(timezone.utc) + timedelta(minutes=5)
+    
+    pdf_tokens[token] = {
+        'job_id': job_id,
+        'user_id': user.id,
+        'expires': expiry
+    }
+    
+    # Clean up old tokens
+    current = datetime.now(timezone.utc)
+    expired = [t for t, d in pdf_tokens.items() if d['expires'] < current]
+    for t in expired:
+        pdf_tokens.pop(t, None)
+    
+    return {"token": token}
+
+# ============================================================================
+# ADDITIONAL ENDPOINTS FOR FRONTEND COMPATIBILITY
+# ============================================================================
+
+@api_router.patch("/jobs/{job_id}")
+async def patch_job(job_id: str, data: dict, user = Depends(get_current_user)):
+    """Patch job - alternate to PUT for compatibility"""
+    job = await prisma.towingjob.find_unique(where={'id': job_id})
+    if not job:
+        raise HTTPException(status_code=404, detail="Auftrag nicht gefunden")
+    
+    update_data = {}
+    
+    # Status update
+    if 'status' in data:
+        status_map = {
+            'pending': JobStatus.PENDING,
+            'assigned': JobStatus.ASSIGNED,
+            'on_site': JobStatus.ON_SITE,
+            'towed': JobStatus.TOWED,
+            'in_yard': JobStatus.IN_YARD,
+            'released': JobStatus.RELEASED,
+            'cancelled': JobStatus.CANCELLED
+        }
+        new_status = status_map.get(data['status'].lower())
+        if new_status:
+            update_data['status'] = new_status
+            now = datetime.now(timezone.utc)
+            if new_status == JobStatus.ASSIGNED and not job.assignedAt:
+                update_data['assignedAt'] = now
+                update_data['acceptedAt'] = now
+            elif new_status == JobStatus.ON_SITE and not job.onSiteAt:
+                update_data['onSiteAt'] = now
+            elif new_status == JobStatus.TOWED and not job.towedAt:
+                update_data['towedAt'] = now
+            elif new_status == JobStatus.IN_YARD and not job.inYardAt:
+                update_data['inYardAt'] = now
+            elif new_status == JobStatus.RELEASED and not job.releasedAt:
+                update_data['releasedAt'] = now
+    
+    # Other updates
+    if 'service_notes' in data:
+        update_data['serviceNotes'] = data['service_notes']
+    if 'notes' in data:
+        update_data['authorityNotes'] = data['notes']
+    if 'owner_first_name' in data:
+        update_data['ownerFirstName'] = data['owner_first_name']
+    if 'owner_last_name' in data:
+        update_data['ownerLastName'] = data['owner_last_name']
+    if 'owner_address' in data:
+        update_data['ownerStreet'] = data['owner_address']
+    if 'payment_method' in data:
+        payment_map = {'cash': PaymentMethod.CASH, 'card': PaymentMethod.CARD, 'invoice': PaymentMethod.INVOICE}
+        pm = payment_map.get(data['payment_method'].lower() if data['payment_method'] else None)
+        if pm:
+            update_data['paymentMethod'] = pm
+    if 'payment_amount' in data:
+        update_data['paymentAmount'] = data['payment_amount']
+    if 'is_empty_trip' in data:
+        update_data['isEmptyTrip'] = data['is_empty_trip']
+    if 'calculated_costs' in data:
+        update_data['calculatedCosts'] = json.dumps(data['calculated_costs']) if data['calculated_costs'] else None
+    
+    updated_job = await prisma.towingjob.update(
+        where={'id': job_id},
+        data=update_data,
+        include={
+            'authority': True,
+            'towingCompany': {'include': {'pricing': True}},
+            'photos': True
+        }
+    )
+    
+    await log_audit("JOB_STATUS_CHANGED", user.id, user.name, user.email, "job", job_id, {
+        "new_status": data.get('status')
+    })
+    
+    # Return full job data
+    return {
+        'id': updated_job.id,
+        'job_number': updated_job.jobNumber,
+        'license_plate': updated_job.licensePlate,
+        'vin': updated_job.vin,
+        'tow_reason': updated_job.towReason,
+        'location_address': updated_job.locationAddress,
+        'location_lat': updated_job.locationLat,
+        'location_lng': updated_job.locationLng,
+        'status': safe_enum_value(updated_job.status),
+        'job_type': safe_enum_value(updated_job.jobType, 'towing'),
+        'authority_notes': updated_job.authorityNotes,
+        'service_notes': updated_job.serviceNotes,
+        'notes': updated_job.authorityNotes,
+        'created_at': updated_job.createdAt.isoformat() if updated_job.createdAt else None,
+        'updated_at': updated_job.updatedAt.isoformat() if updated_job.updatedAt else None,
+        'in_yard_at': updated_job.inYardAt.isoformat() if updated_job.inYardAt else None,
+        'released_at': updated_job.releasedAt.isoformat() if updated_job.releasedAt else None,
+        'is_empty_trip': updated_job.isEmptyTrip,
+        'owner_first_name': updated_job.ownerFirstName,
+        'owner_last_name': updated_job.ownerLastName,
+        'owner_address': updated_job.ownerStreet,
+        'payment_method': safe_enum_value(updated_job.paymentMethod) if updated_job.paymentMethod else None,
+        'payment_amount': updated_job.paymentAmount,
+        'calculated_costs': updated_job.calculatedCosts,
+        'authority_id': updated_job.authorityId,
+        'assigned_service_id': updated_job.towingCompanyId,
+        'created_by_authority': updated_job.authority.name if updated_job.authority else None,
+        'assigned_service_name': updated_job.towingCompany.companyName if updated_job.towingCompany else None
+    }
+
+@api_router.post("/jobs/{job_id}/assign/{service_id}")
+async def assign_job(job_id: str, service_id: str, user = Depends(get_current_user)):
+    """Assign a job to a towing service"""
+    job = await prisma.towingjob.find_unique(where={'id': job_id})
+    if not job:
+        raise HTTPException(status_code=404, detail="Auftrag nicht gefunden")
+    
+    service = await prisma.towingcompany.find_unique(where={'id': service_id})
+    if not service:
+        raise HTTPException(status_code=404, detail="Abschleppdienst nicht gefunden")
+    
+    updated = await prisma.towingjob.update(
+        where={'id': job_id},
+        data={
+            'towingCompanyId': service_id,
+            'status': JobStatus.ASSIGNED,
+            'assignedAt': datetime.now(timezone.utc)
+        }
+    )
+    
+    await log_audit("JOB_ASSIGNED", user.id, user.name, user.email, "job", job_id, {
+        "service_id": service_id
+    })
+    
+    return {"message": "Auftrag zugewiesen", "status": safe_enum_value(updated.status)}
+
+@api_router.patch("/services/costs")
+async def update_service_costs(data: dict, user = Depends(get_current_user)):
+    """Update towing service costs"""
+    if user.role != UserRole.TOWING_COMPANY_USER or not user.towingCompanyUser:
+        raise HTTPException(status_code=403, detail="Nur für Abschleppdienste")
+    
+    update_data = {}
+    if 'tow_cost' in data:
+        update_data['towCost'] = data['tow_cost']
+    if 'daily_cost' in data:
+        update_data['dailyCost'] = data['daily_cost']
+    if 'processing_fee' in data:
+        update_data['processingFee'] = data['processing_fee']
+    if 'empty_trip_fee' in data:
+        update_data['emptyTripFee'] = data['empty_trip_fee']
+    
+    await prisma.towingcompanypricing.update(
+        where={'towingCompanyId': user.towingCompanyUser.towingCompanyId},
+        data=update_data
+    )
+    
+    return {"message": "Kosten aktualisiert"}
+
+@api_router.patch("/towing/company-info")
+async def update_company_info(data: dict, user = Depends(get_current_user)):
+    """Update towing company info"""
+    if user.role != UserRole.TOWING_COMPANY_USER or not user.towingCompanyUser:
+        raise HTTPException(status_code=403, detail="Nur für Abschleppdienste")
+    
+    update_data = {}
+    if 'company_name' in data:
+        update_data['companyName'] = data['company_name']
+    if 'phone' in data:
+        update_data['phone'] = data['phone']
+    if 'address' in data:
+        update_data['street'] = data['address']
+    if 'yard_address' in data:
+        update_data['yardStreet'] = data['yard_address']
+    if 'yard_lat' in data:
+        update_data['yardLat'] = data['yard_lat']
+    if 'yard_lng' in data:
+        update_data['yardLng'] = data['yard_lng']
+    if 'opening_hours' in data:
+        update_data['openingHours'] = data['opening_hours']
+    if 'email' in data:
+        update_data['email'] = data['email']
+    
+    await prisma.towingcompany.update(
+        where={'id': user.towingCompanyUser.towingCompanyId},
+        data=update_data
+    )
+    
+    return {"message": "Firmendaten aktualisiert"}
+
+@api_router.patch("/admin/users/{user_id}/password")
+async def admin_reset_password(user_id: str, data: dict, admin = Depends(require_admin)):
+    """Admin reset user password"""
+    new_password = data.get('new_password')
+    if not new_password:
+        raise HTTPException(status_code=400, detail="Neues Passwort erforderlich")
+    
+    is_valid, error_msg = validate_password(new_password)
+    if not is_valid:
+        raise HTTPException(status_code=400, detail=error_msg)
+    
+    await prisma.user.update(
+        where={'id': user_id},
+        data={'passwordHash': hash_password(new_password)}
+    )
+    
+    await log_audit("PASSWORD_RESET", admin.id, admin.name, admin.email, "user", user_id)
+    
+    return {"message": "Passwort zurückgesetzt"}
+
+@api_router.delete("/admin/users/{user_id}")
+async def admin_delete_user(user_id: str, admin = Depends(require_admin)):
+    """Admin delete user"""
+    target = await prisma.user.find_unique(where={'id': user_id})
+    if not target:
+        raise HTTPException(status_code=404, detail="Benutzer nicht gefunden")
+    
+    # Delete related data
+    if target.role == UserRole.AUTHORITY_USER:
+        auth_user = await prisma.authorityuser.find_first(where={'userId': user_id})
+        if auth_user:
+            await prisma.authorityuser.delete(where={'id': auth_user.id})
+    elif target.role == UserRole.TOWING_COMPANY_USER:
+        tc_user = await prisma.towingcompanyuser.find_first(where={'userId': user_id})
+        if tc_user:
+            await prisma.towingcompanyuser.delete(where={'id': tc_user.id})
+    
+    await prisma.user.delete(where={'id': user_id})
+    
+    await log_audit("USER_BLOCKED", admin.id, admin.name, admin.email, "user", user_id, {"action": "USER_DELETED"})
+    
+    return {"message": "Benutzer gelöscht"}
+
+@api_router.patch("/authority/employees/{employee_id}/password")
+async def reset_employee_password(employee_id: str, data: dict, user = Depends(get_current_user)):
+    """Reset employee password"""
+    if user.role != UserRole.AUTHORITY_USER or not user.authorityUser:
+        raise HTTPException(status_code=403, detail="Nur für Behörden")
+    
+    if not user.authorityUser.isMainAccount:
+        raise HTTPException(status_code=403, detail="Nur Haupt-Accounts können Passwörter zurücksetzen")
+    
+    new_password = data.get('new_password')
+    if not new_password:
+        raise HTTPException(status_code=400, detail="Neues Passwort erforderlich")
+    
+    is_valid, error_msg = validate_password(new_password)
+    if not is_valid:
+        raise HTTPException(status_code=400, detail=error_msg)
+    
+    await prisma.user.update(
+        where={'id': employee_id},
+        data={'passwordHash': hash_password(new_password)}
+    )
+    
+    return {"message": "Passwort zurückgesetzt"}
+
+@api_router.get("/jobs/updates")
+async def get_job_updates(since: Optional[str] = None, user = Depends(get_current_user)):
+    """Get recent job updates for polling"""
+    where = {}
+    
+    if user.role == UserRole.AUTHORITY_USER and user.authorityUser:
+        where['authorityId'] = user.authorityUser.authorityId
+    elif user.role == UserRole.TOWING_COMPANY_USER and user.towingCompanyUser:
+        where['towingCompanyId'] = user.towingCompanyUser.towingCompanyId
+    
+    if since:
+        try:
+            since_dt = datetime.fromisoformat(since.replace('Z', '+00:00'))
+            where['updatedAt'] = {'gt': since_dt}
+        except:
+            pass
+    
+    jobs = await prisma.towingjob.find_many(
+        where=where,
+        order={'updatedAt': 'desc'},
+        take=50
+    )
+    
+    return [{
+        'id': j.id,
+        'job_number': j.jobNumber,
+        'status': safe_enum_value(j.status),
+        'updated_at': j.updatedAt.isoformat() if j.updatedAt else None
+    } for j in jobs]
+
+@api_router.post("/jobs/bulk-update-status")
+async def bulk_update_status(data: dict, user = Depends(get_current_user)):
+    """Bulk update job status"""
+    job_ids = data.get('job_ids', [])
+    new_status = data.get('status')
+    
+    if not job_ids or not new_status:
+        raise HTTPException(status_code=400, detail="job_ids und status erforderlich")
+    
+    status_map = {
+        'pending': JobStatus.PENDING,
+        'assigned': JobStatus.ASSIGNED,
+        'on_site': JobStatus.ON_SITE,
+        'towed': JobStatus.TOWED,
+        'in_yard': JobStatus.IN_YARD,
+        'released': JobStatus.RELEASED
+    }
+    
+    pg_status = status_map.get(new_status.lower())
+    if not pg_status:
+        raise HTTPException(status_code=400, detail="Ungültiger Status")
+    
+    updated_count = await prisma.towingjob.update_many(
+        where={'id': {'in': job_ids}},
+        data={'status': pg_status}
+    )
+    
+    return {"message": f"{updated_count} Aufträge aktualisiert"}
+
+@api_router.get("/auth/verify-reset-token/{token}")
+async def verify_reset_token(token: str):
+    """Verify password reset token"""
+    token_record = await prisma.passwordresettoken.find_first(
+        where={
+            'token': token,
+            'usedAt': None,
+            'expiresAt': {'gt': datetime.now(timezone.utc)}
+        }
+    )
+    
+    if not token_record:
+        raise HTTPException(status_code=400, detail="Token ungültig oder abgelaufen")
+    
+    return {"valid": True}
 
 # ============================================================================
 # APP CONFIGURATION
