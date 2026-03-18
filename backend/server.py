@@ -38,6 +38,8 @@ from botocore.exceptions import ClientError
 import pyotp
 import qrcode
 from qrcode.image.pure import PyPNGImage
+from apscheduler.schedulers.asyncio import AsyncIOScheduler
+from apscheduler.triggers.cron import CronTrigger
 
 ROOT_DIR = Path(__file__).parent
 load_dotenv(ROOT_DIR / '.env')
@@ -75,6 +77,12 @@ login_attempts: Dict[str, List[float]] = defaultdict(list)
 # Image Compression Settings
 MAX_IMAGE_SIZE = (1920, 1080)  # Max dimensions
 JPEG_QUALITY = 75  # Quality for JPEG compression
+
+# DSGVO Data Retention Settings (in days)
+DSGVO_RETENTION_DAYS = int(os.environ.get('DSGVO_RETENTION_DAYS', 180))  # 6 months default
+
+# APScheduler instance (will be started in startup_event)
+scheduler = AsyncIOScheduler()
 
 # Create the main app
 app = FastAPI(title="Abschlepp-Management API")
@@ -932,7 +940,19 @@ async def get_current_user(credentials: HTTPAuthorizationCredentials = Depends(s
         user_id = payload.get("user_id")
         if not user_id:
             raise HTTPException(status_code=401, detail="Invalid token")
+        
+        # Try to find user by UUID id field first, then by MongoDB _id
         user = await db.users.find_one({"id": user_id}, {"_id": 0, "password": 0})
+        if not user:
+            # Try by MongoDB ObjectId (legacy support)
+            try:
+                from bson.objectid import ObjectId
+                user = await db.users.find_one({"_id": ObjectId(user_id)}, {"password": 0})
+                if user:
+                    user["id"] = str(user.pop("_id"))
+            except:
+                pass
+        
         if not user:
             raise HTTPException(status_code=401, detail="User not found")
         return user
@@ -1100,7 +1120,9 @@ async def login(data: UserLogin, request: Request):
         # Clear rate limit on successful login info fetch
         clear_login_attempts(rate_limit_key)
     
-        user["id"] = str(user["_id"])
+        # Use existing id field or fall back to MongoDB _id
+        if not user.get("id"):
+            user["id"] = str(user["_id"])
         
         # 2FA CHECK
         if user.get("totp_enabled"):
@@ -3839,6 +3861,131 @@ async def get_upload(filename: str):
 async def root():
     return {"message": "Abschlepp-Management API", "version": "1.0.0"}
 
+# ==================== DSGVO DATA CLEANUP ====================
+
+async def dsgvo_data_cleanup():
+    """
+    DSGVO-konformer Cronjob zur automatischen Anonymisierung von Fahrzeugdaten.
+    Läuft täglich um 03:00 Uhr und anonymisiert alle Aufträge, die älter als 
+    DSGVO_RETENTION_DAYS (Standard: 6 Monate = 180 Tage) sind und den Status "released" haben.
+    """
+    logger.info(f"DSGVO Data Cleanup gestartet - Retention: {DSGVO_RETENTION_DAYS} Tage")
+    
+    try:
+        cutoff_date = datetime.now(timezone.utc) - timedelta(days=DSGVO_RETENTION_DAYS)
+        cutoff_date_str = cutoff_date.isoformat()
+        
+        # Find all released jobs older than retention period that haven't been anonymized yet
+        query = {
+            "status": "released",
+            "released_at": {"$lt": cutoff_date_str},
+            "anonymized": {"$ne": True}  # Skip already anonymized jobs
+        }
+        
+        jobs_to_anonymize = await db.jobs.find(query).to_list(length=1000)
+        
+        if not jobs_to_anonymize:
+            logger.info("DSGVO Cleanup: Keine Aufträge zur Anonymisierung gefunden.")
+            return
+        
+        anonymized_count = 0
+        
+        for job in jobs_to_anonymize:
+            job_id = job.get("id") or str(job.get("_id"))
+            original_plate = job.get("license_plate", "")
+            
+            # Anonymize personal and vehicle identification data
+            anonymization_data = {
+                "license_plate": "*** (Anonymisiert durch System)",
+                "vin": "*** (Anonymisiert durch System)",
+                "owner_name": "*** (Anonymisiert durch System)" if job.get("owner_name") else None,
+                "owner_address": "*** (Anonymisiert durch System)" if job.get("owner_address") else None,
+                "owner_phone": "*** (Anonymisiert durch System)" if job.get("owner_phone") else None,
+                "driver_name": "*** (Anonymisiert durch System)" if job.get("driver_name") else None,
+                "driver_address": "*** (Anonymisiert durch System)" if job.get("driver_address") else None,
+                "photos": [],  # Clear photos as they may contain personal data
+                "anonymized": True,
+                "anonymized_at": datetime.now(timezone.utc).isoformat(),
+                "original_license_plate_hash": str(hash(original_plate))  # Keep hash for audit trail
+            }
+            
+            # Remove None values
+            anonymization_data = {k: v for k, v in anonymization_data.items() if v is not None}
+            
+            await db.jobs.update_one(
+                {"id": job_id} if job.get("id") else {"_id": job["_id"]},
+                {"$set": anonymization_data}
+            )
+            
+            anonymized_count += 1
+        
+        # Log the cleanup action to audit log
+        await log_audit("DSGVO_DATA_CLEANUP", "SYSTEM", "Automatischer DSGVO Cronjob", {
+            "jobs_anonymized": anonymized_count,
+            "retention_days": DSGVO_RETENTION_DAYS,
+            "cutoff_date": cutoff_date_str
+        })
+        
+        logger.info(f"DSGVO Cleanup abgeschlossen: {anonymized_count} Aufträge anonymisiert.")
+        
+    except Exception as e:
+        logger.error(f"DSGVO Cleanup Fehler: {e}", exc_info=True)
+        await log_audit("DSGVO_CLEANUP_ERROR", "SYSTEM", "Automatischer DSGVO Cronjob", {
+            "error": str(e)
+        })
+
+
+# Admin endpoint to manually trigger DSGVO cleanup (for testing)
+@api_router.post("/admin/trigger-cleanup")
+async def trigger_dsgvo_cleanup(user: dict = Depends(get_current_user)):
+    """Manueller Trigger für den DSGVO Cleanup Job (nur Admin)"""
+    if user["role"] != "admin":
+        raise HTTPException(status_code=403, detail="Nur Administratoren können den Cleanup manuell starten")
+    
+    await dsgvo_data_cleanup()
+    
+    return {
+        "message": "DSGVO Cleanup wurde gestartet",
+        "retention_days": DSGVO_RETENTION_DAYS
+    }
+
+
+# Admin endpoint to get DSGVO status/info
+@api_router.get("/admin/dsgvo-status")
+async def get_dsgvo_status(user: dict = Depends(get_current_user)):
+    """Zeigt den Status der DSGVO-Datenhaltung"""
+    if user["role"] != "admin":
+        raise HTTPException(status_code=403, detail="Nur für Administratoren")
+    
+    cutoff_date = datetime.now(timezone.utc) - timedelta(days=DSGVO_RETENTION_DAYS)
+    
+    # Count jobs that would be anonymized
+    pending_anonymization = await db.jobs.count_documents({
+        "status": "released",
+        "released_at": {"$lt": cutoff_date.isoformat()},
+        "anonymized": {"$ne": True}
+    })
+    
+    # Count already anonymized jobs
+    already_anonymized = await db.jobs.count_documents({
+        "anonymized": True
+    })
+    
+    # Get last cleanup from audit log
+    last_cleanup = await db.audit_logs.find_one(
+        {"action": "DSGVO_DATA_CLEANUP"},
+        sort=[("timestamp", -1)]
+    )
+    
+    return {
+        "retention_days": DSGVO_RETENTION_DAYS,
+        "cutoff_date": cutoff_date.isoformat(),
+        "pending_anonymization": pending_anonymization,
+        "already_anonymized": already_anonymized,
+        "last_cleanup": last_cleanup["timestamp"] if last_cleanup else None,
+        "scheduler_running": scheduler.running
+    }
+
 # Include router
 app.include_router(api_router)
 
@@ -3857,7 +4004,7 @@ app.add_middleware(
 
 @app.on_event("startup")
 async def startup_event():
-    """Create database indexes for improved query performance"""
+    """Create database indexes for improved query performance and start DSGVO scheduler"""
     try:
         # Indexes for jobs collection
         await db.jobs.create_index("license_plate")
@@ -3873,6 +4020,9 @@ async def startup_event():
         await db.jobs.create_index([("created_by_id", 1), ("updated_at", 1)])
         await db.jobs.create_index([("assigned_service_id", 1), ("updated_at", 1)])
         
+        # DSGVO cleanup index
+        await db.jobs.create_index([("status", 1), ("released_at", 1), ("anonymized", 1)])
+        
         # Indexes for users collection
         await db.users.create_index("email", unique=True)
         await db.users.create_index("role")
@@ -3884,9 +4034,22 @@ async def startup_event():
         await db.audit_logs.create_index("user_id")
         
         logger.info("Database indexes created successfully")
+        
+        # Start DSGVO scheduler - runs every day at 03:00 AM
+        scheduler.add_job(
+            dsgvo_data_cleanup,
+            CronTrigger(hour=3, minute=0),
+            id="dsgvo_cleanup",
+            name="DSGVO Daten-Anonymisierung",
+            replace_existing=True
+        )
+        scheduler.start()
+        logger.info(f"DSGVO Scheduler gestartet - Retention: {DSGVO_RETENTION_DAYS} Tage")
+        
     except Exception as e:
-        logger.error(f"Error creating database indexes: {e}")
+        logger.error(f"Error during startup: {e}")
 
 @app.on_event("shutdown")
 async def shutdown_db_client():
+    scheduler.shutdown(wait=False)
     client.close()

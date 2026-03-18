@@ -7,7 +7,7 @@ from datetime import datetime
 from typing import Dict, Any, Optional
 
 class NewFeaturesAPITester:
-    def __init__(self, base_url="https://vehicle-recovery-7.preview.emergentagent.com/api"):
+    def __init__(self, base_url="https://auth-2fa-dsgvo.preview.emergentagent.com/api"):
         self.base_url = base_url
         self.authority_token = None
         self.towing_token = None
