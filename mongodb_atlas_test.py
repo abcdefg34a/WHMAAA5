@@ -6,7 +6,7 @@ import json
 from datetime import datetime
 
 class MongoDBAtlasConnectionTester:
-    def __init__(self, base_url="https://auth-2fa-dsgvo.preview.emergentagent.com/api"):
+    def __init__(self, base_url="https://pg-abschlepp-core.preview.emergentagent.com/api"):
         self.base_url = base_url
         self.admin_token = None
         self.tests_run = 0

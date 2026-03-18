@@ -8,7 +8,7 @@ import json
 import base64
 import re
 
-BACKEND_URL = "https://auth-2fa-dsgvo.preview.emergentagent.com/api"
+BACKEND_URL = "https://pg-abschlepp-core.preview.emergentagent.com/api"
 
 def login_and_get_token(email, password):
     """Helper function to login and get token"""
