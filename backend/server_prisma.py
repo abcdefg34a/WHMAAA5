@@ -80,15 +80,6 @@ JWT_SECRET = os.environ.get('JWT_SECRET', 'your-super-secret-key-change-in-produ
 JWT_ALGORITHM = "HS256"
 JWT_EXPIRATION_HOURS = 24
 
-# Helper function for enum values
-def safe_enum_value(enum_val, default="unknown"):
-    """Safely get enum value as string"""
-    if enum_val is None:
-        return default
-    if hasattr(enum_val, 'value'):
-        return enum_val.value.lower()
-    return str(enum_val).lower()
-
 # Rate Limiting Configuration
 RATE_LIMIT_WINDOW = 900  # 15 minutes
 MAX_LOGIN_ATTEMPTS = 5
@@ -412,25 +403,18 @@ async def log_audit(
         
         audit_action = action_map.get(action, AuditAction.SETTINGS_UPDATED)
         
-        # Prepare audit data
-        audit_data = {
-            'action': audit_action,
-            'userEmail': user_email,
-            'userName': user_name,
-            'entityType': entity_type,
-            'entityId': entity_id,
-            'ipAddress': ip_address
-        }
-        
-        # Only add userId if it's a valid string
-        if user_id and isinstance(user_id, str):
-            audit_data['userId'] = user_id
-        
-        # Handle JSON details - must be a proper JSON value for Prisma
-        if details:
-            audit_data['details'] = json.dumps(details)
-        
-        audit_entry = await prisma.auditlog.create(data=audit_data)
+        audit_entry = await prisma.auditlog.create(
+            data={
+                'action': audit_action,
+                'userId': user_id,
+                'userEmail': user_email,
+                'userName': user_name,
+                'entityType': entity_type,
+                'entityId': entity_id,
+                'details': details if details else None,
+                'ipAddress': ip_address
+            }
+        )
         
         # Log to file as backup
         audit_logger.info(json.dumps({
@@ -861,7 +845,7 @@ async def login(data: UserLogin, request: Request):
         user_response['department'] = user.authorityUser.authority.department
         user_response['dienstnummer'] = user.authorityUser.dienstnummer
         user_response['is_main_authority'] = user.authorityUser.isMainAccount
-        user_response['approval_status'] = safe_enum_value(user.authorityUser.authority.approvalStatus)
+        user_response['approval_status'] = user.authorityUser.authority.approvalStatus.value.lower()
     
     if user.towingCompanyUser:
         tc = user.towingCompanyUser.towingCompany
@@ -873,7 +857,7 @@ async def login(data: UserLogin, request: Request):
         user_response['yard_lng'] = tc.yardLng
         user_response['opening_hours'] = tc.openingHours
         user_response['service_code'] = tc.serviceCode
-        user_response['approval_status'] = safe_enum_value(tc.approvalStatus)
+        user_response['approval_status'] = tc.approvalStatus.value.lower()
         if tc.pricing:
             user_response['tow_cost'] = tc.pricing.towCost
             user_response['daily_cost'] = tc.pricing.dailyCost
@@ -949,7 +933,7 @@ async def get_me(user = Depends(get_current_user)):
         response['department'] = user.authorityUser.authority.department
         response['dienstnummer'] = user.authorityUser.dienstnummer
         response['is_main_authority'] = user.authorityUser.isMainAccount
-        response['approval_status'] = safe_enum_value(user.authorityUser.authority.approvalStatus)
+        response['approval_status'] = user.authorityUser.authority.approvalStatus.value.lower()
     
     if user.towingCompanyUser:
         tc = user.towingCompanyUser.towingCompany
@@ -961,7 +945,7 @@ async def get_me(user = Depends(get_current_user)):
         response['yard_lng'] = tc.yardLng
         response['opening_hours'] = tc.openingHours
         response['service_code'] = tc.serviceCode
-        response['approval_status'] = safe_enum_value(tc.approvalStatus)
+        response['approval_status'] = tc.approvalStatus.value.lower()
         if tc.pricing:
             response['tow_cost'] = tc.pricing.towCost
             response['daily_cost'] = tc.pricing.dailyCost
@@ -1198,12 +1182,12 @@ async def get_admin_users(
         if u.authorityUser:
             user_data['authority_name'] = u.authorityUser.authority.name
             user_data['dienstnummer'] = u.authorityUser.dienstnummer
-            user_data['approval_status'] = safe_enum_value(u.authorityUser.authority.approvalStatus)
+            user_data['approval_status'] = u.authorityUser.authority.approvalStatus.value.lower()
         
         if u.towingCompanyUser:
             user_data['company_name'] = u.towingCompanyUser.towingCompany.companyName
             user_data['service_code'] = u.towingCompanyUser.towingCompany.serviceCode
-            user_data['approval_status'] = safe_enum_value(u.towingCompanyUser.towingCompany.approvalStatus)
+            user_data['approval_status'] = u.towingCompanyUser.towingCompany.approvalStatus.value.lower()
         
         result.append(user_data)
     
@@ -1411,7 +1395,7 @@ async def get_audit_logs(
         "logs": [
             {
                 "id": log.id,
-                "action": safe_enum_value(log.action) if log.action else None,
+                "action": log.action.value if log.action else None,
                 "user_id": log.userId,
                 "user_email": log.userEmail,
                 "user_name": log.userName,
@@ -1602,8 +1586,8 @@ async def get_jobs(
             'location_address': job.locationAddress,
             'location_lat': job.locationLat,
             'location_lng': job.locationLng,
-            'status': safe_enum_value(job.status, 'pending'),
-            'job_type': safe_enum_value(job.jobType, 'towing'),
+            'status': job.status.value.lower() if job.status else 'pending',
+            'job_type': job.jobType.value.lower() if job.jobType else 'towing',
             'authority_notes': job.authorityNotes,
             'service_notes': job.serviceNotes,
             'notes': job.authorityNotes,
@@ -1621,12 +1605,12 @@ async def get_jobs(
             'owner_first_name': job.ownerFirstName,
             'owner_last_name': job.ownerLastName,
             'owner_address': job.ownerStreet,
-            'payment_method': safe_enum_value(job.paymentMethod) if job.paymentMethod else None,
+            'payment_method': job.paymentMethod.value.lower() if job.paymentMethod else None,
             'payment_amount': job.paymentAmount,
             'calculated_costs': job.calculatedCosts,
             'personal_data_anonymized': job.personalDataAnonymized,
             'sicherstellung_reason': job.sicherstellungReason,
-            'vehicle_category': safe_enum_value(job.vehicleCategory) if job.vehicleCategory else None,
+            'vehicle_category': job.vehicleCategory.value.lower() if job.vehicleCategory else None,
             'ordering_authority': job.orderingAuthority,
             'contact_attempts': job.contactAttempts,
             'contact_attempts_notes': job.contactAttemptsNotes,
@@ -1727,7 +1711,7 @@ async def get_admin_jobs(
         'vin': j.vin,
         'tow_reason': j.towReason,
         'location_address': j.locationAddress,
-        'status': safe_enum_value(j.status, 'pending'),
+        'status': j.status.value.lower() if j.status else 'pending',
         'created_at': j.createdAt.isoformat() if j.createdAt else None,
         'created_by_authority': j.authority.name if j.authority else None,
         'assigned_service_name': j.towingCompany.companyName if j.towingCompany else None,
@@ -1768,7 +1752,7 @@ async def create_job(data: JobCreate, user = Depends(get_current_user)):
         if existing:
             raise HTTPException(
                 status_code=400,
-                detail=f"Ein Fahrzeug mit diesem Kennzeichen ({data.license_plate}) ist bereits im System und wurde noch nicht freigegeben. Status: {safe_enum_value(existing.status)}"
+                detail=f"Ein Fahrzeug mit diesem Kennzeichen ({data.license_plate}) ist bereits im System und wurde noch nicht freigegeben. Status: {existing.status.value.lower()}"
             )
     
     # Map job type
@@ -1838,7 +1822,7 @@ async def create_job(data: JobCreate, user = Depends(get_current_user)):
     return {
         'id': job.id,
         'job_number': job.jobNumber,
-        'status': safe_enum_value(job.status),
+        'status': job.status.value.lower(),
         'message': 'Auftrag erfolgreich erstellt'
     }
 
@@ -1868,8 +1852,8 @@ async def get_job(job_id: str, user = Depends(get_current_user)):
         'location_address': job.locationAddress,
         'location_lat': job.locationLat,
         'location_lng': job.locationLng,
-        'status': safe_enum_value(job.status, 'pending'),
-        'job_type': safe_enum_value(job.jobType, 'towing'),
+        'status': job.status.value.lower() if job.status else 'pending',
+        'job_type': job.jobType.value.lower() if job.jobType else 'towing',
         'authority_notes': job.authorityNotes,
         'service_notes': job.serviceNotes,
         'notes': job.authorityNotes,
@@ -1884,11 +1868,11 @@ async def get_job(job_id: str, user = Depends(get_current_user)):
         'owner_first_name': job.ownerFirstName,
         'owner_last_name': job.ownerLastName,
         'owner_address': job.ownerStreet,
-        'payment_method': safe_enum_value(job.paymentMethod) if job.paymentMethod else None,
+        'payment_method': job.paymentMethod.value.lower() if job.paymentMethod else None,
         'payment_amount': job.paymentAmount,
         'calculated_costs': job.calculatedCosts,
         'sicherstellung_reason': job.sicherstellungReason,
-        'vehicle_category': safe_enum_value(job.vehicleCategory) if job.vehicleCategory else None,
+        'vehicle_category': job.vehicleCategory.value.lower() if job.vehicleCategory else None,
         'ordering_authority': job.orderingAuthority,
         'contact_attempts': job.contactAttempts,
         'contact_attempts_notes': job.contactAttemptsNotes,
@@ -2003,11 +1987,11 @@ async def update_job(job_id: str, data: JobUpdate, user = Depends(get_current_us
             )
     
     await log_audit("JOB_STATUS_CHANGED", user.id, user.name, user.email, "job", job_id, {
-        "old_status": safe_enum_value(job.status) if job.status else None,
+        "old_status": job.status.value.lower() if job.status else None,
         "new_status": data.status
     })
     
-    return {"message": "Auftrag aktualisiert", "status": safe_enum_value(updated_job.status)}
+    return {"message": "Auftrag aktualisiert", "status": updated_job.status.value.lower()}
 
 @api_router.patch("/jobs/{job_id}/edit-data")
 async def edit_job_data(job_id: str, data: JobEditData, user = Depends(get_current_user)):
@@ -2178,7 +2162,7 @@ async def search_vehicle(q: str):
         "found": True,
         "job_number": job.jobNumber,
         "license_plate": job.licensePlate,
-        "status": safe_enum_value(job.status, 'pending'),
+        "status": job.status.value.lower() if job.status else 'pending',
         "towed_at": job.towedAt.isoformat() if job.towedAt else None,
         "in_yard_at": job.inYardAt.isoformat() if job.inYardAt else None,
         "tow_reason": job.towReason,
@@ -2589,7 +2573,7 @@ async def generate_job_pdf(job_id: str, user = Depends(get_current_user)):
         ["Auftragsnummer:", job.jobNumber],
         ["Kennzeichen:", job.licensePlate or "-"],
         ["FIN:", job.vin or "-"],
-        ["Status:", safe_enum_value(job.status, "-")],
+        ["Status:", job.status.value if job.status else "-"],
         ["Abschleppgrund:", job.towReason],
         ["Standort:", job.locationAddress],
         ["Erstellt am:", job.createdAt.strftime("%d.%m.%Y %H:%M") if job.createdAt else "-"]

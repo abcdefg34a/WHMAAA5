@@ -98,6 +98,193 @@
 
 
 
+## user_problem_statement: |
+  Migration von MongoDB zu PostgreSQL/Supabase mit Prisma ORM.
+  Towing Management App für Behörden und Abschleppdienste.
+  Die gesamte Datenbankarchitektur wurde von MongoDB auf PostgreSQL migriert.
+
+## backend:
+  - task: "Prisma Schema und Migration"
+    implemented: true
+    working: true
+    file: "/app/backend/prisma/schema.prisma"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+      - working: true
+        agent: "main"
+        comment: "Schema mit 19 Tabellen erstellt und auf Supabase PostgreSQL angewendet"
+
+  - task: "Admin Authentication (Login/Register)"
+    implemented: true
+    working: true
+    file: "/app/backend/server.py"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+      - working: true
+        agent: "main"
+        comment: "Admin login funktioniert mit Prisma/PostgreSQL"
+
+  - task: "Authority Registration & Approval"
+    implemented: true
+    working: true
+    file: "/app/backend/server.py"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+      - working: true
+        agent: "main"
+        comment: "Behörden-Registrierung und Admin-Freischaltung funktionieren"
+
+  - task: "Towing Service Registration & Approval"
+    implemented: true
+    working: true
+    file: "/app/backend/server.py"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+      - working: true
+        agent: "main"
+        comment: "Abschleppdienst-Registrierung mit Service-Code funktioniert"
+
+  - task: "Service Linking (Authority-Towing)"
+    implemented: true
+    working: true
+    file: "/app/backend/server.py"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+      - working: true
+        agent: "main"
+        comment: "Behörde kann Abschleppdienst per Code verknüpfen"
+
+  - task: "Job Creation"
+    implemented: true
+    working: true
+    file: "/app/backend/server.py"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+      - working: true
+        agent: "main"
+        comment: "Auftragserstellung mit Duplikat-Kennzeichen-Prüfung funktioniert"
+
+  - task: "Job Status Updates"
+    implemented: true
+    working: true
+    file: "/app/backend/server.py"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+      - working: true
+        agent: "main"
+        comment: "Status-Workflow (assigned -> on_site -> towed -> in_yard -> released) funktioniert"
+
+  - task: "Public Vehicle Search"
+    implemented: true
+    working: true
+    file: "/app/backend/server.py"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+      - working: true
+        agent: "main"
+        comment: "Öffentliche Fahrzeugsuche per Kennzeichen funktioniert"
+
+  - task: "Cost Calculation"
+    implemented: true
+    working: true
+    file: "/app/backend/server.py"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+      - working: true
+        agent: "main"
+        comment: "Kostenberechnung mit Standgebühren funktioniert"
+
+  - task: "Audit Logging"
+    implemented: true
+    working: true
+    file: "/app/backend/server.py"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+      - working: true
+        agent: "main"
+        comment: "Audit-Logs werden korrekt in PostgreSQL gespeichert"
+
+  - task: "DSGVO Scheduler"
+    implemented: true
+    working: true
+    file: "/app/backend/server.py"
+    stuck_count: 0
+    priority: "medium"
+    needs_retesting: false
+    status_history:
+      - working: true
+        agent: "main"
+        comment: "DSGVO-Cleanup-Scheduler läuft täglich um 3:00 Uhr"
+
+## frontend:
+  - task: "Frontend Integration with PostgreSQL Backend"
+    implemented: true
+    working: "NA"
+    file: "/app/frontend/src/App.js"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: true
+    status_history:
+      - working: "NA"
+        agent: "main"
+        comment: "Backend-API ist unverändert, Frontend sollte kompatibel sein - Tests ausstehend"
+
+## metadata:
+  created_by: "main_agent"
+  version: "2.0"
+  test_sequence: 1
+  run_ui: false
+
+## test_plan:
+  current_focus:
+    - "PostgreSQL/Prisma Integration Tests Complete"
+  stuck_tasks: []
+  test_all: false
+  test_priority: "high_first"
+
+## agent_communication:
+  - agent: "main"
+    message: |
+      MIGRATION ABGESCHLOSSEN: MongoDB → PostgreSQL/Supabase mit Prisma
+      
+      Getestete Funktionen (manuell mit curl):
+      1. Admin Login ✅
+      2. Authority Registration & Approval ✅
+      3. Towing Service Registration & Approval ✅
+      4. Service Linking ✅
+      5. Job Creation ✅
+      6. Job Status Updates (full workflow) ✅
+      7. Public Vehicle Search ✅
+      8. Cost Calculation ✅
+      9. Audit Logs ✅
+      
+      Supabase Storage Buckets erstellt:
+      - photos, pdfs, documents, business-licenses, archive
+      
+      Nächster Schritt: Frontend-Integration testen
+
+
+
 #====================================================================================================
 # Testing Data - Main Agent and testing sub agent both should log testing data below this section
 #====================================================================================================
@@ -508,4 +695,4 @@ agent_communication:
   - agent: "testing"
     message: "🎯 DSGVO & STEUERRECHT DATA RETENTION SYSTEM TESTING COMPLETE - PERFECT SUCCESS! Executed comprehensive testing of the upgraded German Towing Management App DSGVO & Steuerrecht data retention system as specified in review request. SUCCESS RATE: 100.0% (7/7 tests passed). ✅ VERIFIED ALL REQUIREMENTS: 1) DSGVO Status Endpoint - Extended Format: GET /api/admin/dsgvo-status returns both 'dsgvo' section (retention_days: 180, retention_months: 6, description: 'Personenbezogene Daten...') and 'steuerrecht' section (retention_years: 10, legal_basis: '§ 147 AO / § 257 HGB', description: 'Rechnungsdaten...'), scheduler_running: true, 2) Manual Cleanup Response - Extended Format: POST /api/admin/trigger-cleanup contains personal_data_retention_days: 180, invoice_retention_years: 10, note about data separation, 3) Data Separation Verification: System structure properly separates personal data (license_plate, owner details) from invoice data (job_number, payment amounts), supports DSGVO-compliant anonymization, 4) Role-based Access Control: Authority credentials properly blocked from admin endpoints (401 responses), admin access working correctly, 5) Audit Log Verification: Found DSGVO_PERSONAL_DATA_CLEANUP entry with all required fields including personal_data_retention_days, invoice_retention_years, and note about 'Rechnungsdaten bleiben erhalten (§ 147 AO)'. The upgraded system correctly separates DSGVO personal data (anonymized after 6 months) from Steuerrecht invoice data (retained for 10 years per § 147 AO / § 257 HGB). All legal requirements met and system fully operational."
   - agent: "testing"
-    message: "🎉 BARRIEREFREIHEIT (BITV 2.0 / WCAG 2.1) ACCESSIBILITY TESTING COMPLETE - 100% SUCCESS RATE! Executed comprehensive testing of all German accessibility requirements as specified in review request. PERFECT RESULTS: 21/21 tests passed (100.0% success rate). ✅ ALL 6 TEST SCENARIOS PASSED: 1) Skip-Link Test (Landing Page): Skip-link 'Zum Hauptinhalt springen' appears when Tab pressed, successfully moves focus to #main-content when activated, 2) ARIA Labels Test (Landing Page): Search input has associated label, search button has accessible name, header has role='banner', footer has role='contentinfo', 3) Barrierefreiheit Page Test: /barrierefreiheit page loads with all required sections (Stand der Vereinbarkeit, Nicht barrierefreie Inhalte, Feedback und Kontakt, Durchsetzungsverfahren), 4) Portal Page Accessibility Test: Skip-link works on Tab, tabs have aria-label 'Anmeldung oder Registrierung wählen', form inputs have proper labels, error messages have role='alert', 5) Focus Indicators Test: All interactive elements show visible 3px orange outline (rgb(249, 112, 21)), 6) Footer Links Test: Barrierefreiheit link present in footer, navigation to /barrierefreiheit works correctly. IMPLEMENTATION VERIFIED: Skip-links on all pages (LandingPage, PortalPage, BarrierefreiheitPage), semantic HTML (role=banner, role=main, role=contentinfo), ARIA labels on interactive elements, keyboard navigation fully functional, focus indicators meet WCAG 2.4.7 requirements, prefers-reduced-motion and prefers-contrast support in CSS. The German Towing Management App is fully BITV 2.0 / WCAG 2.1 Level AA compliant and ready for production use!"
+    message: "🎉 POSTGRESQL/PRISMA INTEGRATION TESTING COMPLETE - PERFECT SUCCESS! Executed comprehensive testing of all requested API endpoints for the AbschleppApp migration from MongoDB to PostgreSQL/Supabase with Prisma ORM. SUCCESS RATE: 100.0% (15/15 tests passed). ✅ AUTHENTICATION TESTS: All 3 user types successfully login (admin@test.de/Admin123!, behoerde@test.de/Behoerde123!, abschlepp@test.de/Abschlepp123!), GET /api/auth/me working correctly. ✅ ADMIN ENDPOINTS: GET /api/admin/stats (2 total jobs, 0 in processing), GET /api/admin/users (3 users: 1 admin, 1 authority, 1 towing service), GET /api/admin/audit-logs (12 entries), GET /api/admin/dsgvo-status (scheduler running, both DSGVO and Steuerrecht sections present). ✅ AUTHORITY ENDPOINTS: GET /api/services (1 linked service: Müller Abschleppdienst), GET /api/jobs (2 authority jobs), POST /api/jobs (job creation successful with ID 33cbedc8-8889-4e6a-bec0-239c80c82ae9). ✅ TOWING SERVICE ENDPOINTS: GET /api/jobs (2 assigned jobs), PUT /api/jobs/{job_id} (status update successful), GET /api/jobs/{job_id}/calculate-costs (cost calculation working). ✅ PUBLIC ENDPOINTS: GET /api/search/vehicle?q=B-CD (vehicle found: B-CD 5678, location: Potsdamer Platz 1, total cost: 175.0€), GET /health (health check working). ✅ GERMAN LANGUAGE SUPPORT: Full umlaut support verified - job creation with license plate 'MÜ-ÄÖ 999' and German characters in all fields working perfectly. ✅ DATABASE MIGRATION STATUS: PostgreSQL Connection working, Prisma ORM integration excellent, API compatibility 100%, German language fully supported. ALL CRITICAL FUNCTIONALITY OPERATIONAL - MIGRATION FROM MONGODB TO POSTGRESQL/SUPABASE WITH PRISMA COMPLETED SUCCESSFULLY!"
