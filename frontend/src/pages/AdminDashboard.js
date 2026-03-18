@@ -20,6 +20,7 @@ import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigge
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '../components/ui/alert-dialog';
 import { toast } from 'sonner';
 import { Pagination } from '../components/Pagination';
+import TwoFactorSetup from '../components/profile/TwoFactorSetup';
 
 const API = `${process.env.REACT_APP_BACKEND_URL}/api`;
 
@@ -1000,6 +1001,11 @@ export const AdminDashboard = () => {
                 </div>
               </CardContent>
             </Card>
+          </TabsContent>
+
+          {/* Profile Tab */}
+          <TabsContent value="profile">
+            <TwoFactorSetup />
           </TabsContent>
         </Tabs>
       </main>

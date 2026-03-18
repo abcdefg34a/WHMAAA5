@@ -67,6 +67,28 @@ export const AuthProvider = ({ children }) => {
 
   const login = async (email, password) => {
     const response = await axios.post(`${API}/auth/login`, { email, password });
+    
+    // Check if 2FA is required
+    if (response.data.requires_2fa) {
+      return { 
+        requires_2fa: true, 
+        temp_token: response.data.temp_token 
+      };
+    }
+    
+    // Normal login flow
+    const { access_token, user: userData } = response.data;
+    localStorage.setItem('token', access_token);
+    setToken(access_token);
+    setUser(userData);
+    return userData;
+  };
+
+  const verify2FA = async (temp_token, totp_code) => {
+    const response = await axios.post(`${API}/auth/login/2fa`, { 
+      temp_token, 
+      totp_code 
+    });
     const { access_token, user: userData } = response.data;
     localStorage.setItem('token', access_token);
     setToken(access_token);
@@ -94,7 +116,7 @@ export const AuthProvider = ({ children }) => {
   };
 
   return (
-    <AuthContext.Provider value={{ user, token, loading, login, register, logout, updateUser }}>
+    <AuthContext.Provider value={{ user, token, loading, login, register, logout, updateUser, verify2FA }}>
       {children}
     </AuthContext.Provider>
   );

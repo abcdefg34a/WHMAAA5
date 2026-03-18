@@ -5,7 +5,8 @@ import axios from 'axios';
 import {
   Car, MapPin, Camera, Plus, LogOut, FileText, Menu, X,
   Search, Clock, ChevronRight, Trash2, Link as LinkIcon, CheckCircle,
-  Users, UserPlus, Lock, Unlock, Key, Badge, Download, Filter, Calendar, Settings
+  Users, UserPlus, Lock, Unlock, Key, Badge, Download, Filter, Calendar, Settings,
+  User
 } from 'lucide-react';
 import { Button } from '../components/ui/button';
 import { Input } from '../components/ui/input';
@@ -18,6 +19,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '../components/ui/tabs'
 import { MapContainer, TileLayer, Marker, useMapEvents } from 'react-leaflet';
 import { toast } from 'sonner';
 import { Pagination } from '../components/Pagination';
+import TwoFactorSetup from '../components/profile/TwoFactorSetup';
 import 'leaflet/dist/leaflet.css';
 import L from 'leaflet';
 
@@ -622,6 +624,10 @@ export const AuthorityDashboard = () => {
                 Mitarbeiter ({employees.length})
               </TabsTrigger>
             )}
+            <TabsTrigger data-testid="tab-profile" value="profile" className="flex items-center gap-2">
+              <User className="h-4 w-4" />
+              Profil
+            </TabsTrigger>
           </TabsList>
 
           {/* New Job Tab */}
@@ -1394,6 +1400,11 @@ export const AuthorityDashboard = () => {
               </Card>
             </TabsContent>
           )}
+
+          {/* Profile Tab */}
+          <TabsContent value="profile">
+            <TwoFactorSetup />
+          </TabsContent>
         </Tabs>
       </main>
 

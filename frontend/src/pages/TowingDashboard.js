@@ -6,7 +6,7 @@ import {
   Car, MapPin, Camera, LogOut, FileText, Copy, CheckCircle,
   Clock, Truck, Phone, Building2, Download, X, Settings, Euro,
   Filter, CheckSquare, Square, ChevronDown, Calendar, Plus, Search,
-  Edit, Save, Undo2
+  Edit, Save, Undo2, User
 } from 'lucide-react';
 import { Button } from '../components/ui/button';
 import { Input } from '../components/ui/input';
@@ -21,6 +21,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '.
 import { MapContainer, TileLayer, Marker, Popup, useMapEvents } from 'react-leaflet';
 import { toast } from 'sonner';
 import { Pagination } from '../components/Pagination';
+import TwoFactorSetup from '../components/profile/TwoFactorSetup';
 import 'leaflet/dist/leaflet.css';
 import L from 'leaflet';
 
@@ -1389,6 +1390,11 @@ export const TowingDashboard = () => {
                 ))}
               </div>
             )}
+          </TabsContent>
+
+          {/* Profile Tab */}
+          <TabsContent value="profile">
+            <TwoFactorSetup />
           </TabsContent>
         </Tabs>
 

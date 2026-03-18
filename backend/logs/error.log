@@ -1,1 +1,85 @@
 2026-02-24 17:16:47,177 - server - ERROR - Error creating database indexes: bad auth : authentication failed, full error: {'ok': 0, 'errmsg': 'bad auth : authentication failed', 'code': 8000, 'codeName': 'AtlasError'}
+2026-03-17 17:43:35,984 - server - ERROR - Login failed: 1 validation error for UserResponse
+created_at
+  Field required [type=missing, input_value={'email': 'admin@abschlep...b977990baf15dc77001250'}, input_type=dict]
+    For further information visit https://errors.pydantic.dev/2.12/v/missing
+Traceback (most recent call last):
+  File "C:\Users\ahmad\AbschleppApp.final\backend\server.py", line 1133, in login
+    return TokenResponse(access_token=token, user=UserResponse(**user))
+                                                  ~~~~~~~~~~~~^^^^^^^^
+  File "C:\Users\ahmad\AppData\Roaming\Python\Python314\site-packages\pydantic\main.py", line 250, in __init__
+    validated_self = self.__pydantic_validator__.validate_python(data, self_instance=self)
+pydantic_core._pydantic_core.ValidationError: 1 validation error for UserResponse
+created_at
+  Field required [type=missing, input_value={'email': 'admin@abschlep...b977990baf15dc77001250'}, input_type=dict]
+    For further information visit https://errors.pydantic.dev/2.12/v/missing
+2026-03-17 17:45:35,750 - server - ERROR - Login failed: 1 validation error for UserResponse
+created_at
+  Field required [type=missing, input_value={'email': 'admin@abschlep...b977990baf15dc77001250'}, input_type=dict]
+    For further information visit https://errors.pydantic.dev/2.12/v/missing
+Traceback (most recent call last):
+  File "C:\Users\ahmad\AbschleppApp.final\backend\server.py", line 1133, in login
+    return TokenResponse(access_token=token, user=UserResponse(**user))
+                                                  ~~~~~~~~~~~~^^^^^^^^
+  File "C:\Users\ahmad\AppData\Roaming\Python\Python314\site-packages\pydantic\main.py", line 250, in __init__
+    validated_self = self.__pydantic_validator__.validate_python(data, self_instance=self)
+pydantic_core._pydantic_core.ValidationError: 1 validation error for UserResponse
+created_at
+  Field required [type=missing, input_value={'email': 'admin@abschlep...b977990baf15dc77001250'}, input_type=dict]
+    For further information visit https://errors.pydantic.dev/2.12/v/missing
+2026-03-17 17:46:42,896 - server - ERROR - Login failed: 1 validation error for UserResponse
+created_at
+  Field required [type=missing, input_value={'email': 'admin@abschlep...b977990baf15dc77001250'}, input_type=dict]
+    For further information visit https://errors.pydantic.dev/2.12/v/missing
+Traceback (most recent call last):
+  File "C:\Users\ahmad\AbschleppApp.final\backend\server.py", line 1133, in login
+    return TokenResponse(access_token=token, user=UserResponse(**user))
+                                                  ~~~~~~~~~~~~^^^^^^^^
+  File "C:\Users\ahmad\AppData\Roaming\Python\Python314\site-packages\pydantic\main.py", line 250, in __init__
+    validated_self = self.__pydantic_validator__.validate_python(data, self_instance=self)
+pydantic_core._pydantic_core.ValidationError: 1 validation error for UserResponse
+created_at
+  Field required [type=missing, input_value={'email': 'admin@abschlep...b977990baf15dc77001250'}, input_type=dict]
+    For further information visit https://errors.pydantic.dev/2.12/v/missing
+2026-03-17 17:48:18,516 - server - ERROR - Login failed: 1 validation error for UserResponse
+created_at
+  Field required [type=missing, input_value={'email': 'admin@abschlep...b977990baf15dc77001250'}, input_type=dict]
+    For further information visit https://errors.pydantic.dev/2.12/v/missing
+Traceback (most recent call last):
+  File "C:\Users\ahmad\AbschleppApp.final\backend\server.py", line 1133, in login
+    return TokenResponse(access_token=token, user=UserResponse(**user))
+                                                  ~~~~~~~~~~~~^^^^^^^^
+  File "C:\Users\ahmad\AppData\Roaming\Python\Python314\site-packages\pydantic\main.py", line 250, in __init__
+    validated_self = self.__pydantic_validator__.validate_python(data, self_instance=self)
+pydantic_core._pydantic_core.ValidationError: 1 validation error for UserResponse
+created_at
+  Field required [type=missing, input_value={'email': 'admin@abschlep...b977990baf15dc77001250'}, input_type=dict]
+    For further information visit https://errors.pydantic.dev/2.12/v/missing
+2026-03-17 17:49:55,593 - server - ERROR - Login failed: 1 validation error for UserResponse
+created_at
+  Field required [type=missing, input_value={'email': 'admin@abschlep...b977990baf15dc77001250'}, input_type=dict]
+    For further information visit https://errors.pydantic.dev/2.12/v/missing
+Traceback (most recent call last):
+  File "C:\Users\ahmad\AbschleppApp.final\backend\server.py", line 1133, in login
+    return TokenResponse(access_token=token, user=UserResponse(**user))
+                                                  ~~~~~~~~~~~~^^^^^^^^
+  File "C:\Users\ahmad\AppData\Roaming\Python\Python314\site-packages\pydantic\main.py", line 250, in __init__
+    validated_self = self.__pydantic_validator__.validate_python(data, self_instance=self)
+pydantic_core._pydantic_core.ValidationError: 1 validation error for UserResponse
+created_at
+  Field required [type=missing, input_value={'email': 'admin@abschlep...b977990baf15dc77001250'}, input_type=dict]
+    For further information visit https://errors.pydantic.dev/2.12/v/missing
+2026-03-17 17:53:14,268 - server - ERROR - Login failed: 1 validation error for UserResponse
+created_at
+  Field required [type=missing, input_value={'email': 'admin@abschlep...b977990baf15dc77001250'}, input_type=dict]
+    For further information visit https://errors.pydantic.dev/2.12/v/missing
+Traceback (most recent call last):
+  File "C:\Users\ahmad\AbschleppApp.final\backend\server.py", line 1133, in login
+    return TokenResponse(access_token=token, user=UserResponse(**user))
+                                                  ~~~~~~~~~~~~^^^^^^^^
+  File "C:\Users\ahmad\AppData\Roaming\Python\Python314\site-packages\pydantic\main.py", line 250, in __init__
+    validated_self = self.__pydantic_validator__.validate_python(data, self_instance=self)
+pydantic_core._pydantic_core.ValidationError: 1 validation error for UserResponse
+created_at
+  Field required [type=missing, input_value={'email': 'admin@abschlep...b977990baf15dc77001250'}, input_type=dict]
+    For further information visit https://errors.pydantic.dev/2.12/v/missing

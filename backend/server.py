@@ -1,4 +1,4 @@
-from fastapi import FastAPI, APIRouter, HTTPException, Depends, UploadFile, File, Form, status, Request, BackgroundTasks
+from fastapi import FastAPI, APIRouter, HTTPException, Depends, UploadFile, File, Form, status, Request, BackgroundTasks, Header
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from fastapi.responses import FileResponse, StreamingResponse
 from dotenv import load_dotenv
@@ -35,6 +35,9 @@ import csv
 import json
 import boto3
 from botocore.exceptions import ClientError
+import pyotp
+import qrcode
+from qrcode.image.pure import PyPNGImage
 
 ROOT_DIR = Path(__file__).parent
 load_dotenv(ROOT_DIR / '.env')
@@ -489,6 +492,13 @@ class UserLogin(BaseModel):
     email: EmailStr
     password: str
 
+class UserLogin2FA(BaseModel):
+    temp_token: str
+    totp_code: str
+
+class TOTPVerifyRequest(BaseModel):
+    totp_code: str
+
 class UserResponse(BaseModel):
     id: str
     email: str
@@ -506,7 +516,7 @@ class UserResponse(BaseModel):
     service_code: Optional[str] = None
     linked_services: Optional[List[str]] = None
     linked_authorities: Optional[List[str]] = None  # NEW: Authorities that linked this service
-    created_at: str
+    created_at: Optional[str] = None
     # Pricing fields
     tow_cost: Optional[float] = None
     daily_cost: Optional[float] = None
@@ -518,6 +528,8 @@ class UserResponse(BaseModel):
     dienstnummer: Optional[str] = None
     parent_authority_id: Optional[str] = None
     is_main_authority: Optional[bool] = None
+    # 2FA
+    totp_enabled: Optional[bool] = False
     # NEW: Extended pricing settings
     time_based_enabled: Optional[bool] = None
     first_half_hour: Optional[float] = None
@@ -1033,72 +1045,241 @@ async def register(data: UserRegister, request: Request, background_tasks: Backg
     
     return TokenResponse(access_token=token, user=UserResponse(**user_doc))
 
-@api_router.post("/auth/login", response_model=TokenResponse)
+@api_router.post("/auth/login")
 async def login(data: UserLogin, request: Request):
-    # Get client IP for rate limiting
-    client_ip = request.client.host if request.client else "unknown"
-    rate_limit_key = f"{client_ip}:{data.email}"
+    try:
+        # Get client IP for rate limiting
+        client_ip = request.client.host if request.client else "unknown"
+        rate_limit_key = f"{client_ip}:{data.email}"
+        
+        # Check rate limit
+        is_allowed, seconds_remaining = check_rate_limit(rate_limit_key)
+        if not is_allowed:
+            minutes = seconds_remaining // 60
+            raise HTTPException(
+                status_code=429, 
+                detail=f"Zu viele Anmeldeversuche. Bitte warten Sie {minutes} Minuten."
+            )
+        
+        user = await db.users.find_one({"email": data.email})
+        if not user or not verify_password(data.password, user["password"]):
+            # Record failed attempt
+            record_login_attempt(rate_limit_key)
+            attempts_left = MAX_LOGIN_ATTEMPTS - len(login_attempts[rate_limit_key])
+            # Audit log failed login attempt
+            await log_audit("LOGIN_FAILED", "unknown", data.email, {
+                "email": data.email,
+                "ip_address": client_ip,
+                "reason": "invalid_credentials"
+            })
+            raise HTTPException(
+                status_code=401, 
+                detail=f"Ungültige Anmeldedaten. Noch {attempts_left} Versuche übrig."
+            )
+        
+        # Check if user is blocked
+        if user.get("is_blocked"):
+            raise HTTPException(status_code=403, detail="Ihr Konto wurde gesperrt. Bitte kontaktieren Sie den Administrator.")
+        
+        # Check if authority or towing service is approved (employees don't need approval)
+        if user["role"] in [UserRole.TOWING_SERVICE, UserRole.AUTHORITY]:
+            # Skip approval check for employee accounts (they inherit from parent)
+            if user.get("is_main_authority") == False and user.get("parent_authority_id"):
+                pass  # Employee accounts don't need separate approval
+            elif user["role"] == UserRole.AUTHORITY and not user.get("is_main_authority"):
+                pass  # Non-main authority employees
+            else:
+                # Main accounts need approval
+                approval_status = user.get("approval_status")
+                if approval_status is None or approval_status == ApprovalStatus.PENDING:
+                    raise HTTPException(status_code=403, detail="Ihr Konto wartet noch auf Freischaltung durch einen Administrator")
+                elif approval_status == ApprovalStatus.REJECTED:
+                    rejection_reason = user.get("rejection_reason", "")
+                    raise HTTPException(status_code=403, detail=f"Ihre Registrierung wurde abgelehnt: {rejection_reason}. Sie können sich erneut registrieren.")
+        
+        # Clear rate limit on successful login info fetch
+        clear_login_attempts(rate_limit_key)
     
-    # Check rate limit
-    is_allowed, seconds_remaining = check_rate_limit(rate_limit_key)
-    if not is_allowed:
-        minutes = seconds_remaining // 60
-        raise HTTPException(
-            status_code=429, 
-            detail=f"Zu viele Anmeldeversuche. Bitte warten Sie {minutes} Minuten."
-        )
-    
-    user = await db.users.find_one({"email": data.email})
-    if not user or not verify_password(data.password, user["password"]):
-        # Record failed attempt
-        record_login_attempt(rate_limit_key)
-        attempts_left = MAX_LOGIN_ATTEMPTS - len(login_attempts[rate_limit_key])
-        # Audit log failed login attempt
-        await log_audit("LOGIN_FAILED", "unknown", data.email, {
-            "email": data.email,
+        user["id"] = str(user["_id"])
+        
+        # 2FA CHECK
+        if user.get("totp_enabled"):
+            # Create a temp token valid for 5 minutes just for 2FA validation
+            temp_payload = {
+                "user_id": user["id"],
+                "type": "2fa_temp",
+                "exp": datetime.now(timezone.utc) + timedelta(minutes=5)
+            }
+            temp_token = jwt.encode(temp_payload, JWT_SECRET, algorithm=JWT_ALGORITHM)
+            return {
+                "requires_2fa": True,
+                "temp_token": temp_token
+            }
+            
+        # Standard Login Flow Without 2FA
+        await log_audit("USER_LOGIN", user["id"], user.get("name", user["email"]), {
+            "email": user["email"],
+            "role": user["role"],
             "ip_address": client_ip,
-            "reason": "invalid_credentials"
+            "2fa_used": False
         })
-        raise HTTPException(
-            status_code=401, 
-            detail=f"Ungültige Anmeldedaten. Noch {attempts_left} Versuche übrig."
-        )
+        
+        token = create_token(user["id"], user["role"])
+        user.pop("password")
+        user.pop("_id", None)
+        # Don't send secret to frontend
+        user.pop("totp_secret", None)
+        
+        return TokenResponse(access_token=token, user=UserResponse(**user))
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Login failed: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail="Internal Server Error")
+
+@api_router.post("/auth/login/2fa", response_model=TokenResponse)
+async def login_2fa(data: UserLogin2FA, request: Request):
+    # Get client IP
+    client_ip = request.client.host if request.client else "unknown"
     
-    # Check if user is blocked
-    if user.get("is_blocked"):
-        raise HTTPException(status_code=403, detail="Ihr Konto wurde gesperrt. Bitte kontaktieren Sie den Administrator.")
+    try:
+        # Verify temp token
+        payload = jwt.decode(data.temp_token, JWT_SECRET, algorithms=[JWT_ALGORITHM])
+        if payload.get("type") != "2fa_temp":
+            raise HTTPException(status_code=401, detail="Ungültiger Token-Typ")
+            
+        user_id = payload.get("user_id")
+        try:
+            from bson.objectid import ObjectId
+            user = await db.users.find_one({"_id": ObjectId(user_id)})
+        except:
+            user = await db.users.find_one({"id": user_id})
+        
+        if not user or not user.get("totp_enabled") or not user.get("totp_secret"):
+            raise HTTPException(status_code=400, detail="2FA ist für diesen Account nicht aktiv")
+            
+        user["id"] = str(user["_id"])
+        
+        # Verify TOTP code
+        totp = pyotp.TOTP(user["totp_secret"])
+        if not totp.verify(data.totp_code):
+            await log_audit("LOGIN_FAILED_2FA", user["id"], user.get("name", ""), {
+                "ip_address": client_ip
+            })
+            raise HTTPException(status_code=401, detail="Falscher Authenticator-Code")
+            
+        # Success!
+        await log_audit("USER_LOGIN", user["id"], user.get("name", user["email"]), {
+            "email": user["email"],
+            "role": user["role"],
+            "ip_address": client_ip,
+            "2fa_used": True
+        })
+        
+        token = create_token(user["id"], user["role"])
+        user.pop("password", None)
+        user.pop("_id", None)
+        user.pop("totp_secret", None)
+        
+        return TokenResponse(access_token=token, user=UserResponse(**user))
+        
+    except jwt.ExpiredSignatureError:
+        raise HTTPException(status_code=401, detail="Login-Sitzung abgelaufen, bitte erneut anmelden.")
+    except jwt.InvalidTokenError:
+        raise HTTPException(status_code=401, detail="Ungültige Sitzung.")
+
+# ==================== 2FA SETUP ====================
+
+@api_router.post("/auth/2fa/setup")
+async def setup_2fa(user: dict = Depends(get_current_user)):
+    # Generate new secret
+    secret = pyotp.random_base32()
     
-    # Check if authority or towing service is approved (employees don't need approval)
-    if user["role"] in [UserRole.TOWING_SERVICE, UserRole.AUTHORITY]:
-        # Skip approval check for employee accounts (they inherit from parent)
-        if user.get("is_main_authority") == False and user.get("parent_authority_id"):
-            pass  # Employee accounts don't need separate approval
-        elif user["role"] == UserRole.AUTHORITY and not user.get("is_main_authority"):
-            pass  # Non-main authority employees
-        else:
-            # Main accounts need approval
-            approval_status = user.get("approval_status")
-            if approval_status is None or approval_status == ApprovalStatus.PENDING:
-                raise HTTPException(status_code=403, detail="Ihr Konto wartet noch auf Freischaltung durch einen Administrator")
-            elif approval_status == ApprovalStatus.REJECTED:
-                rejection_reason = user.get("rejection_reason", "")
-                raise HTTPException(status_code=403, detail=f"Ihre Registrierung wurde abgelehnt: {rejection_reason}. Sie können sich erneut registrieren.")
+    # Temporarily store it, but don't enable yet
+    await db.users.update_one(
+        {"id": user["id"]},
+        {"$set": {"temp_totp_secret": secret}}
+    )
     
-    # Clear rate limit on successful login
-    clear_login_attempts(rate_limit_key)
+    # Generate provisioning URI
+    totp = pyotp.TOTP(secret)
+    provisioning_uri = totp.provisioning_uri(
+        name=user["email"], 
+        issuer_name="AbschleppApp"
+    )
     
-    # Audit log successful login
-    await log_audit("USER_LOGIN", user["id"], user.get("name", user["email"]), {
-        "email": user["email"],
-        "role": user["role"],
-        "ip_address": client_ip
-    })
+    # Create QR code
+    qr = qrcode.QRCode(
+        version=1,
+        error_correction=qrcode.constants.ERROR_CORRECT_L,
+        box_size=10,
+        border=4,
+    )
+    qr.add_data(provisioning_uri)
+    qr.make(fit=True)
     
-    token = create_token(user["id"], user["role"])
-    user.pop("password")
-    user.pop("_id", None)
+    # Convert QR Code to base64 for frontend
+    img_buffer = BytesIO()
+    img = qr.make_image(image_factory=PyPNGImage)
+    img.save(img_buffer)
+    img_base64 = base64.b64encode(img_buffer.getvalue()).decode()
     
-    return TokenResponse(access_token=token, user=UserResponse(**user))
+    return {
+        "secret": secret,
+        "qr_code": f"data:image/png;base64,{img_base64}"
+    }
+
+@api_router.post("/auth/2fa/verify-setup")
+async def verify_2fa_setup(data: TOTPVerifyRequest, user: dict = Depends(get_current_user)):
+    user_data = await db.users.find_one({"id": user["id"]})
+    secret = user_data.get("temp_totp_secret")
+    
+    if not secret:
+        raise HTTPException(status_code=400, detail="Kein 2FA-Setup im Gange")
+        
+    totp = pyotp.TOTP(secret)
+    if not totp.verify(data.totp_code):
+        raise HTTPException(status_code=400, detail="Falscher Code")
+        
+    # Successfully verified, make it permanent
+    await db.users.update_one(
+        {"id": user["id"]},
+        {
+            "$set": {
+                "totp_secret": secret,
+                "totp_enabled": True
+            },
+            "$unset": {"temp_totp_secret": ""}
+        }
+    )
+    
+    await log_audit("2FA_ENABLED", user["id"], user.get("name", ""), {})
+    
+    return {"message": "2FA erfolgreich aktiviert"}
+
+@api_router.post("/auth/2fa/disable")
+async def disable_2fa(data: TOTPVerifyRequest, user: dict = Depends(get_current_user)):
+    user_data = await db.users.find_one({"id": user["id"]})
+    
+    if not user_data.get("totp_enabled"):
+        raise HTTPException(status_code=400, detail="2FA ist nicht aktiviert")
+        
+    totp = pyotp.TOTP(user_data["totp_secret"])
+    if not totp.verify(data.totp_code):
+        raise HTTPException(status_code=400, detail="Falscher Code")
+        
+    await db.users.update_one(
+        {"id": user["id"]},
+        {
+            "$set": {"totp_enabled": False},
+            "$unset": {"totp_secret": ""}
+        }
+    )
+    
+    await log_audit("2FA_DISABLED", user["id"], user.get("name", ""), {})
+    
+    return {"message": "2FA wurde deaktiviert"}
+
 
 # ==================== PASSWORD RESET ====================
 

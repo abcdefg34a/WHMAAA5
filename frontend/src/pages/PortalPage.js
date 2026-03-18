@@ -14,7 +14,7 @@ const API_URL = process.env.REACT_APP_BACKEND_URL;
 
 export const PortalPage = () => {
   const navigate = useNavigate();
-  const { login, logout } = useAuth();
+  const { login, logout, verify2FA } = useAuth();
   
   // Login state
   const [loginEmail, setLoginEmail] = useState('');
@@ -22,6 +22,11 @@ export const PortalPage = () => {
   const [showLoginPassword, setShowLoginPassword] = useState(false);
   const [loginLoading, setLoginLoading] = useState(false);
   const [loginError, setLoginError] = useState('');
+  
+  // 2FA login state
+  const [loginRequires2FA, setLoginRequires2FA] = useState(false);
+  const [loginTempToken, setLoginTempToken] = useState('');
+  const [loginTotpCode, setLoginTotpCode] = useState('');
 
   // Register state
   const [registerRole, setRegisterRole] = useState('authority');
@@ -127,20 +132,42 @@ export const PortalPage = () => {
     setLoginError('');
 
     try {
-      const user = await login(loginEmail, loginPassword);
-      
-      // Portal is ONLY for authority and towing_service - reject admins
-      if (user.role === 'admin') {
-        setLoginError('Administratoren nutzen bitte die Admin-Anmeldeseite unter /login');
-        logout(); // Properly clear token and user state
-        return;
-      }
-      
-      // Redirect based on role
-      if (user.role === 'authority') {
-        navigate('/authority');
-      } else if (user.role === 'towing_service') {
-        navigate('/towing');
+      if (loginRequires2FA) {
+        // Submit 2FA Code
+        const user = await verify2FA(loginTempToken, loginTotpCode);
+        
+        if (user.role === 'admin') {
+          setLoginError('Administratoren nutzen bitte die Admin-Anmeldeseite unter /login');
+          logout();
+          return;
+        }
+        
+        if (user.role === 'authority') {
+          navigate('/authority');
+        } else if (user.role === 'towing_service') {
+          navigate('/towing');
+        }
+      } else {
+        // Initial Login
+        const response = await login(loginEmail, loginPassword);
+        
+        if (response.requires_2fa) {
+          setLoginRequires2FA(true);
+          setLoginTempToken(response.temp_token);
+        } else {
+          // Normal Login
+          if (response.role === 'admin') {
+            setLoginError('Administratoren nutzen bitte die Admin-Anmeldeseite unter /login');
+            logout(); // Properly clear token and user state
+            return;
+          }
+          
+          if (response.role === 'authority') {
+            navigate('/authority');
+          } else if (response.role === 'towing_service') {
+            navigate('/towing');
+          }
+        }
       }
     } catch (err) {
       setLoginError(err.response?.data?.detail || 'Anmeldung fehlgeschlagen');
@@ -277,59 +304,97 @@ export const PortalPage = () => {
                     </div>
                   )}
 
-                  <div className="space-y-2">
-                    <Label htmlFor="login-email">E-Mail</Label>
-                    <Input
-                      id="login-email"
-                      type="email"
-                      value={loginEmail}
-                      onChange={(e) => setLoginEmail(e.target.value)}
-                      placeholder="ihre@email.de"
-                      required
-                      autoComplete="email"
-                      className="h-12"
-                    />
-                  </div>
+                  {!loginRequires2FA ? (
+                    <>
+                      <div className="space-y-2">
+                        <Label htmlFor="login-email">E-Mail</Label>
+                        <Input
+                          id="login-email"
+                          type="email"
+                          value={loginEmail}
+                          onChange={(e) => setLoginEmail(e.target.value)}
+                          placeholder="ihre@email.de"
+                          required
+                          autoComplete="email"
+                          className="h-12"
+                        />
+                      </div>
 
-                  <div className="space-y-2">
-                    <Label htmlFor="login-password">Passwort</Label>
-                    <div className="relative">
-                      <Input
-                        id="login-password"
-                        type={showLoginPassword ? 'text' : 'password'}
-                        value={loginPassword}
-                        onChange={(e) => setLoginPassword(e.target.value)}
-                        placeholder="••••••••"
-                        required
-                        autoComplete="current-password"
-                        className="h-12 pr-12"
-                      />
-                      <button
-                        type="button"
-                        onClick={() => setShowLoginPassword(!showLoginPassword)}
-                        className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"
-                      >
-                        {showLoginPassword ? <EyeOff className="h-5 w-5" /> : <Eye className="h-5 w-5" />}
-                      </button>
+                      <div className="space-y-2">
+                        <Label htmlFor="login-password">Passwort</Label>
+                        <div className="relative">
+                          <Input
+                            id="login-password"
+                            type={showLoginPassword ? 'text' : 'password'}
+                            value={loginPassword}
+                            onChange={(e) => setLoginPassword(e.target.value)}
+                            placeholder="••••••••"
+                            required
+                            autoComplete="current-password"
+                            className="h-12 pr-12"
+                          />
+                          <button
+                            type="button"
+                            onClick={() => setShowLoginPassword(!showLoginPassword)}
+                            className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"
+                          >
+                            {showLoginPassword ? <EyeOff className="h-5 w-5" /> : <Eye className="h-5 w-5" />}
+                          </button>
+                        </div>
+                      </div>
+                    </>
+                  ) : (
+                    <div className="space-y-4">
+                      <div className="bg-blue-50 text-blue-800 p-4 rounded-lg text-sm mb-4">
+                        Bitte geben Sie den 6-stelligen Code aus Ihrer Authenticator App ein.
+                      </div>
+                      <div className="space-y-2">
+                        <Label htmlFor="login-totpCode">Authenticator Code</Label>
+                        <Input
+                          id="login-totpCode"
+                          type="text"
+                          value={loginTotpCode}
+                          onChange={(e) => setLoginTotpCode(e.target.value.replace(/\D/g, '').slice(0, 6))}
+                          placeholder="123456"
+                          required
+                          autoComplete="one-time-code"
+                          className="h-12 text-center text-xl tracking-widest"
+                          maxLength={6}
+                        />
+                      </div>
                     </div>
-                  </div>
+                  )}
 
                   <Button
                     type="submit"
-                    disabled={loginLoading}
-                    className="w-full h-12 bg-slate-900 hover:bg-slate-800"
+                    disabled={loginLoading || (loginRequires2FA && loginTotpCode.length !== 6)}
+                    className="w-full h-12 bg-slate-900 hover:bg-slate-800 mt-4"
                   >
                     {loginLoading ? (
                       <div className="loading-spinner"></div>
                     ) : (
                       <>
                         <LogIn className="h-4 w-4 mr-2" />
-                        Anmelden
+                        {loginRequires2FA ? 'Verifizieren' : 'Anmelden'}
                       </>
                     )}
                   </Button>
+                  
+                  {loginRequires2FA && (
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      onClick={() => {
+                        setLoginRequires2FA(false);
+                        setLoginTotpCode('');
+                      }}
+                      className="w-full mt-2"
+                    >
+                      Zurück
+                    </Button>
+                  )}
 
-                  <div className="text-center">
+                  <div className="text-center mt-4">
                     <a href="/forgot-password" className="text-sm text-orange-600 hover:text-orange-700">
                       Passwort vergessen?
                     </a>
