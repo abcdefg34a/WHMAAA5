@@ -8,7 +8,7 @@ import json
 import base64
 import re
 
-BACKEND_URL = "https://pg-abschlepp-core.preview.emergentagent.com/api"
+BACKEND_URL = "https://mongodb-archive-tool.preview.emergentagent.com/api"
 
 def login_and_get_token(email, password):
     """Helper function to login and get token"""

@@ -5,7 +5,8 @@ import {
   Car, Search, LogOut, Users, Truck, Shield, Building2,
   CheckCircle, Clock, Download, Filter, BarChart3, AlertCircle,
   FileText, X, Eye, Lock, Unlock, Trash2, Key, MoreVertical,
-  History, Database, FileSpreadsheet
+  History, Database, FileSpreadsheet, HardDrive, RefreshCw,
+  Archive, Play, Loader2, CloudDownload
 } from 'lucide-react';
 import { Button } from '../components/ui/button';
 import { Input } from '../components/ui/input';
@@ -60,6 +61,15 @@ export const AdminDashboard = () => {
   const [auditLogs, setAuditLogs] = useState([]);
   const [auditLoading, setAuditLoading] = useState(false);
 
+  // Backup state
+  const [backups, setBackups] = useState([]);
+  const [backupStatus, setBackupStatus] = useState(null);
+  const [backupsLoading, setBackupsLoading] = useState(false);
+  const [backupRunning, setBackupRunning] = useState(false);
+  const [restoreDialogOpen, setRestoreDialogOpen] = useState(false);
+  const [selectedBackup, setSelectedBackup] = useState(null);
+  const [deleteBackupDialogOpen, setDeleteBackupDialogOpen] = useState(false);
+
   useEffect(() => {
     fetchData();
   }, [currentPage]);
@@ -75,6 +85,14 @@ export const AdminDashboard = () => {
   useEffect(() => {
     if (activeTab === 'system' && auditLogs.length === 0) {
       fetchAuditLogs();
+    }
+  }, [activeTab]);
+
+  // Load backups when switching to backups tab
+  useEffect(() => {
+    if (activeTab === 'backups') {
+      fetchBackups();
+      fetchBackupStatus();
     }
   }, [activeTab]);
 
@@ -122,6 +140,175 @@ export const AdminDashboard = () => {
     } finally {
       setAuditLoading(false);
     }
+  };
+
+  // ==================== BACKUP FUNKTIONEN ====================
+  
+  const fetchBackups = async () => {
+    setBackupsLoading(true);
+    try {
+      const response = await axios.get(`${API}/admin/backups?limit=50`);
+      setBackups(response.data);
+    } catch (error) {
+      console.error('Error fetching backups:', error);
+      toast.error('Fehler beim Laden der Backups');
+    } finally {
+      setBackupsLoading(false);
+    }
+  };
+
+  const fetchBackupStatus = async () => {
+    try {
+      const response = await axios.get(`${API}/admin/backups/system-status`);
+      setBackupStatus(response.data);
+    } catch (error) {
+      console.error('Error fetching backup status:', error);
+    }
+  };
+
+  const handleRunDatabaseBackup = async () => {
+    setBackupRunning(true);
+    try {
+      toast.info('Datenbank-Backup wird erstellt...');
+      const response = await axios.post(`${API}/admin/backups/run-database-backup`);
+      if (response.data.status === 'success') {
+        toast.success(`Backup erfolgreich: ${response.data.filename}`);
+        fetchBackups();
+        fetchBackupStatus();
+      } else {
+        toast.error('Backup fehlgeschlagen: ' + (response.data.error || 'Unbekannter Fehler'));
+      }
+    } catch (error) {
+      toast.error(error.response?.data?.detail || 'Backup fehlgeschlagen');
+    } finally {
+      setBackupRunning(false);
+    }
+  };
+
+  const handleRunStorageBackup = async () => {
+    setBackupRunning(true);
+    try {
+      toast.info('Storage-Backup wird erstellt...');
+      const response = await axios.post(`${API}/admin/backups/run-storage-backup`);
+      if (response.data.status === 'success') {
+        toast.success(`Backup erfolgreich: ${response.data.filename}`);
+        fetchBackups();
+        fetchBackupStatus();
+      } else {
+        toast.error('Backup fehlgeschlagen: ' + (response.data.error || 'Unbekannter Fehler'));
+      }
+    } catch (error) {
+      toast.error(error.response?.data?.detail || 'Backup fehlgeschlagen');
+    } finally {
+      setBackupRunning(false);
+    }
+  };
+
+  const handleRunFullBackup = async () => {
+    setBackupRunning(true);
+    try {
+      toast.info('Komplett-Backup wird erstellt (Datenbank + Storage)...');
+      const response = await axios.post(`${API}/admin/backups/run-full-backup`);
+      if (response.data.status === 'success' || response.data.status === 'partial_failure') {
+        toast.success('Komplett-Backup erfolgreich erstellt');
+        fetchBackups();
+        fetchBackupStatus();
+      } else {
+        toast.error('Backup fehlgeschlagen');
+      }
+    } catch (error) {
+      toast.error(error.response?.data?.detail || 'Backup fehlgeschlagen');
+    } finally {
+      setBackupRunning(false);
+    }
+  };
+
+  const handleDownloadBackup = async (backupId, filename) => {
+    try {
+      toast.info('Download wird vorbereitet...');
+      const response = await axios.get(`${API}/admin/backups/${backupId}/download`, {
+        responseType: 'blob'
+      });
+      const url = window.URL.createObjectURL(new Blob([response.data]));
+      const link = document.createElement('a');
+      link.href = url;
+      link.setAttribute('download', filename);
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      window.URL.revokeObjectURL(url);
+      toast.success('Download gestartet');
+    } catch (error) {
+      toast.error('Download fehlgeschlagen');
+    }
+  };
+
+  const handleRestoreBackup = async () => {
+    if (!selectedBackup) return;
+    
+    setActionLoading(true);
+    try {
+      const endpoint = selectedBackup.backup_type === 'database' 
+        ? `${API}/admin/backups/${selectedBackup.id}/restore-database`
+        : `${API}/admin/backups/${selectedBackup.id}/restore-storage`;
+      
+      const response = await axios.post(endpoint, { confirm: true });
+      
+      if (response.data.status === 'success') {
+        toast.success('Wiederherstellung erfolgreich!');
+        setRestoreDialogOpen(false);
+        setSelectedBackup(null);
+        fetchBackups();
+        fetchBackupStatus();
+      } else {
+        toast.error('Wiederherstellung fehlgeschlagen: ' + (response.data.error || response.data.message));
+      }
+    } catch (error) {
+      toast.error(error.response?.data?.detail || 'Wiederherstellung fehlgeschlagen');
+    } finally {
+      setActionLoading(false);
+    }
+  };
+
+  const handleDeleteBackup = async () => {
+    if (!selectedBackup) return;
+    
+    setActionLoading(true);
+    try {
+      const response = await axios.delete(`${API}/admin/backups/${selectedBackup.id}`);
+      if (response.data.status === 'success') {
+        toast.success('Backup gelöscht');
+        setDeleteBackupDialogOpen(false);
+        setSelectedBackup(null);
+        fetchBackups();
+        fetchBackupStatus();
+      } else {
+        toast.error('Löschen fehlgeschlagen');
+      }
+    } catch (error) {
+      toast.error(error.response?.data?.detail || 'Löschen fehlgeschlagen');
+    } finally {
+      setActionLoading(false);
+    }
+  };
+
+  const formatBytes = (bytes) => {
+    if (!bytes || bytes === 0) return '0 B';
+    const k = 1024;
+    const sizes = ['B', 'KB', 'MB', 'GB'];
+    const i = Math.floor(Math.log(bytes) / Math.log(k));
+    return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
+  };
+
+  const formatDate = (dateStr) => {
+    if (!dateStr) return '-';
+    return new Date(dateStr).toLocaleString('de-DE', {
+      day: '2-digit',
+      month: '2-digit',
+      year: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit'
+    });
   };
 
   const handleExportExcel = async () => {
@@ -434,6 +621,14 @@ export const AdminDashboard = () => {
             >
               <Database className="h-4 w-4" />
               System
+            </TabsTrigger>
+            <TabsTrigger
+              data-testid="tab-backups"
+              value="backups"
+              className="flex items-center gap-2"
+            >
+              <HardDrive className="h-4 w-4" />
+              Backups
             </TabsTrigger>
           </TabsList>
 
@@ -1003,6 +1198,252 @@ export const AdminDashboard = () => {
             </Card>
           </TabsContent>
 
+          {/* Backups Tab */}
+          <TabsContent value="backups">
+            <div className="space-y-6">
+              {/* Backup Status KPI Cards */}
+              <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+                <Card>
+                  <CardContent className="p-4">
+                    <div className="flex items-center gap-3">
+                      <div className="p-2 bg-blue-100 rounded-lg">
+                        <Database className="h-5 w-5 text-blue-600" />
+                      </div>
+                      <div>
+                        <p className="text-xs text-slate-500">Letztes DB-Backup</p>
+                        <p className="font-semibold text-sm">
+                          {backupStatus?.last_database_backup?.date 
+                            ? formatDate(backupStatus.last_database_backup.date)
+                            : 'Noch keins'}
+                        </p>
+                      </div>
+                    </div>
+                  </CardContent>
+                </Card>
+                <Card>
+                  <CardContent className="p-4">
+                    <div className="flex items-center gap-3">
+                      <div className="p-2 bg-green-100 rounded-lg">
+                        <Archive className="h-5 w-5 text-green-600" />
+                      </div>
+                      <div>
+                        <p className="text-xs text-slate-500">Letztes Storage-Backup</p>
+                        <p className="font-semibold text-sm">
+                          {backupStatus?.last_storage_backup?.date 
+                            ? formatDate(backupStatus.last_storage_backup.date)
+                            : 'Noch keins'}
+                        </p>
+                      </div>
+                    </div>
+                  </CardContent>
+                </Card>
+                <Card>
+                  <CardContent className="p-4">
+                    <div className="flex items-center gap-3">
+                      <div className="p-2 bg-amber-100 rounded-lg">
+                        <HardDrive className="h-5 w-5 text-amber-600" />
+                      </div>
+                      <div>
+                        <p className="text-xs text-slate-500">Gesamt-Backups</p>
+                        <p className="font-semibold text-sm">
+                          {backupStatus?.total_backups || 0} Dateien
+                        </p>
+                      </div>
+                    </div>
+                  </CardContent>
+                </Card>
+                <Card>
+                  <CardContent className="p-4">
+                    <div className="flex items-center gap-3">
+                      <div className={`p-2 rounded-lg ${backupStatus?.failed_backups > 0 ? 'bg-red-100' : 'bg-slate-100'}`}>
+                        <BarChart3 className={`h-5 w-5 ${backupStatus?.failed_backups > 0 ? 'text-red-600' : 'text-slate-600'}`} />
+                      </div>
+                      <div>
+                        <p className="text-xs text-slate-500">Speicher-Nutzung</p>
+                        <p className="font-semibold text-sm">
+                          {backupStatus?.total_size_mb?.toFixed(2) || 0} MB
+                        </p>
+                      </div>
+                    </div>
+                  </CardContent>
+                </Card>
+              </div>
+
+              {/* Manual Backup Actions */}
+              <Card>
+                <CardHeader>
+                  <CardTitle className="flex items-center gap-2">
+                    <Play className="h-5 w-5" />
+                    Manuelles Backup
+                  </CardTitle>
+                  <CardDescription>
+                    Starten Sie sofort ein Backup der Datenbank oder Dateien
+                  </CardDescription>
+                </CardHeader>
+                <CardContent>
+                  <div className="flex flex-wrap gap-3">
+                    <Button 
+                      onClick={handleRunDatabaseBackup} 
+                      disabled={backupRunning}
+                      className="bg-blue-600 hover:bg-blue-700"
+                    >
+                      {backupRunning ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Database className="h-4 w-4 mr-2" />}
+                      Datenbank-Backup jetzt starten
+                    </Button>
+                    <Button 
+                      onClick={handleRunStorageBackup}
+                      disabled={backupRunning}
+                      className="bg-green-600 hover:bg-green-700"
+                    >
+                      {backupRunning ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Archive className="h-4 w-4 mr-2" />}
+                      Storage-Backup jetzt starten
+                    </Button>
+                    <Button 
+                      onClick={handleRunFullBackup}
+                      disabled={backupRunning}
+                      className="bg-orange-600 hover:bg-orange-700"
+                    >
+                      {backupRunning ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <HardDrive className="h-4 w-4 mr-2" />}
+                      Komplett-Backup jetzt starten
+                    </Button>
+                  </div>
+                  <div className="mt-4 p-3 bg-slate-50 rounded-lg text-sm text-slate-600">
+                    <strong>Automatische Backups:</strong> Täglich um 02:00 Uhr (Datenbank), 02:30 Uhr (Storage). 
+                    Monatliche Backups am 1. jeden Monats um 01:00 Uhr.
+                  </div>
+                </CardContent>
+              </Card>
+
+              {/* Backups Table */}
+              <Card>
+                <CardHeader className="flex flex-row items-center justify-between">
+                  <div>
+                    <CardTitle>Alle Backups</CardTitle>
+                    <CardDescription>
+                      Aufbewahrung: Täglich {backupStatus?.retention_settings?.daily_retention_days || 30} Tage, 
+                      Monatlich {backupStatus?.retention_settings?.monthly_retention_months || 12} Monate
+                    </CardDescription>
+                  </div>
+                  <Button variant="outline" onClick={() => { fetchBackups(); fetchBackupStatus(); }}>
+                    <RefreshCw className="h-4 w-4 mr-2" />
+                    Aktualisieren
+                  </Button>
+                </CardHeader>
+                <CardContent>
+                  {backupsLoading ? (
+                    <div className="flex justify-center py-8">
+                      <Loader2 className="h-8 w-8 animate-spin text-slate-400" />
+                    </div>
+                  ) : backups.length === 0 ? (
+                    <div className="text-center py-8 text-slate-500">
+                      Noch keine Backups vorhanden
+                    </div>
+                  ) : (
+                    <div className="overflow-x-auto">
+                      <table className="w-full text-sm">
+                        <thead>
+                          <tr className="border-b text-left">
+                            <th className="py-3 px-2 font-semibold">Typ</th>
+                            <th className="py-3 px-2 font-semibold">Dateiname</th>
+                            <th className="py-3 px-2 font-semibold">Klasse</th>
+                            <th className="py-3 px-2 font-semibold">Größe</th>
+                            <th className="py-3 px-2 font-semibold">Status</th>
+                            <th className="py-3 px-2 font-semibold">Erstellt am</th>
+                            <th className="py-3 px-2 font-semibold">Aktionen</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {backups.map((backup) => (
+                            <tr key={backup.id} className="border-b hover:bg-slate-50">
+                              <td className="py-3 px-2">
+                                <Badge variant={backup.backup_type === 'database' ? 'default' : 'secondary'}>
+                                  {backup.backup_type === 'database' ? 'Datenbank' : 'Storage'}
+                                </Badge>
+                              </td>
+                              <td className="py-3 px-2 font-mono text-xs">{backup.file_name}</td>
+                              <td className="py-3 px-2">
+                                <Badge variant="outline">
+                                  {backup.retention_class === 'daily' ? 'Täglich' : 'Monatlich'}
+                                </Badge>
+                              </td>
+                              <td className="py-3 px-2">{formatBytes(backup.file_size_bytes)}</td>
+                              <td className="py-3 px-2">
+                                {backup.status === 'success' ? (
+                                  <Badge className="bg-green-100 text-green-800">Erfolgreich</Badge>
+                                ) : backup.status === 'running' ? (
+                                  <Badge className="bg-blue-100 text-blue-800">Läuft</Badge>
+                                ) : (
+                                  <Badge className="bg-red-100 text-red-800">Fehlgeschlagen</Badge>
+                                )}
+                              </td>
+                              <td className="py-3 px-2">{formatDate(backup.created_at)}</td>
+                              <td className="py-3 px-2">
+                                <DropdownMenu>
+                                  <DropdownMenuTrigger asChild>
+                                    <Button variant="ghost" size="sm">
+                                      <MoreVertical className="h-4 w-4" />
+                                    </Button>
+                                  </DropdownMenuTrigger>
+                                  <DropdownMenuContent align="end">
+                                    <DropdownMenuItem 
+                                      onClick={() => handleDownloadBackup(backup.id, backup.file_name)}
+                                      disabled={backup.status !== 'success'}
+                                    >
+                                      <CloudDownload className="h-4 w-4 mr-2" />
+                                      Herunterladen
+                                    </DropdownMenuItem>
+                                    <DropdownMenuItem 
+                                      onClick={() => {
+                                        setSelectedBackup(backup);
+                                        setRestoreDialogOpen(true);
+                                      }}
+                                      disabled={backup.status !== 'success'}
+                                    >
+                                      <RefreshCw className="h-4 w-4 mr-2" />
+                                      Wiederherstellen
+                                    </DropdownMenuItem>
+                                    <DropdownMenuSeparator />
+                                    <DropdownMenuItem 
+                                      onClick={() => {
+                                        setSelectedBackup(backup);
+                                        setDeleteBackupDialogOpen(true);
+                                      }}
+                                      className="text-red-600"
+                                    >
+                                      <Trash2 className="h-4 w-4 mr-2" />
+                                      Löschen
+                                    </DropdownMenuItem>
+                                  </DropdownMenuContent>
+                                </DropdownMenu>
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
+
+              {/* System Status */}
+              {backupStatus?.last_error && (
+                <Card className="border-red-200 bg-red-50">
+                  <CardHeader>
+                    <CardTitle className="flex items-center gap-2 text-red-700">
+                      <AlertCircle className="h-5 w-5" />
+                      Letzter Fehler
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    <p className="text-sm text-red-600">
+                      {formatDate(backupStatus.last_error.date)}: {backupStatus.last_error.message}
+                    </p>
+                  </CardContent>
+                </Card>
+              )}
+            </div>
+          </TabsContent>
+
           {/* Profile Tab */}
           <TabsContent value="profile">
             <TwoFactorSetup />
@@ -1277,6 +1718,70 @@ export const AdminDashboard = () => {
           )}
         </DialogContent>
       </Dialog>
+
+      {/* Restore Backup Confirmation Dialog */}
+      <AlertDialog open={restoreDialogOpen} onOpenChange={setRestoreDialogOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle className="flex items-center gap-2 text-amber-600">
+              <RefreshCw className="h-5 w-5" />
+              Backup wiederherstellen
+            </AlertDialogTitle>
+            <AlertDialogDescription className="space-y-2">
+              <p>
+                <strong className="text-red-600">Warnung:</strong> Diese Aktion kann bestehende Daten überschreiben!
+              </p>
+              <p>
+                Möchten Sie wirklich das Backup <strong>{selectedBackup?.file_name}</strong> vom{' '}
+                <strong>{formatDate(selectedBackup?.created_at)}</strong> wiederherstellen?
+              </p>
+              <p className="text-sm text-slate-500 mt-2">
+                {selectedBackup?.backup_type === 'database' 
+                  ? 'Die gesamte Datenbank wird auf den Stand dieses Backups zurückgesetzt.'
+                  : 'Alle gespeicherten Dateien werden aus diesem Backup wiederhergestellt.'}
+              </p>
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel onClick={() => setSelectedBackup(null)}>Abbrechen</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={handleRestoreBackup}
+              className="bg-amber-600 hover:bg-amber-700"
+              disabled={actionLoading}
+            >
+              {actionLoading ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <RefreshCw className="h-4 w-4 mr-2" />}
+              Ja, wiederherstellen
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      {/* Delete Backup Confirmation Dialog */}
+      <AlertDialog open={deleteBackupDialogOpen} onOpenChange={setDeleteBackupDialogOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle className="flex items-center gap-2 text-red-600">
+              <Trash2 className="h-5 w-5" />
+              Backup löschen
+            </AlertDialogTitle>
+            <AlertDialogDescription>
+              Sind Sie sicher, dass Sie das Backup <strong>{selectedBackup?.file_name}</strong> löschen möchten?
+              Diese Aktion kann nicht rückgängig gemacht werden.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel onClick={() => setSelectedBackup(null)}>Abbrechen</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={handleDeleteBackup}
+              className="bg-red-600 hover:bg-red-700"
+              disabled={actionLoading}
+            >
+              {actionLoading ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Trash2 className="h-4 w-4 mr-2" />}
+              Endgültig löschen
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 };

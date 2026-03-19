@@ -5,7 +5,7 @@ import json
 
 def test_admin_registration():
     """Test if we can register the admin user"""
-    base_url = "https://pg-abschlepp-core.preview.emergentagent.com/api"
+    base_url = "https://mongodb-archive-tool.preview.emergentagent.com/api"
     
     admin_data = {
         "email": "admin@test.de",
@@ -47,7 +47,7 @@ def test_admin_registration():
 
 def test_admin_login(token=None):
     """Test admin login after registration"""
-    base_url = "https://pg-abschlepp-core.preview.emergentagent.com/api"
+    base_url = "https://mongodb-archive-tool.preview.emergentagent.com/api"
     
     login_data = {
         "email": "admin@test.de",
@@ -86,7 +86,7 @@ def test_admin_login(token=None):
 
 def test_database_stats(token):
     """Test database stats to verify MongoDB connection"""
-    base_url = "https://pg-abschlepp-core.preview.emergentagent.com/api"
+    base_url = "https://mongodb-archive-tool.preview.emergentagent.com/api"
     
     print("\n📊 Testing Database Stats...")
     

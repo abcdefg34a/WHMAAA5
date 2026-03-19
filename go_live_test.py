@@ -8,7 +8,7 @@ from datetime import datetime
 from typing import Dict, Any, Optional
 
 class GoLiveFeatureTester:
-    def __init__(self, base_url="https://pg-abschlepp-core.preview.emergentagent.com/api"):
+    def __init__(self, base_url="https://mongodb-archive-tool.preview.emergentagent.com/api"):
         self.base_url = base_url
         self.admin_token = None
         self.tests_run = 0
