@@ -1,12 +1,13 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useAuth } from '../contexts/AuthContext';
 import { useDeltaPolling } from '../hooks/useDeltaPolling';
+import { useJobNotifications } from '../hooks/useJobNotifications';
 import axios from 'axios';
 import {
   Car, MapPin, Camera, LogOut, FileText, Copy, CheckCircle,
   Clock, Truck, Phone, Building2, Download, X, Settings, Euro,
   Filter, CheckSquare, Square, ChevronDown, Calendar, Plus, Search,
-  Edit, Save, Undo2, User
+  Edit, Save, Undo2, User, Bell, BellOff, Volume2, VolumeX
 } from 'lucide-react';
 import { Button } from '../components/ui/button';
 import { Input } from '../components/ui/input';
@@ -98,6 +99,16 @@ export const TowingDashboard = () => {
   const [selectedJob, setSelectedJob] = useState(null);
   const [jobDetailOpen, setJobDetailOpen] = useState(false);
   const [releaseDialogOpen, setReleaseDialogOpen] = useState(false);
+  
+  // Echtzeit-Benachrichtigungen Hook
+  const {
+    notificationPermission,
+    requestNotificationPermission,
+    soundEnabled,
+    setSoundEnabled,
+    newJobsCount,
+    clearNewJobsCount
+  } = useJobNotifications(jobs, true);
   const [settingsDialogOpen, setSettingsDialogOpen] = useState(false);
   const [codeCopied, setCodeCopied] = useState(false);
 
@@ -960,6 +971,51 @@ export const TowingDashboard = () => {
                 <Building2 className="h-4 w-4" />
               </Button>
 
+              {/* Notification Settings */}
+              <div className="flex items-center gap-1 border rounded-md px-2 py-1 bg-slate-50">
+                {/* Notification Permission Button */}
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={async () => {
+                    if (notificationPermission !== 'granted') {
+                      const granted = await requestNotificationPermission();
+                      if (granted) {
+                        toast.success('🔔 Benachrichtigungen aktiviert!');
+                      }
+                    }
+                  }}
+                  className={`relative p-1 h-8 w-8 ${notificationPermission === 'granted' ? 'text-green-600' : 'text-slate-400'}`}
+                  title={notificationPermission === 'granted' ? 'Benachrichtigungen aktiv' : 'Benachrichtigungen aktivieren'}
+                >
+                  {notificationPermission === 'granted' ? (
+                    <Bell className="h-4 w-4" />
+                  ) : (
+                    <BellOff className="h-4 w-4" />
+                  )}
+                  {newJobsCount > 0 && (
+                    <span className="absolute -top-1 -right-1 bg-red-500 text-white text-xs rounded-full h-5 w-5 flex items-center justify-center animate-pulse">
+                      {newJobsCount > 9 ? '9+' : newJobsCount}
+                    </span>
+                  )}
+                </Button>
+                
+                {/* Sound Toggle */}
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => setSoundEnabled(!soundEnabled)}
+                  className={`p-1 h-8 w-8 ${soundEnabled ? 'text-green-600' : 'text-slate-400'}`}
+                  title={soundEnabled ? 'Ton an' : 'Ton aus'}
+                >
+                  {soundEnabled ? (
+                    <Volume2 className="h-4 w-4" />
+                  ) : (
+                    <VolumeX className="h-4 w-4" />
+                  )}
+                </Button>
+              </div>
+
               <Button
                 data-testid="logout-btn"
                 variant="outline"
@@ -977,6 +1033,69 @@ export const TowingDashboard = () => {
 
       {/* Main Content */}
       <main className="max-w-7xl mx-auto px-4 py-6">
+        {/* NEW: New Jobs Alert Banner */}
+        {newJobsCount > 0 && (
+          <div className="mb-6 bg-gradient-to-r from-amber-500 to-orange-500 text-white rounded-lg shadow-lg overflow-hidden animate-pulse">
+            <div className="px-6 py-4 flex items-center justify-between">
+              <div className="flex items-center gap-4">
+                <div className="bg-white/20 rounded-full p-3">
+                  <Bell className="h-8 w-8 animate-bounce" />
+                </div>
+                <div>
+                  <h3 className="text-xl font-bold">
+                    🚨 {newJobsCount} neue{newJobsCount > 1 ? ' Aufträge' : 'r Auftrag'}!
+                  </h3>
+                  <p className="text-amber-100">
+                    Sie haben neue Abschleppaufträge erhalten. Bitte prüfen Sie diese.
+                  </p>
+                </div>
+              </div>
+              <div className="flex items-center gap-3">
+                <Button 
+                  onClick={() => {
+                    setActiveTab('incoming');
+                    clearNewJobsCount();
+                  }}
+                  className="bg-white text-orange-600 hover:bg-orange-100 font-bold"
+                >
+                  Jetzt ansehen
+                </Button>
+                <Button 
+                  variant="ghost" 
+                  onClick={clearNewJobsCount}
+                  className="text-white hover:bg-white/20"
+                >
+                  <X className="h-5 w-5" />
+                </Button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Notification Permission Banner */}
+        {notificationPermission === 'default' && (
+          <div className="mb-6 bg-blue-50 border border-blue-200 rounded-lg px-6 py-4 flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <Bell className="h-6 w-6 text-blue-600" />
+              <div>
+                <p className="font-semibold text-blue-900">Benachrichtigungen aktivieren</p>
+                <p className="text-sm text-blue-700">Erhalten Sie sofort einen Alarm wenn neue Aufträge eingehen.</p>
+              </div>
+            </div>
+            <Button 
+              onClick={async () => {
+                const granted = await requestNotificationPermission();
+                if (granted) {
+                  toast.success('🔔 Benachrichtigungen aktiviert!');
+                }
+              }}
+              className="bg-blue-600 hover:bg-blue-700"
+            >
+              Aktivieren
+            </Button>
+          </div>
+        )}
+
         {/* Company Info Card */}
         <Card className="mb-6 border-blue-200 bg-blue-50">
           <CardContent className="py-4">
