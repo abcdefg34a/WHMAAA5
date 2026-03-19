@@ -591,6 +591,18 @@ class BackupService:
                 {"type": "database", "error": error_msg}
             )
             
+            # Send email notification on failure
+            try:
+                from server import email_service
+                await email_service.send_backup_failure_alert(
+                    backup_type="Datenbank-Backup",
+                    error_message=error_msg,
+                    backup_id=backup_id
+                )
+                logger.info(f"Backup failure alert sent for backup {backup_id}")
+            except Exception as email_err:
+                logger.error(f"Failed to send backup failure email: {email_err}")
+            
             return {
                 "id": backup_id,
                 "status": "failed",
@@ -736,6 +748,18 @@ class BackupService:
                 backup_id,
                 {"type": "storage", "error": error_msg}
             )
+            
+            # Send email notification on failure
+            try:
+                from server import email_service
+                await email_service.send_backup_failure_alert(
+                    backup_type="Storage-Backup",
+                    error_message=error_msg,
+                    backup_id=backup_id
+                )
+                logger.info(f"Backup failure alert sent for backup {backup_id}")
+            except Exception as email_err:
+                logger.error(f"Failed to send backup failure email: {email_err}")
             
             return {
                 "id": backup_id,

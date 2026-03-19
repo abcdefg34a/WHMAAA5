@@ -40,6 +40,8 @@ import qrcode
 from qrcode.image.pure import PyPNGImage
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from apscheduler.triggers.cron import CronTrigger
+import resend
+import asyncio
 
 ROOT_DIR = Path(__file__).parent
 load_dotenv(ROOT_DIR / '.env')
@@ -49,11 +51,10 @@ mongo_url = os.environ['MONGO_URL']
 client = AsyncIOMotorClient(mongo_url)
 db = client[os.environ['DB_NAME']]
 
-# AWS SES Configuration
-AWS_ACCESS_KEY_ID = os.environ.get('AWS_ACCESS_KEY_ID')
-AWS_SECRET_ACCESS_KEY = os.environ.get('AWS_SECRET_ACCESS_KEY')
-AWS_SES_REGION = os.environ.get('AWS_SES_REGION', 'eu-central-1')
-AWS_SES_VERIFIED_EMAIL = os.environ.get('AWS_SES_VERIFIED_EMAIL', 'info@werhatmeinautoabgeschleppt.de')
+# Resend Email Configuration
+RESEND_API_KEY = os.environ.get('RESEND_API_KEY')
+SENDER_EMAIL = os.environ.get('SENDER_EMAIL', 'noreply@werhatmeinautoabgeschleppt.de')
+ADMIN_EMAIL = os.environ.get('ADMIN_EMAIL', 'info@werhatmeinautoabgeschleppt.de')
 FRONTEND_URL = os.environ.get('FRONTEND_URL', 'http://localhost:3000')
 
 # Create directories
@@ -146,72 +147,81 @@ def setup_logging():
 
 logger, audit_logger = setup_logging()
 
-# ==================== EMAIL SERVICE (AWS SES) ====================
+# ==================== EMAIL SERVICE (RESEND) ====================
 
 class EmailService:
-    """Service for sending emails via AWS SES"""
+    """Service for sending emails via Resend"""
     
     def __init__(self):
-        """Initialize SES client"""
-        if AWS_ACCESS_KEY_ID and AWS_SECRET_ACCESS_KEY:
-            self.ses_client = boto3.client(
-                'ses',
-                region_name=AWS_SES_REGION,
-                aws_access_key_id=AWS_ACCESS_KEY_ID,
-                aws_secret_access_key=AWS_SECRET_ACCESS_KEY
-            )
+        """Initialize Resend client"""
+        if RESEND_API_KEY:
+            resend.api_key = RESEND_API_KEY
             self.enabled = True
-            logger.info("AWS SES Email Service initialized")
+            logger.info("Resend Email Service initialized")
         else:
-            self.ses_client = None
             self.enabled = False
-            logger.warning("AWS SES not configured - emails will be logged only")
+            logger.warning("Resend not configured - emails will be logged only")
         
-        self.sender_email = AWS_SES_VERIFIED_EMAIL
+        self.sender_email = SENDER_EMAIL
+        self.admin_email = ADMIN_EMAIL
         self.frontend_url = FRONTEND_URL
     
-    def send_email(self, to_email: str, subject: str, html_content: str, text_content: str = None) -> Optional[str]:
-        """Send email via AWS SES"""
+    async def send_email_async(self, to_email: str, subject: str, html_content: str) -> Optional[str]:
+        """Send email via Resend (async/non-blocking)"""
         if not self.enabled:
             logger.info(f"[EMAIL MOCK] To: {to_email}, Subject: {subject}")
             print(f"\n{'='*60}")
-            print(f"📧 EMAIL (SES nicht konfiguriert - nur Log)")
+            print(f"📧 EMAIL (Resend nicht konfiguriert - nur Log)")
             print(f"An: {to_email}")
             print(f"Betreff: {subject}")
             print(f"{'='*60}\n")
             return None
         
         try:
-            body = {
-                'Html': {'Data': html_content, 'Charset': 'UTF-8'}
+            params = {
+                "from": self.sender_email,
+                "to": [to_email],
+                "subject": subject,
+                "html": html_content
             }
-            if text_content:
-                body['Text'] = {'Data': text_content, 'Charset': 'UTF-8'}
             
-            response = self.ses_client.send_email(
-                Source=self.sender_email,
-                Destination={'ToAddresses': [to_email]},
-                Message={
-                    'Subject': {'Data': subject, 'Charset': 'UTF-8'},
-                    'Body': body
-                }
-            )
-            
-            message_id = response['MessageId']
+            # Run sync SDK in thread to keep FastAPI non-blocking
+            email_response = await asyncio.to_thread(resend.Emails.send, params)
+            message_id = email_response.get("id") if isinstance(email_response, dict) else getattr(email_response, 'id', None)
             logger.info(f"Email sent successfully to {to_email}, MessageId: {message_id}")
             return message_id
             
-        except ClientError as e:
-            error_code = e.response['Error']['Code']
-            error_message = e.response['Error']['Message']
-            logger.error(f"Failed to send email to {to_email}: {error_code} - {error_message}")
+        except Exception as e:
+            logger.error(f"Failed to send email to {to_email}: {str(e)}")
+            raise Exception(f"E-Mail-Versand fehlgeschlagen: {str(e)}")
+    
+    def send_email(self, to_email: str, subject: str, html_content: str, text_content: str = None) -> Optional[str]:
+        """Send email via Resend (sync wrapper for backwards compatibility)"""
+        if not self.enabled:
+            logger.info(f"[EMAIL MOCK] To: {to_email}, Subject: {subject}")
+            print(f"\n{'='*60}")
+            print(f"📧 EMAIL (Resend nicht konfiguriert - nur Log)")
+            print(f"An: {to_email}")
+            print(f"Betreff: {subject}")
+            print(f"{'='*60}\n")
+            return None
+        
+        try:
+            params = {
+                "from": self.sender_email,
+                "to": [to_email],
+                "subject": subject,
+                "html": html_content
+            }
             
-            if error_code == 'MessageRejected':
-                raise Exception(f"E-Mail wurde abgelehnt: {error_message}")
-            elif error_code == 'MailFromDomainNotVerified':
-                raise Exception("Absender-E-Mail nicht verifiziert")
-            else:
-                raise Exception(f"E-Mail-Versand fehlgeschlagen: {error_message}")
+            email_response = resend.Emails.send(params)
+            message_id = email_response.get("id") if isinstance(email_response, dict) else getattr(email_response, 'id', None)
+            logger.info(f"Email sent successfully to {to_email}, MessageId: {message_id}")
+            return message_id
+            
+        except Exception as e:
+            logger.error(f"Failed to send email to {to_email}: {str(e)}")
+            raise Exception(f"E-Mail-Versand fehlgeschlagen: {str(e)}")
     
     def send_password_reset_email(self, to_email: str, reset_token: str, user_name: str) -> Optional[str]:
         """Send password reset email"""
@@ -455,6 +465,167 @@ Ihr AbschleppPortal Team
         """
         
         return self.send_email(to_email, subject, html_content)
+    
+    # ==================== BACKUP NOTIFICATION METHODS ====================
+    
+    async def send_backup_failure_alert(self, backup_type: str, error_message: str, backup_id: str = None) -> Optional[str]:
+        """Send alert email when a backup fails"""
+        subject = f"⚠️ Backup-Fehler - {backup_type.upper()}"
+        
+        html_content = f"""
+        <!DOCTYPE html>
+        <html>
+        <head>
+            <meta charset="UTF-8">
+            <style>
+                body {{ font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; line-height: 1.6; color: #333; max-width: 600px; margin: 0 auto; padding: 20px; }}
+                .container {{ background-color: #fef2f2; border: 2px solid #ef4444; border-radius: 8px; padding: 30px; }}
+                .header {{ text-align: center; margin-bottom: 20px; }}
+                .header h1 {{ color: #dc2626; margin: 0; font-size: 22px; }}
+                .alert-icon {{ font-size: 48px; margin-bottom: 15px; }}
+                .error-box {{ background-color: #fee2e2; border: 1px solid #fca5a5; border-radius: 6px; padding: 15px; margin: 20px 0; font-family: monospace; font-size: 13px; white-space: pre-wrap; word-break: break-word; }}
+                .details {{ background-color: #fff; border-radius: 6px; padding: 15px; margin: 20px 0; }}
+                .detail-row {{ padding: 8px 0; border-bottom: 1px solid #f3f4f6; }}
+                .detail-row:last-child {{ border-bottom: none; }}
+                .action-box {{ background-color: #fef3c7; border: 1px solid #fcd34d; border-radius: 6px; padding: 15px; margin: 20px 0; }}
+                .footer {{ font-size: 12px; color: #64748b; margin-top: 30px; text-align: center; }}
+            </style>
+        </head>
+        <body>
+            <div class="container">
+                <div class="header">
+                    <div class="alert-icon">🚨</div>
+                    <h1>Backup fehlgeschlagen!</h1>
+                </div>
+                
+                <div class="details">
+                    <div class="detail-row">
+                        <strong>Backup-Typ:</strong> {backup_type}
+                    </div>
+                    <div class="detail-row">
+                        <strong>Zeitpunkt:</strong> {datetime.now(timezone.utc).strftime('%d.%m.%Y um %H:%M:%S Uhr')} UTC
+                    </div>
+                    {f'<div class="detail-row"><strong>Backup-ID:</strong> {backup_id}</div>' if backup_id else ''}
+                </div>
+                
+                <p><strong>Fehlermeldung:</strong></p>
+                <div class="error-box">{error_message}</div>
+                
+                <div class="action-box">
+                    <strong>⚡ Empfohlene Maßnahmen:</strong>
+                    <ul style="margin: 10px 0 0 0; padding-left: 20px;">
+                        <li>Prüfen Sie die Backend-Logs auf weitere Details</li>
+                        <li>Stellen Sie sicher, dass genügend Speicherplatz vorhanden ist</li>
+                        <li>Überprüfen Sie die Datenbankverbindung</li>
+                        <li>Führen Sie ein manuelles Backup durch, um das Problem zu isolieren</li>
+                    </ul>
+                </div>
+                
+                <div class="footer">
+                    <p>Diese automatische Benachrichtigung wurde vom AbschleppPortal Backup-System gesendet.</p>
+                </div>
+            </div>
+        </body>
+        </html>
+        """
+        
+        return await self.send_email_async(self.admin_email, subject, html_content)
+    
+    async def send_weekly_backup_report(self, stats: dict) -> Optional[str]:
+        """Send weekly backup status report"""
+        subject = f"📊 Wöchentlicher Backup-Report - KW {datetime.now(timezone.utc).isocalendar()[1]}"
+        
+        # Calculate health status
+        total_backups = stats.get('total_backups', 0)
+        failed_backups = stats.get('failed_backups', 0)
+        success_rate = ((total_backups - failed_backups) / total_backups * 100) if total_backups > 0 else 0
+        
+        health_color = '#16a34a' if success_rate >= 95 else '#f59e0b' if success_rate >= 80 else '#dc2626'
+        health_text = 'Ausgezeichnet' if success_rate >= 95 else 'Gut' if success_rate >= 80 else 'Kritisch'
+        health_icon = '✅' if success_rate >= 95 else '⚠️' if success_rate >= 80 else '❌'
+        
+        html_content = f"""
+        <!DOCTYPE html>
+        <html>
+        <head>
+            <meta charset="UTF-8">
+            <style>
+                body {{ font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; line-height: 1.6; color: #333; max-width: 600px; margin: 0 auto; padding: 20px; }}
+                .container {{ background-color: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px; padding: 30px; }}
+                .header {{ text-align: center; margin-bottom: 25px; }}
+                .header h1 {{ color: #1e293b; margin: 0; font-size: 22px; }}
+                .health-badge {{ display: inline-block; padding: 10px 20px; background-color: {health_color}; color: white; border-radius: 25px; font-weight: 600; font-size: 16px; margin: 15px 0; }}
+                .stats-grid {{ display: grid; grid-template-columns: repeat(2, 1fr); gap: 15px; margin: 20px 0; }}
+                .stat-box {{ background-color: #fff; border: 1px solid #e2e8f0; border-radius: 8px; padding: 15px; text-align: center; }}
+                .stat-value {{ font-size: 28px; font-weight: 700; color: #1e293b; }}
+                .stat-label {{ font-size: 12px; color: #64748b; text-transform: uppercase; letter-spacing: 0.5px; }}
+                .details {{ background-color: #fff; border-radius: 6px; padding: 15px; margin: 20px 0; border: 1px solid #e2e8f0; }}
+                .detail-row {{ display: flex; justify-content: space-between; padding: 10px 0; border-bottom: 1px solid #f3f4f6; }}
+                .detail-row:last-child {{ border-bottom: none; }}
+                .footer {{ font-size: 12px; color: #64748b; margin-top: 30px; text-align: center; border-top: 1px solid #e2e8f0; padding-top: 20px; }}
+            </style>
+        </head>
+        <body>
+            <div class="container">
+                <div class="header">
+                    <h1>📊 Wöchentlicher Backup-Report</h1>
+                    <p style="color: #64748b; margin: 5px 0;">Kalenderwoche {datetime.now(timezone.utc).isocalendar()[1]} / {datetime.now(timezone.utc).year}</p>
+                    <span class="health-badge">{health_icon} {health_text} ({success_rate:.1f}%)</span>
+                </div>
+                
+                <div class="stats-grid">
+                    <div class="stat-box">
+                        <div class="stat-value">{total_backups}</div>
+                        <div class="stat-label">Backups gesamt</div>
+                    </div>
+                    <div class="stat-box">
+                        <div class="stat-value" style="color: #16a34a;">{total_backups - failed_backups}</div>
+                        <div class="stat-label">Erfolgreich</div>
+                    </div>
+                    <div class="stat-box">
+                        <div class="stat-value" style="color: {'#dc2626' if failed_backups > 0 else '#64748b'};">{failed_backups}</div>
+                        <div class="stat-label">Fehlgeschlagen</div>
+                    </div>
+                    <div class="stat-box">
+                        <div class="stat-value">{stats.get('total_size_mb', 0):.1f}</div>
+                        <div class="stat-label">Speicher (MB)</div>
+                    </div>
+                </div>
+                
+                <div class="details">
+                    <h3 style="margin-top: 0; color: #1e293b;">📋 Details</h3>
+                    <div class="detail-row">
+                        <span>Datenbank-Backups:</span>
+                        <strong>{stats.get('db_backups', 0)}</strong>
+                    </div>
+                    <div class="detail-row">
+                        <span>Storage-Backups:</span>
+                        <strong>{stats.get('storage_backups', 0)}</strong>
+                    </div>
+                    <div class="detail-row">
+                        <span>Cloud-Uploads (Supabase):</span>
+                        <strong>{stats.get('cloud_uploads', 0)}</strong>
+                    </div>
+                    <div class="detail-row">
+                        <span>Letztes erfolgreiches Backup:</span>
+                        <strong>{stats.get('last_successful', 'N/A')}</strong>
+                    </div>
+                    <div class="detail-row">
+                        <span>Ältestes verfügbares Backup:</span>
+                        <strong>{stats.get('oldest_backup', 'N/A')}</strong>
+                    </div>
+                </div>
+                
+                <div class="footer">
+                    <p>Dieser Report wird jeden Montag automatisch gesendet.</p>
+                    <p>© {datetime.now().year} AbschleppPortal - werhatmeinautoabgeschleppt.de</p>
+                </div>
+            </div>
+        </body>
+        </html>
+        """
+        
+        return await self.send_email_async(self.admin_email, subject, html_content)
 
 # Initialize email service
 email_service = EmailService()
@@ -4300,6 +4471,41 @@ async def get_encryption_settings_route(current_user: dict = Depends(get_current
     
     return await backup_service.get_encryption_settings()
 
+@api_router.post("/admin/backups/send-test-email")
+async def send_test_email_route(current_user: dict = Depends(get_current_user)):
+    """Test-E-Mail senden - nur Admin"""
+    if current_user.get("role") != "admin":
+        raise HTTPException(status_code=403, detail="Nur Admins können E-Mails senden")
+    
+    try:
+        result = await email_service.send_backup_failure_alert(
+            backup_type="Test-Backup",
+            error_message="Dies ist eine Test-E-Mail um die Backup-Benachrichtigungen zu prüfen. Keine Aktion erforderlich.",
+            backup_id="TEST-" + datetime.now(timezone.utc).strftime("%Y%m%d%H%M%S")
+        )
+        return {
+            "success": True,
+            "message": f"Test-E-Mail wurde an {ADMIN_EMAIL} gesendet",
+            "message_id": result
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"E-Mail-Versand fehlgeschlagen: {str(e)}")
+
+@api_router.post("/admin/backups/send-weekly-report")
+async def send_weekly_report_manual_route(current_user: dict = Depends(get_current_user)):
+    """Wöchentlichen Backup-Report manuell senden - nur Admin"""
+    if current_user.get("role") != "admin":
+        raise HTTPException(status_code=403, detail="Nur Admins können Reports senden")
+    
+    try:
+        await scheduled_weekly_backup_report()
+        return {
+            "success": True,
+            "message": f"Wöchentlicher Report wurde an {ADMIN_EMAIL} gesendet"
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Report-Versand fehlgeschlagen: {str(e)}")
+
 @api_router.put("/admin/backups/encryption")
 async def update_encryption_settings_route(
     request: Request,
@@ -4679,6 +4885,58 @@ async def scheduled_retention_cleanup():
     except Exception as e:
         logger.error(f"Retention cleanup failed: {e}")
 
+async def scheduled_weekly_backup_report():
+    """Sendet den wöchentlichen Backup-Status-Report per E-Mail"""
+    logger.info("Starting weekly backup report generation")
+    try:
+        # Berechne Statistiken der letzten 7 Tage
+        week_ago = datetime.now(timezone.utc) - timedelta(days=7)
+        
+        # Alle Backups der letzten Woche
+        all_backups = await db.backup_jobs.find({
+            "created_at": {"$gte": week_ago.isoformat()}
+        }).to_list(1000)
+        
+        total_backups = len(all_backups)
+        failed_backups = sum(1 for b in all_backups if b.get("status") == "failed")
+        db_backups = sum(1 for b in all_backups if b.get("backup_type") == "database")
+        storage_backups = sum(1 for b in all_backups if b.get("backup_type") == "storage")
+        cloud_uploads = sum(1 for b in all_backups if b.get("supabase_uploaded"))
+        
+        # Gesamtgröße
+        total_size_bytes = sum(b.get("size_bytes", 0) for b in all_backups if b.get("size_bytes"))
+        total_size_mb = total_size_bytes / (1024 * 1024) if total_size_bytes else 0
+        
+        # Letztes erfolgreiches Backup
+        successful_backups = [b for b in all_backups if b.get("status") == "success"]
+        last_successful = "Keines" if not successful_backups else max(
+            successful_backups, key=lambda x: x.get("created_at", "")
+        ).get("created_at", "")[:16].replace("T", " ")
+        
+        # Ältestes verfügbares Backup (aus allen, nicht nur letzte Woche)
+        oldest_backup_doc = await db.backup_jobs.find_one(
+            {"status": "success"},
+            sort=[("created_at", 1)]
+        )
+        oldest_backup = oldest_backup_doc.get("created_at", "")[:10] if oldest_backup_doc else "N/A"
+        
+        stats = {
+            "total_backups": total_backups,
+            "failed_backups": failed_backups,
+            "db_backups": db_backups,
+            "storage_backups": storage_backups,
+            "cloud_uploads": cloud_uploads,
+            "total_size_mb": total_size_mb,
+            "last_successful": last_successful,
+            "oldest_backup": oldest_backup
+        }
+        
+        await email_service.send_weekly_backup_report(stats)
+        logger.info(f"Weekly backup report sent successfully: {stats}")
+        
+    except Exception as e:
+        logger.error(f"Weekly backup report failed: {e}")
+
 @app.on_event("startup")
 async def startup_event():
     """Create database indexes for improved query performance and start schedulers"""
@@ -4764,9 +5022,19 @@ async def startup_event():
             replace_existing=True
         )
         
+        # Jeden Montag um 08:00 Uhr - Wöchentlicher Backup-Report
+        scheduler.add_job(
+            scheduled_weekly_backup_report,
+            CronTrigger(day_of_week='mon', hour=8, minute=0),
+            id="weekly_backup_report",
+            name="Wöchentlicher Backup-Report",
+            replace_existing=True
+        )
+        
         scheduler.start()
         logger.info(f"DSGVO Scheduler gestartet - Retention: {DSGVO_RETENTION_DAYS} Tage")
         logger.info("Backup Scheduler gestartet - Tägliche Backups um 02:00/02:30 Uhr, Monatliche am 1.")
+        logger.info("Wöchentlicher Backup-Report: Jeden Montag um 08:00 Uhr")
         
     except Exception as e:
         logger.error(f"Error during startup: {e}")

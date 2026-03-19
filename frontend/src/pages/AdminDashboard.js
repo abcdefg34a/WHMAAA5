@@ -6,7 +6,7 @@ import {
   CheckCircle, Clock, Download, Filter, BarChart3, AlertCircle,
   FileText, X, Eye, Lock, Unlock, Trash2, Key, MoreVertical,
   History, Database, FileSpreadsheet, HardDrive, RefreshCw,
-  Archive, Play, Loader2, CloudDownload
+  Archive, Play, Loader2, CloudDownload, Mail, Send
 } from 'lucide-react';
 import { Button } from '../components/ui/button';
 import { Input } from '../components/ui/input';
@@ -317,6 +317,42 @@ export const AdminDashboard = () => {
       toast.error(error.response?.data?.detail || 'Löschen fehlgeschlagen');
     } finally {
       setActionLoading(false);
+    }
+  };
+
+  // ==================== E-MAIL BENACHRICHTIGUNGEN ====================
+  
+  const [emailSending, setEmailSending] = useState(false);
+  
+  const handleSendTestEmail = async () => {
+    setEmailSending(true);
+    try {
+      const response = await axios.post(`${API}/admin/backups/send-test-email`);
+      if (response.data.success) {
+        toast.success('Test-E-Mail wurde erfolgreich gesendet!');
+      } else {
+        toast.error('E-Mail-Versand fehlgeschlagen');
+      }
+    } catch (error) {
+      toast.error(error.response?.data?.detail || 'E-Mail-Versand fehlgeschlagen');
+    } finally {
+      setEmailSending(false);
+    }
+  };
+  
+  const handleSendWeeklyReport = async () => {
+    setEmailSending(true);
+    try {
+      const response = await axios.post(`${API}/admin/backups/send-weekly-report`);
+      if (response.data.success) {
+        toast.success('Wöchentlicher Report wurde erfolgreich gesendet!');
+      } else {
+        toast.error('Report-Versand fehlgeschlagen');
+      }
+    } catch (error) {
+      toast.error(error.response?.data?.detail || 'Report-Versand fehlgeschlagen');
+    } finally {
+      setEmailSending(false);
     }
   };
 
@@ -1807,6 +1843,53 @@ export const AdminDashboard = () => {
                       <Clock className="h-4 w-4 mr-1" />
                       Zeitplan ändern
                     </Button>
+                  </div>
+                </CardContent>
+              </Card>
+
+              {/* E-Mail Benachrichtigungen */}
+              <Card className="border-blue-200 bg-blue-50/30">
+                <CardHeader>
+                  <CardTitle className="flex items-center gap-2">
+                    <Mail className="h-5 w-5 text-blue-600" />
+                    E-Mail-Benachrichtigungen
+                  </CardTitle>
+                  <CardDescription>
+                    Automatische Benachrichtigungen bei Backup-Fehlern und wöchentliche Status-Reports
+                  </CardDescription>
+                </CardHeader>
+                <CardContent>
+                  <div className="flex flex-wrap gap-3 mb-4">
+                    <Button 
+                      onClick={handleSendTestEmail} 
+                      disabled={emailSending}
+                      variant="outline"
+                      className="border-blue-300 hover:bg-blue-100"
+                    >
+                      {emailSending ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Mail className="h-4 w-4 mr-2" />}
+                      Test-E-Mail senden
+                    </Button>
+                    <Button 
+                      onClick={handleSendWeeklyReport}
+                      disabled={emailSending}
+                      variant="outline"
+                      className="border-green-300 hover:bg-green-100"
+                    >
+                      {emailSending ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Send className="h-4 w-4 mr-2" />}
+                      Wöchentlichen Report jetzt senden
+                    </Button>
+                  </div>
+                  <div className="p-3 bg-white rounded-lg text-sm text-slate-600 border border-slate-200">
+                    <div className="flex items-start gap-2">
+                      <AlertCircle className="h-4 w-4 text-blue-500 mt-0.5" />
+                      <div>
+                        <p className="font-medium text-slate-700">Automatische E-Mails:</p>
+                        <ul className="mt-1 list-disc list-inside text-slate-500">
+                          <li><strong>Bei Backup-Fehlern:</strong> Sofortige Benachrichtigung mit Fehlerbeschreibung</li>
+                          <li><strong>Wöchentlicher Report:</strong> Jeden Montag um 08:00 Uhr mit Backup-Statistiken</li>
+                        </ul>
+                      </div>
+                    </div>
                   </div>
                 </CardContent>
               </Card>
