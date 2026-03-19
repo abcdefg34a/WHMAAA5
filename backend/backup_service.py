@@ -595,6 +595,32 @@ class BackupService:
             
             metadata = backup_data.pop("_backup_metadata", {})
             
+            # Helper function to convert $oid and $date fields back to proper BSON types
+            def convert_bson_fields(doc):
+                """Konvertiert $oid und $date Felder zurück zu BSON-Typen"""
+                from bson import ObjectId
+                from datetime import datetime
+                
+                if isinstance(doc, dict):
+                    # Check if it's an $oid object
+                    if '$oid' in doc and len(doc) == 1:
+                        return ObjectId(doc['$oid'])
+                    # Check if it's a $date object
+                    if '$date' in doc and len(doc) == 1:
+                        date_val = doc['$date']
+                        if isinstance(date_val, str):
+                            return datetime.fromisoformat(date_val.replace('Z', '+00:00'))
+                        elif isinstance(date_val, dict) and '$numberLong' in date_val:
+                            return datetime.fromtimestamp(int(date_val['$numberLong']) / 1000)
+                        return date_val
+                    # Recursively convert all fields
+                    return {k: convert_bson_fields(v) for k, v in doc.items()}
+                elif isinstance(doc, list):
+                    return [convert_bson_fields(item) for item in doc]
+                return doc
+            
+            collections_restored = []
+            
             # Restore each collection
             for collection_name, documents in backup_data.items():
                 if not isinstance(documents, list):
@@ -606,16 +632,21 @@ class BackupService:
                 if collection_name not in ["backup_jobs", "restore_jobs"]:
                     await collection.delete_many({})
                     
-                    # Insert restored documents
+                    # Insert restored documents with proper BSON conversion
                     if documents:
-                        # Convert back from JSON to proper BSON
-                        restored_docs = json.loads(
-                            json.dumps(documents),
-                            object_hook=json_util.object_hook
-                        )
-                        await collection.insert_many(restored_docs)
-                
-                logger.info(f"  Restored {len(documents)} documents to {collection_name}")
+                        converted_docs = [convert_bson_fields(doc) for doc in documents]
+                        
+                        # Insert documents one by one to handle any issues
+                        success_count = 0
+                        for doc in converted_docs:
+                            try:
+                                await collection.insert_one(doc)
+                                success_count += 1
+                            except Exception as e:
+                                logger.warning(f"Error inserting document in {collection_name}: {e}")
+                        
+                        logger.info(f"  Restored {success_count}/{len(documents)} documents to {collection_name}")
+                        collections_restored.append(collection_name)
             
             # Update restore job
             await self.db.restore_jobs.update_one(
@@ -633,7 +664,7 @@ class BackupService:
                 restore_id,
                 {
                     "backup_id": backup_id,
-                    "collections_restored": list(backup_data.keys()),
+                    "collections_restored": collections_restored,
                     "backup_date": metadata.get("created_at")
                 }
             )
@@ -644,7 +675,7 @@ class BackupService:
                 "status": "success",
                 "restore_id": restore_id,
                 "backup_id": backup_id,
-                "collections_restored": list(backup_data.keys()),
+                "collections_restored": collections_restored,
                 "backup_date": metadata.get("created_at")
             }
             
