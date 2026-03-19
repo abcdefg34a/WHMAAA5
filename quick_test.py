@@ -4,7 +4,7 @@ import requests
 import json
 
 # Test authority_id field in jobs
-base_url = "https://mongodb-archive-tool.preview.emergentagent.com/api"
+base_url = "https://react-state-sync.preview.emergentagent.com/api"
 
 # Register a new authority for testing
 authority_data = {

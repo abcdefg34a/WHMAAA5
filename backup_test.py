@@ -11,7 +11,7 @@ import sys
 from typing import Dict, Any, Optional, List
 
 # Configuration
-BACKEND_URL = "https://mongodb-archive-tool.preview.emergentagent.com"
+BACKEND_URL = "https://react-state-sync.preview.emergentagent.com"
 ADMIN_EMAIL = "admin@test.de"
 ADMIN_PASSWORD = "Admin123!"
 
