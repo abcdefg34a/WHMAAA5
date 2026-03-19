@@ -3852,33 +3852,7 @@ async def create_backup(user: dict = Depends(get_current_user)):
         logger.error(f"Backup failed: {e}")
         raise HTTPException(status_code=500, detail=f"Backup fehlgeschlagen: {str(e)}")
 
-@api_router.get("/admin/backups")
-async def list_backups(user: dict = Depends(get_current_user)):
-    """List all available backups"""
-    if user["role"] != UserRole.ADMIN:
-        raise HTTPException(status_code=403, detail="Admin only")
-    
-    backups = []
-    for f in sorted(BACKUP_DIR.glob("backup_*.json"), reverse=True):
-        backups.append({
-            "filename": f.name,
-            "size": f.stat().st_size,
-            "created_at": datetime.fromtimestamp(f.stat().st_mtime).isoformat()
-        })
-    
-    return backups
-
-@api_router.get("/admin/backups/{filename}")
-async def download_backup(filename: str, user: dict = Depends(get_current_user)):
-    """Download a backup file"""
-    if user["role"] != UserRole.ADMIN:
-        raise HTTPException(status_code=403, detail="Admin only")
-    
-    backup_file = BACKUP_DIR / filename
-    if not backup_file.exists() or not filename.startswith("backup_"):
-        raise HTTPException(status_code=404, detail="Backup nicht gefunden")
-    
-    return FileResponse(backup_file, filename=filename)
+# OLD BACKUP ROUTES REMOVED - Using new BackupService instead
 
 # ==================== FILE UPLOAD ====================
 
@@ -4194,6 +4168,165 @@ async def get_dsgvo_status(user: dict = Depends(get_current_user)):
         "scheduler_running": scheduler.running
     }
 
+# ==================== BACKUP SERVICE ====================
+from backup_service import BackupService
+
+backup_service = BackupService(db, mongo_url, os.environ['DB_NAME'])
+
+# ==================== BACKUP ROUTES (ADMIN ONLY) ====================
+
+@api_router.get("/admin/backups/system-status")
+async def get_backup_system_status(current_user: dict = Depends(get_current_user)):
+    """System-Status der Backups - nur Admin"""
+    if current_user.get("role") != "admin":
+        raise HTTPException(status_code=403, detail="Nur Admins können Backups verwalten")
+    
+    return await backup_service.get_system_status()
+
+@api_router.get("/admin/backups")
+async def list_backups_route(
+    backup_type: Optional[str] = None,
+    retention_class: Optional[str] = None,
+    status: Optional[str] = None,
+    limit: int = 100,
+    current_user: dict = Depends(get_current_user)
+):
+    """Liste aller Backups - nur Admin"""
+    if current_user.get("role") != "admin":
+        raise HTTPException(status_code=403, detail="Nur Admins können Backups verwalten")
+    
+    backups = await backup_service.list_backups(backup_type, retention_class, status, limit)
+    return backups
+
+@api_router.post("/admin/backups/run-database-backup")
+async def run_database_backup_route(
+    background_tasks: BackgroundTasks,
+    current_user: dict = Depends(get_current_user)
+):
+    """Manuelles Datenbank-Backup starten - nur Admin"""
+    if current_user.get("role") != "admin":
+        raise HTTPException(status_code=403, detail="Nur Admins können Backups erstellen")
+    
+    result = await backup_service.create_database_backup(
+        triggered_by_user_id=current_user.get("id"),
+        retention_class="daily"
+    )
+    return result
+
+@api_router.post("/admin/backups/run-storage-backup")
+async def run_storage_backup_route(
+    background_tasks: BackgroundTasks,
+    current_user: dict = Depends(get_current_user)
+):
+    """Manuelles Storage-Backup starten - nur Admin"""
+    if current_user.get("role") != "admin":
+        raise HTTPException(status_code=403, detail="Nur Admins können Backups erstellen")
+    
+    result = await backup_service.create_storage_backup(
+        triggered_by_user_id=current_user.get("id"),
+        retention_class="daily"
+    )
+    return result
+
+@api_router.post("/admin/backups/run-full-backup")
+async def run_full_backup_route(
+    background_tasks: BackgroundTasks,
+    current_user: dict = Depends(get_current_user)
+):
+    """Manuelles Komplett-Backup (DB + Storage) starten - nur Admin"""
+    if current_user.get("role") != "admin":
+        raise HTTPException(status_code=403, detail="Nur Admins können Backups erstellen")
+    
+    result = await backup_service.create_full_backup(
+        triggered_by_user_id=current_user.get("id"),
+        retention_class="daily"
+    )
+    return result
+
+@api_router.get("/admin/backups/{backup_id}/download")
+async def download_backup_route(
+    backup_id: str,
+    current_user: dict = Depends(get_current_user)
+):
+    """Backup herunterladen - nur Admin"""
+    if current_user.get("role") != "admin":
+        raise HTTPException(status_code=403, detail="Nur Admins können Backups herunterladen")
+    
+    backup_path = await backup_service.get_backup_file_path(backup_id)
+    if not backup_path:
+        raise HTTPException(status_code=404, detail="Backup-Datei nicht gefunden")
+    
+    return FileResponse(
+        path=str(backup_path),
+        filename=backup_path.name,
+        media_type="application/octet-stream"
+    )
+
+@api_router.post("/admin/backups/{backup_id}/restore-database")
+async def restore_database_backup_route(
+    backup_id: str,
+    data: dict,
+    current_user: dict = Depends(get_current_user)
+):
+    """Datenbank aus Backup wiederherstellen - nur Admin"""
+    if current_user.get("role") != "admin":
+        raise HTTPException(status_code=403, detail="Nur Admins können Backups wiederherstellen")
+    
+    confirm = data.get("confirm", False)
+    result = await backup_service.restore_database_backup(
+        backup_id=backup_id,
+        triggered_by_user_id=current_user.get("id"),
+        confirm=confirm
+    )
+    return result
+
+@api_router.post("/admin/backups/{backup_id}/restore-storage")
+async def restore_storage_backup_route(
+    backup_id: str,
+    data: dict,
+    current_user: dict = Depends(get_current_user)
+):
+    """Storage aus Backup wiederherstellen - nur Admin"""
+    if current_user.get("role") != "admin":
+        raise HTTPException(status_code=403, detail="Nur Admins können Backups wiederherstellen")
+    
+    confirm = data.get("confirm", False)
+    result = await backup_service.restore_storage_backup(
+        backup_id=backup_id,
+        triggered_by_user_id=current_user.get("id"),
+        confirm=confirm
+    )
+    return result
+
+@api_router.delete("/admin/backups/{backup_id}")
+async def delete_backup_route(
+    backup_id: str,
+    current_user: dict = Depends(get_current_user)
+):
+    """Backup löschen - nur Admin"""
+    if current_user.get("role") != "admin":
+        raise HTTPException(status_code=403, detail="Nur Admins können Backups löschen")
+    
+    result = await backup_service.delete_backup(
+        backup_id=backup_id,
+        triggered_by_user_id=current_user.get("id")
+    )
+    return result
+
+@api_router.get("/admin/backups/{backup_id}")
+async def get_backup_details_route(
+    backup_id: str,
+    current_user: dict = Depends(get_current_user)
+):
+    """Details eines Backups - nur Admin"""
+    if current_user.get("role") != "admin":
+        raise HTTPException(status_code=403, detail="Nur Admins können Backups verwalten")
+    
+    backup = await backup_service.get_backup(backup_id)
+    if not backup:
+        raise HTTPException(status_code=404, detail="Backup nicht gefunden")
+    return backup
+
 # Include router
 app.include_router(api_router)
 
@@ -4210,9 +4343,215 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+# ==================== BACKUP SERVICE ====================
+from backup_service import BackupService
+
+backup_service = BackupService(db, mongo_url, os.environ['DB_NAME'])
+
+# ==================== BACKUP ROUTES (ADMIN ONLY) ====================
+
+@api_router.get("/admin/backups")
+async def list_backups(
+    backup_type: Optional[str] = None,
+    retention_class: Optional[str] = None,
+    status: Optional[str] = None,
+    limit: int = 100,
+    current_user: dict = Depends(get_current_user)
+):
+    """Liste aller Backups - nur Admin"""
+    if current_user.get("role") != "admin":
+        raise HTTPException(status_code=403, detail="Nur Admins können Backups verwalten")
+    
+    backups = await backup_service.list_backups(backup_type, retention_class, status, limit)
+    return backups
+
+@api_router.get("/admin/backups/system-status")
+async def get_backup_system_status(current_user: dict = Depends(get_current_user)):
+    """System-Status der Backups - nur Admin"""
+    if current_user.get("role") != "admin":
+        raise HTTPException(status_code=403, detail="Nur Admins können Backups verwalten")
+    
+    return await backup_service.get_system_status()
+
+@api_router.post("/admin/backups/run-database-backup")
+async def run_database_backup(
+    background_tasks: BackgroundTasks,
+    current_user: dict = Depends(get_current_user)
+):
+    """Manuelles Datenbank-Backup starten - nur Admin"""
+    if current_user.get("role") != "admin":
+        raise HTTPException(status_code=403, detail="Nur Admins können Backups erstellen")
+    
+    result = await backup_service.create_database_backup(
+        triggered_by_user_id=current_user.get("id"),
+        retention_class="daily"
+    )
+    return result
+
+@api_router.post("/admin/backups/run-storage-backup")
+async def run_storage_backup(
+    background_tasks: BackgroundTasks,
+    current_user: dict = Depends(get_current_user)
+):
+    """Manuelles Storage-Backup starten - nur Admin"""
+    if current_user.get("role") != "admin":
+        raise HTTPException(status_code=403, detail="Nur Admins können Backups erstellen")
+    
+    result = await backup_service.create_storage_backup(
+        triggered_by_user_id=current_user.get("id"),
+        retention_class="daily"
+    )
+    return result
+
+@api_router.post("/admin/backups/run-full-backup")
+async def run_full_backup(
+    background_tasks: BackgroundTasks,
+    current_user: dict = Depends(get_current_user)
+):
+    """Manuelles Komplett-Backup (DB + Storage) starten - nur Admin"""
+    if current_user.get("role") != "admin":
+        raise HTTPException(status_code=403, detail="Nur Admins können Backups erstellen")
+    
+    result = await backup_service.create_full_backup(
+        triggered_by_user_id=current_user.get("id"),
+        retention_class="daily"
+    )
+    return result
+
+@api_router.get("/admin/backups/{backup_id}")
+async def get_backup_details(
+    backup_id: str,
+    current_user: dict = Depends(get_current_user)
+):
+    """Details eines Backups - nur Admin"""
+    if current_user.get("role") != "admin":
+        raise HTTPException(status_code=403, detail="Nur Admins können Backups verwalten")
+    
+    backup = await backup_service.get_backup(backup_id)
+    if not backup:
+        raise HTTPException(status_code=404, detail="Backup nicht gefunden")
+    return backup
+
+@api_router.get("/admin/backups/{backup_id}/download")
+async def download_backup(
+    backup_id: str,
+    current_user: dict = Depends(get_current_user)
+):
+    """Backup herunterladen - nur Admin"""
+    if current_user.get("role") != "admin":
+        raise HTTPException(status_code=403, detail="Nur Admins können Backups herunterladen")
+    
+    backup_path = await backup_service.get_backup_file_path(backup_id)
+    if not backup_path:
+        raise HTTPException(status_code=404, detail="Backup-Datei nicht gefunden")
+    
+    return FileResponse(
+        path=str(backup_path),
+        filename=backup_path.name,
+        media_type="application/octet-stream"
+    )
+
+@api_router.post("/admin/backups/{backup_id}/restore-database")
+async def restore_database_backup(
+    backup_id: str,
+    data: dict,
+    current_user: dict = Depends(get_current_user)
+):
+    """Datenbank aus Backup wiederherstellen - nur Admin"""
+    if current_user.get("role") != "admin":
+        raise HTTPException(status_code=403, detail="Nur Admins können Backups wiederherstellen")
+    
+    confirm = data.get("confirm", False)
+    result = await backup_service.restore_database_backup(
+        backup_id=backup_id,
+        triggered_by_user_id=current_user.get("id"),
+        confirm=confirm
+    )
+    return result
+
+@api_router.post("/admin/backups/{backup_id}/restore-storage")
+async def restore_storage_backup(
+    backup_id: str,
+    data: dict,
+    current_user: dict = Depends(get_current_user)
+):
+    """Storage aus Backup wiederherstellen - nur Admin"""
+    if current_user.get("role") != "admin":
+        raise HTTPException(status_code=403, detail="Nur Admins können Backups wiederherstellen")
+    
+    confirm = data.get("confirm", False)
+    result = await backup_service.restore_storage_backup(
+        backup_id=backup_id,
+        triggered_by_user_id=current_user.get("id"),
+        confirm=confirm
+    )
+    return result
+
+@api_router.delete("/admin/backups/{backup_id}")
+async def delete_backup(
+    backup_id: str,
+    current_user: dict = Depends(get_current_user)
+):
+    """Backup löschen - nur Admin"""
+    if current_user.get("role") != "admin":
+        raise HTTPException(status_code=403, detail="Nur Admins können Backups löschen")
+    
+    result = await backup_service.delete_backup(
+        backup_id=backup_id,
+        triggered_by_user_id=current_user.get("id")
+    )
+    return result
+
+# ==================== SCHEDULED BACKUP FUNCTIONS ====================
+
+async def scheduled_database_backup():
+    """Geplantes tägliches Datenbank-Backup"""
+    logger.info("Starting scheduled database backup")
+    try:
+        result = await backup_service.create_database_backup(
+            triggered_by_user_id=None,
+            retention_class="daily"
+        )
+        logger.info(f"Scheduled database backup completed: {result}")
+    except Exception as e:
+        logger.error(f"Scheduled database backup failed: {e}")
+
+async def scheduled_storage_backup():
+    """Geplantes tägliches Storage-Backup"""
+    logger.info("Starting scheduled storage backup")
+    try:
+        result = await backup_service.create_storage_backup(
+            triggered_by_user_id=None,
+            retention_class="daily"
+        )
+        logger.info(f"Scheduled storage backup completed: {result}")
+    except Exception as e:
+        logger.error(f"Scheduled storage backup failed: {e}")
+
+async def scheduled_monthly_backup():
+    """Geplantes monatliches Komplett-Backup"""
+    logger.info("Starting scheduled monthly backup")
+    try:
+        result = await backup_service.create_full_backup(
+            triggered_by_user_id=None,
+            retention_class="monthly"
+        )
+        logger.info(f"Scheduled monthly backup completed: {result}")
+    except Exception as e:
+        logger.error(f"Scheduled monthly backup failed: {e}")
+
+async def scheduled_retention_cleanup():
+    """Geplante Aufräumung alter Backups"""
+    logger.info("Starting retention cleanup")
+    try:
+        result = await backup_service.apply_retention_rules()
+        logger.info(f"Retention cleanup completed: {result}")
+    except Exception as e:
+        logger.error(f"Retention cleanup failed: {e}")
+
 @app.on_event("startup")
 async def startup_event():
-    """Create database indexes for improved query performance and start DSGVO scheduler"""
+    """Create database indexes for improved query performance and start schedulers"""
     try:
         # Indexes for jobs collection
         await db.jobs.create_index("license_plate")
@@ -4241,6 +4580,12 @@ async def startup_event():
         await db.audit_logs.create_index("action")
         await db.audit_logs.create_index("user_id")
         
+        # Indexes for backup_jobs collection
+        await db.backup_jobs.create_index("backup_type")
+        await db.backup_jobs.create_index("status")
+        await db.backup_jobs.create_index("created_at")
+        await db.backup_jobs.create_index("retention_class")
+        
         logger.info("Database indexes created successfully")
         
         # Start DSGVO scheduler - runs every day at 03:00 AM
@@ -4251,8 +4596,47 @@ async def startup_event():
             name="DSGVO Daten-Anonymisierung",
             replace_existing=True
         )
+        
+        # Start Backup schedulers
+        # Täglich um 02:00 Uhr - Datenbank-Backup
+        scheduler.add_job(
+            scheduled_database_backup,
+            CronTrigger(hour=2, minute=0),
+            id="daily_db_backup",
+            name="Tägliches Datenbank-Backup",
+            replace_existing=True
+        )
+        
+        # Täglich um 02:30 Uhr - Storage-Backup
+        scheduler.add_job(
+            scheduled_storage_backup,
+            CronTrigger(hour=2, minute=30),
+            id="daily_storage_backup",
+            name="Tägliches Storage-Backup",
+            replace_existing=True
+        )
+        
+        # Am 1. jedes Monats um 01:00 Uhr - Monatliches Komplett-Backup
+        scheduler.add_job(
+            scheduled_monthly_backup,
+            CronTrigger(day=1, hour=1, minute=0),
+            id="monthly_backup",
+            name="Monatliches Komplett-Backup",
+            replace_existing=True
+        )
+        
+        # Täglich um 04:00 Uhr - Aufbewahrungsregeln anwenden
+        scheduler.add_job(
+            scheduled_retention_cleanup,
+            CronTrigger(hour=4, minute=0),
+            id="retention_cleanup",
+            name="Backup-Aufbewahrung Aufräumen",
+            replace_existing=True
+        )
+        
         scheduler.start()
         logger.info(f"DSGVO Scheduler gestartet - Retention: {DSGVO_RETENTION_DAYS} Tage")
+        logger.info("Backup Scheduler gestartet - Tägliche Backups um 02:00/02:30 Uhr, Monatliche am 1.")
         
     except Exception as e:
         logger.error(f"Error during startup: {e}")
