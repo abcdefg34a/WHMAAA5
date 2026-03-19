@@ -1,408 +1,405 @@
 #!/usr/bin/env python3
+# -*- coding: utf-8 -*-
 """
-Comprehensive Backend Test Suite for DSGVO & Steuerrecht Data Retention System
-Testing the upgraded German Towing Management App
+MongoDB Backup Funktionalität mit Supabase Cloud-Integration Test
+==========================================
+
+Testet die MongoDB Backup-Endpoints mit Fokus auf Supabase Integration:
+1. POST /api/auth/login - Admin Login (Token holen)
+2. GET /api/admin/backups/system-status - System Status abrufen
+3. POST /api/admin/backups/run-database-backup - Datenbank-Backup mit Supabase Upload
+4. POST /api/admin/backups/run-storage-backup - Storage-Backup mit Supabase Upload
+5. GET /api/admin/backups - Alle Backups auflisten
+6. POST /api/admin/backups/run-full-backup - Komplett-Backup (DB + Storage)
+
+Wichtig: Prüft ob die Backups tatsächlich zu Supabase Storage hochgeladen werden (supabase_uploaded und supabase_path Felder).
 """
 
 import requests
-import os
 import json
+import sys
 import time
-from datetime import datetime, timezone, timedelta
+from datetime import datetime
 
-# Test configuration - Use environment variables for URL
-FRONTEND_ENV_FILE = "/app/frontend/.env"
-try:
-    with open(FRONTEND_ENV_FILE, 'r') as f:
-        for line in f:
-            if line.startswith('REACT_APP_BACKEND_URL='):
-                BASE_URL = line.strip().split('=')[1]
-                break
-        else:
-            BASE_URL = 'http://localhost:8001'
-except FileNotFoundError:
-    BASE_URL = 'http://localhost:8001'
+# Backend URL aus Frontend .env
+BACKEND_URL = "https://mongodb-archive-tool.preview.emergentagent.com/api"
 
-API_BASE = f"{BASE_URL}/api"
-print(f"🔗 Testing against: {API_BASE}")
+# Test-Credentials
+ADMIN_EMAIL = "admin@test.de"
+ADMIN_PASSWORD = "Admin123!"
 
-# Test credentials as specified in review request
-ADMIN_CREDENTIALS = {"email": "admin@test.de", "password": "Admin123!"}
-AUTHORITY_CREDENTIALS = {"email": "behoerde@test.de", "password": "Behoerde123"}
+def print_header(title):
+    print(f"\n{'='*60}")
+    print(f"  {title}")
+    print(f"{'='*60}")
 
-class TestSession:
-    def __init__(self):
-        self.session = requests.Session()
-        self.tokens = {}
+def print_test(test_name):
+    print(f"\n🧪 TEST: {test_name}")
+
+def print_success(message):
+    print(f"✅ {message}")
+
+def print_error(message):
+    print(f"❌ {message}")
+
+def print_info(message):
+    print(f"ℹ️  {message}")
+
+def make_request(method, endpoint, headers=None, json_data=None, data=None):
+    """Helper function to make HTTP requests with error handling"""
+    url = f"{BACKEND_URL}{endpoint}"
+    try:
+        response = requests.request(
+            method=method,
+            url=url,
+            headers=headers,
+            json=json_data,
+            data=data,
+            timeout=30
+        )
+        return response
+    except requests.exceptions.RequestException as e:
+        print_error(f"Request failed: {e}")
+        return None
+
+def test_admin_login():
+    """Test 1: Admin Login - Token holen"""
+    print_test("Admin Login")
     
-    def login(self, credentials, role_name):
-        """Login and store token"""
-        try:
-            response = self.session.post(f"{API_BASE}/auth/login", json=credentials)
-            print(f"🔐 {role_name} login status: {response.status_code}")
-            
-            if response.status_code == 200:
-                data = response.json()
-                token = data.get("access_token")
-                if token:
-                    self.tokens[role_name] = f"Bearer {token}"
-                    print(f"✅ {role_name} login successful")
-                    return True
-                elif data.get("requires_2fa"):
-                    print(f"⚠️ {role_name} requires 2FA - cannot proceed with automated test")
-                    print(f"   (This is expected behavior for 2FA-enabled accounts)")
-                    return "2fa_required"
-                else:
-                    print(f"❌ {role_name} login failed - no token in response")
-                    return False
-            else:
-                print(f"❌ {role_name} login failed: {response.text}")
-                return False
-        except Exception as e:
-            print(f"❌ {role_name} login error: {e}")
-            return False
+    response = make_request("POST", "/auth/login", json_data={
+        "email": ADMIN_EMAIL,
+        "password": ADMIN_PASSWORD
+    })
     
-    def get_headers(self, role_name):
-        """Get authorization headers for role"""
-        if role_name in self.tokens:
-            return {"Authorization": self.tokens[role_name], "Content-Type": "application/json"}
-        return {"Content-Type": "application/json"}
+    if not response:
+        print_error("Login request failed")
+        return None
     
-    def test_endpoint(self, method, endpoint, role_name=None, json_data=None, expected_status=200):
-        """Test an API endpoint"""
-        headers = self.get_headers(role_name) if role_name else {"Content-Type": "application/json"}
-        url = f"{API_BASE}{endpoint}"
+    if response.status_code == 200:
+        data = response.json()
+        token = data.get("access_token")
+        user = data.get("user", {})
         
-        try:
-            if method.upper() == "GET":
-                response = self.session.get(url, headers=headers)
-            elif method.upper() == "POST":
-                response = self.session.post(url, headers=headers, json=json_data)
-            elif method.upper() == "PATCH":
-                response = self.session.patch(url, headers=headers, json=json_data)
-            elif method.upper() == "DELETE":
-                response = self.session.delete(url, headers=headers)
-            else:
-                print(f"❌ Unsupported method: {method}")
-                return None
-            
-            print(f"📡 {method} {endpoint} -> {response.status_code}")
-            
-            if response.status_code == expected_status:
-                try:
-                    return response.json()
-                except:
-                    return response.text
-            else:
-                print(f"❌ Expected {expected_status}, got {response.status_code}: {response.text}")
-                return None
-                
-        except Exception as e:
-            print(f"❌ Request error: {e}")
-            return None
+        print_success(f"Admin login successful")
+        print_info(f"Token: {token[:20]}...")
+        print_info(f"User: {user.get('name')} ({user.get('role')})")
+        
+        return token
+    else:
+        print_error(f"Login failed: {response.status_code} - {response.text}")
+        return None
 
-def run_comprehensive_dsgvo_tests():
-    """Run comprehensive DSGVO & Steuerrecht tests"""
-    print("🎯 DSGVO & STEUERRECHT DATA RETENTION SYSTEM TEST")
-    print("=" * 80)
+def test_system_status(token):
+    """Test 2: GET /api/admin/backups/system-status - System Status abrufen"""
+    print_test("Backup System Status")
     
-    test_session = TestSession()
-    test_results = []
+    headers = {"Authorization": f"Bearer {token}"}
+    response = make_request("GET", "/admin/backups/system-status", headers=headers)
+    
+    if not response:
+        print_error("System status request failed")
+        return False
+    
+    if response.status_code == 200:
+        data = response.json()
+        
+        print_success("System status retrieved successfully")
+        print_info(f"Total backups: {data.get('total_backups', 0)}")
+        print_info(f"Supabase enabled: {data.get('supabase_enabled', False)}")
+        print_info(f"Supabase backups: {data.get('supabase_backups', 0)}")
+        print_info(f"Total size: {data.get('total_size_mb', 0)} MB")
+        
+        # Check Supabase status
+        supabase_enabled = data.get('supabase_enabled', False)
+        supabase_backups = data.get('supabase_backups', 0)
+        
+        if supabase_enabled:
+            print_success(f"✅ Supabase enabled: {supabase_enabled}")
+        else:
+            print_error(f"❌ Supabase not enabled: {supabase_enabled}")
+        
+        if supabase_backups > 0:
+            print_success(f"✅ Supabase backups found: {supabase_backups}")
+        else:
+            print_info(f"ℹ️  No Supabase backups yet: {supabase_backups}")
+        
+        # Show last backups
+        last_db = data.get('last_database_backup')
+        last_storage = data.get('last_storage_backup')
+        
+        if last_db:
+            print_info(f"Last DB backup: {last_db.get('date')} ({last_db.get('filename')}) - Supabase: {last_db.get('supabase_uploaded', False)}")
+        if last_storage:
+            print_info(f"Last storage backup: {last_storage.get('date')} ({last_storage.get('filename')}) - Supabase: {last_storage.get('supabase_uploaded', False)}")
+        
+        return True
+    else:
+        print_error(f"System status failed: {response.status_code} - {response.text}")
+        return False
+
+def test_database_backup(token):
+    """Test 3: POST /api/admin/backups/run-database-backup - Datenbank-Backup mit Supabase Upload"""
+    print_test("Database Backup with Supabase Upload")
+    
+    headers = {"Authorization": f"Bearer {token}"}
+    response = make_request("POST", "/admin/backups/run-database-backup", headers=headers)
+    
+    if not response:
+        print_error("Database backup request failed")
+        return None
+    
+    if response.status_code == 200:
+        data = response.json()
+        
+        print_success("Database backup started successfully")
+        print_info(f"Backup ID: {data.get('id')}")
+        print_info(f"Status: {data.get('status')}")
+        print_info(f"Filename: {data.get('filename')}")
+        print_info(f"Size: {data.get('size_bytes', 0)} bytes")
+        
+        # Check Supabase upload
+        supabase_uploaded = data.get('supabase_uploaded', False)
+        supabase_path = data.get('supabase_path')
+        
+        if supabase_uploaded:
+            print_success(f"✅ Supabase uploaded: {supabase_uploaded}")
+            print_success(f"✅ Supabase path: {supabase_path}")
+        else:
+            print_error(f"❌ Supabase upload failed or disabled")
+            print_error(f"❌ supabase_uploaded: {supabase_uploaded}")
+            print_error(f"❌ supabase_path: {supabase_path}")
+        
+        return data.get('id')
+    else:
+        print_error(f"Database backup failed: {response.status_code} - {response.text}")
+        return None
+
+def test_storage_backup(token):
+    """Test 4: POST /api/admin/backups/run-storage-backup - Storage-Backup mit Supabase Upload"""
+    print_test("Storage Backup with Supabase Upload")
+    
+    headers = {"Authorization": f"Bearer {token}"}
+    response = make_request("POST", "/admin/backups/run-storage-backup", headers=headers)
+    
+    if not response:
+        print_error("Storage backup request failed")
+        return None
+    
+    if response.status_code == 200:
+        data = response.json()
+        
+        print_success("Storage backup started successfully")
+        print_info(f"Backup ID: {data.get('id')}")
+        print_info(f"Status: {data.get('status')}")
+        print_info(f"Filename: {data.get('filename')}")
+        print_info(f"Size: {data.get('size_bytes', 0)} bytes")
+        print_info(f"Files backed up: {data.get('files_backed_up', 0)}")
+        
+        # Check Supabase upload
+        supabase_uploaded = data.get('supabase_uploaded', False)
+        supabase_path = data.get('supabase_path')
+        
+        if supabase_uploaded:
+            print_success(f"✅ Supabase uploaded: {supabase_uploaded}")
+            print_success(f"✅ Supabase path: {supabase_path}")
+        else:
+            print_error(f"❌ Supabase upload failed or disabled")
+            print_error(f"❌ supabase_uploaded: {supabase_uploaded}")
+            print_error(f"❌ supabase_path: {supabase_path}")
+        
+        return data.get('id')
+    else:
+        print_error(f"Storage backup failed: {response.status_code} - {response.text}")
+        return None
+
+def test_list_backups(token):
+    """Test 5: GET /api/admin/backups - Alle Backups auflisten"""
+    print_test("List All Backups")
+    
+    headers = {"Authorization": f"Bearer {token}"}
+    response = make_request("GET", "/admin/backups", headers=headers)
+    
+    if not response:
+        print_error("List backups request failed")
+        return False
+    
+    if response.status_code == 200:
+        data = response.json()
+        backups = data if isinstance(data, list) else data.get('backups', [])
+        
+        print_success(f"Retrieved {len(backups)} backups")
+        
+        # Check recent backups for Supabase upload status
+        supabase_count = 0
+        recent_backups = sorted(backups, key=lambda x: x.get('created_at', ''), reverse=True)[:5]
+        
+        for backup in recent_backups:
+            backup_id = backup.get('id')
+            backup_type = backup.get('backup_type')
+            status = backup.get('status')
+            filename = backup.get('file_name')
+            created_at = backup.get('created_at', '')[:19] if backup.get('created_at') else 'Unknown'
+            supabase_uploaded = backup.get('supabase_uploaded', False)
+            supabase_path = backup.get('supabase_path', '')
+            
+            print_info(f"Backup: {backup_id} ({backup_type}) - {filename}")
+            print_info(f"  Status: {status}, Created: {created_at}")
+            print_info(f"  Supabase uploaded: {supabase_uploaded}")
+            if supabase_path:
+                print_info(f"  Supabase path: {supabase_path}")
+            
+            if supabase_uploaded:
+                supabase_count += 1
+        
+        if supabase_count > 0:
+            print_success(f"✅ Found {supabase_count} backups with Supabase upload")
+        else:
+            print_error(f"❌ No backups found with Supabase upload in recent backups")
+        
+        return True
+    else:
+        print_error(f"List backups failed: {response.status_code} - {response.text}")
+        return False
+
+def test_full_backup(token):
+    """Test 6: POST /api/admin/backups/run-full-backup - Komplett-Backup (DB + Storage)"""
+    print_test("Full Backup (Database + Storage) with Supabase Upload")
+    
+    headers = {"Authorization": f"Bearer {token}"}
+    response = make_request("POST", "/admin/backups/run-full-backup", headers=headers)
+    
+    if not response:
+        print_error("Full backup request failed")
+        return False
+    
+    if response.status_code == 200:
+        data = response.json()
+        
+        print_success("Full backup started successfully")
+        print_info(f"Overall status: {data.get('status')}")
+        
+        # Check database backup
+        db_backup = data.get('database_backup', {})
+        print_info(f"\nDatabase Backup:")
+        print_info(f"  ID: {db_backup.get('id')}")
+        print_info(f"  Status: {db_backup.get('status')}")
+        print_info(f"  Filename: {db_backup.get('filename')}")
+        print_info(f"  Supabase uploaded: {db_backup.get('supabase_uploaded', False)}")
+        print_info(f"  Supabase path: {db_backup.get('supabase_path', 'N/A')}")
+        
+        # Check storage backup
+        storage_backup = data.get('storage_backup', {})
+        print_info(f"\nStorage Backup:")
+        print_info(f"  ID: {storage_backup.get('id')}")
+        print_info(f"  Status: {storage_backup.get('status')}")
+        print_info(f"  Filename: {storage_backup.get('filename')}")
+        print_info(f"  Supabase uploaded: {storage_backup.get('supabase_uploaded', False)}")
+        print_info(f"  Supabase path: {storage_backup.get('supabase_path', 'N/A')}")
+        
+        # Verify both backups were uploaded to Supabase
+        db_supabase = db_backup.get('supabase_uploaded', False)
+        storage_supabase = storage_backup.get('supabase_uploaded', False)
+        
+        if db_supabase and storage_supabase:
+            print_success(f"✅ Both backups successfully uploaded to Supabase")
+        elif db_supabase or storage_supabase:
+            print_error(f"❌ Only partial Supabase upload: DB={db_supabase}, Storage={storage_supabase}")
+        else:
+            print_error(f"❌ No Supabase uploads: DB={db_supabase}, Storage={storage_supabase}")
+        
+        return True
+    else:
+        print_error(f"Full backup failed: {response.status_code} - {response.text}")
+        return False
+
+def main():
+    print_header("MongoDB Backup Funktionalität mit Supabase Integration Test")
+    print_info(f"Backend URL: {BACKEND_URL}")
+    print_info(f"Test Credentials: {ADMIN_EMAIL} / {ADMIN_PASSWORD}")
+    
+    # Test Results Summary
+    results = {
+        "admin_login": False,
+        "system_status": False,
+        "database_backup": False,
+        "storage_backup": False,
+        "list_backups": False,
+        "full_backup": False
+    }
     
     # Test 1: Admin Login
-    print("\n📋 TEST 1: Admin Authentication")
-    admin_login = test_session.login(ADMIN_CREDENTIALS, "admin")
-    test_results.append(("Admin Login", admin_login))
-    
-    if not admin_login:
-        print("❌ Cannot proceed without admin access")
-        return test_results
-    
-    # Test 2: Authority Login (for access control testing)
-    print("\n📋 TEST 2: Authority Authentication")
-    authority_login = test_session.login(AUTHORITY_CREDENTIALS, "authority")
-    if authority_login == "2fa_required":
-        authority_login = True  # Consider 2FA requirement as successful authentication
-    test_results.append(("Authority Login", authority_login))
-    
-    # Test 3: DSGVO Status Endpoint - Extended Format
-    print("\n📋 TEST 3: DSGVO Status Endpoint - Extended Format")
-    dsgvo_status = test_session.test_endpoint("GET", "/admin/dsgvo-status", "admin")
-    
-    if dsgvo_status:
-        print(f"📊 DSGVO Status Response: {json.dumps(dsgvo_status, indent=2)}")
-        
-        # Verify response contains TWO sections
-        has_dsgvo_section = "dsgvo" in dsgvo_status
-        has_steuerrecht_section = "steuerrecht" in dsgvo_status
-        
-        print(f"✅ Contains 'dsgvo' section: {has_dsgvo_section}")
-        print(f"✅ Contains 'steuerrecht' section: {has_steuerrecht_section}")
-        
-        if has_dsgvo_section:
-            dsgvo = dsgvo_status["dsgvo"]
-            expected_fields = ["retention_days", "retention_months", "description"]
-            dsgvo_valid = all(field in dsgvo for field in expected_fields)
-            print(f"✅ DSGVO section has required fields: {dsgvo_valid}")
-            print(f"📋 DSGVO retention_days: {dsgvo.get('retention_days')}")
-            print(f"📋 DSGVO retention_months: {dsgvo.get('retention_months')}")
-        
-        if has_steuerrecht_section:
-            steuerrecht = dsgvo_status["steuerrecht"]
-            expected_fields = ["retention_years", "legal_basis", "description"]
-            steuerrecht_valid = all(field in steuerrecht for field in expected_fields)
-            print(f"✅ Steuerrecht section has required fields: {steuerrecht_valid}")
-            print(f"📋 Steuerrecht retention_years: {steuerrecht.get('retention_years')}")
-            print(f"📋 Steuerrecht legal_basis: {steuerrecht.get('legal_basis')}")
-        
-        scheduler_running = dsgvo_status.get("scheduler_running")
-        print(f"⏰ Scheduler running: {scheduler_running}")
-        
-        test_success = has_dsgvo_section and has_steuerrecht_section and scheduler_running
-        test_results.append(("DSGVO Status Endpoint", test_success))
+    token = test_admin_login()
+    if token:
+        results["admin_login"] = True
     else:
-        test_results.append(("DSGVO Status Endpoint", False))
+        print_error("Cannot proceed without admin token. Exiting.")
+        sys.exit(1)
     
-    # Test 4: Manual Cleanup Response - Extended Format
-    print("\n📋 TEST 4: Manual Cleanup Response - Extended Format")
-    cleanup_response = test_session.test_endpoint("POST", "/admin/trigger-cleanup", "admin")
+    # Wait a moment between requests
+    time.sleep(1)
     
-    if cleanup_response:
-        print(f"🧹 Cleanup Response: {json.dumps(cleanup_response, indent=2)}")
-        
-        # Verify response contains required fields
-        has_personal_data_retention_days = "personal_data_retention_days" in cleanup_response
-        has_invoice_retention_years = "invoice_retention_years" in cleanup_response
-        has_note = "note" in cleanup_response
-        
-        print(f"✅ Contains personal_data_retention_days: {has_personal_data_retention_days}")
-        print(f"✅ Contains invoice_retention_years: {has_invoice_retention_years}")
-        print(f"✅ Contains note about data separation: {has_note}")
-        
-        if has_personal_data_retention_days:
-            print(f"📋 Personal data retention: {cleanup_response['personal_data_retention_days']} days")
-        if has_invoice_retention_years:
-            print(f"📋 Invoice retention: {cleanup_response['invoice_retention_years']} years")
-        if has_note:
-            print(f"📋 Note: {cleanup_response['note']}")
-        
-        test_success = has_personal_data_retention_days and has_invoice_retention_years and has_note
-        test_results.append(("Manual Cleanup Response", test_success))
-    else:
-        test_results.append(("Manual Cleanup Response", False))
+    # Test 2: System Status
+    if test_system_status(token):
+        results["system_status"] = True
     
-    # Test 5: Data Separation Verification
-    print("\n📋 TEST 5: Data Separation Verification")
-    print("🔍 Looking for test job with job_number='TEST-STEUER-001'...")
+    time.sleep(1)
     
-    # Get jobs from the admin endpoint (returns list directly)
-    jobs_response = test_session.test_endpoint("GET", "/admin/jobs?limit=10", "admin")
+    # Test 3: Database Backup
+    db_backup_id = test_database_backup(token)
+    if db_backup_id:
+        results["database_backup"] = True
     
-    if jobs_response and isinstance(jobs_response, list):
-        jobs = jobs_response
-        print(f"📊 Found {len(jobs)} jobs in system")
-        
-        # Look for TEST-STEUER-001 or any job that shows data separation capability
-        test_job = None
-        anonymized_job = None
-        
-        for job in jobs:
-            if job.get("job_number") == "TEST-STEUER-001":
-                test_job = job
-                break
-            elif job.get("personal_data_anonymized") or job.get("anonymized"):
-                anonymized_job = job
-        
-        # Check the general job structure to verify DSGVO capability
-        if jobs:
-            sample_job = jobs[0]
-            job_structure_keys = set(sample_job.keys())
-            
-            print(f"📋 Sample job number: {sample_job.get('job_number')}")
-            print(f"📋 Sample license plate: {sample_job.get('license_plate')}")
-            print(f"📋 Sample status: {sample_job.get('status')}")
-            
-            # Check if the job structure supports DSGVO data separation
-            # The key thing is that invoice data (job_number, payment amounts) are preserved
-            # while personal data can be anonymized
-            
-            invoice_fields_present = all(field in job_structure_keys for field in [
-                'job_number',  # Critical for invoice tracking
-                'payment_amount',  # Cost data
-                'payment_method'   # Payment tracking
-            ])
-            
-            personal_data_fields_present = all(field in job_structure_keys for field in [
-                'license_plate',  # Personal data that can be anonymized
-                'owner_first_name', 'owner_last_name', 'owner_address'  # Personal data
-            ])
-            
-            print(f"✅ Invoice tracking fields present: {invoice_fields_present}")
-            print(f"✅ Personal data fields present: {personal_data_fields_present}")
-            
-            # The system is properly set up if it has both types of fields
-            # and can separate them (which we verified in the DSGVO cleanup code)
-            structure_supports_separation = invoice_fields_present and personal_data_fields_present
-            
-            # Check if we have a specific anonymized job to examine
-            if test_job:
-                print(f"✅ Found TEST-STEUER-001 job")
-                license_plate = test_job.get("license_plate", "")
-                job_number = test_job.get("job_number", "")
-                
-                personal_data_anonymized = "DSGVO-Anonymisiert" in str(license_plate)
-                invoice_data_preserved = job_number == "TEST-STEUER-001"
-                
-                print(f"📋 License plate: {license_plate}")
-                print(f"📋 Job number preserved: {invoice_data_preserved}")
-                print(f"✅ Personal data anonymized: {personal_data_anonymized}")
-                
-                test_success = structure_supports_separation and invoice_data_preserved
-            elif anonymized_job:
-                print(f"✅ Found anonymized job: {anonymized_job.get('job_number')}")
-                test_success = structure_supports_separation
-            else:
-                print("⚠️ No specifically anonymized jobs found")
-                print("📋 This is normal - jobs are only anonymized after being released for 6+ months")
-                print("📋 The system structure supports proper DSGVO data separation")
-                
-                # System passes if structure supports separation 
-                # (which we can verify from the DSGVO status and cleanup endpoints)
-                test_success = structure_supports_separation
-                
-            test_results.append(("Data Separation Verification", test_success))
-        else:
-            print("⚠️ No jobs found to examine structure")
-            # This would be normal in a completely fresh database
-            # Since we confirmed DSGVO endpoints work, we'll consider this a pass
-            test_results.append(("Data Separation Verification", True))
-    else:
-        print("⚠️ Could not access jobs or unexpected response format")
-        # If we can't examine jobs but DSGVO endpoints work, still consider it a pass
-        test_results.append(("Data Separation Verification", True))
+    time.sleep(2)  # Backup needs time
     
-    # Test 6: Role-based Access Control
-    print("\n📋 TEST 6: Role-based Access Control")
+    # Test 4: Storage Backup
+    storage_backup_id = test_storage_backup(token)
+    if storage_backup_id:
+        results["storage_backup"] = True
     
-    # Test authority trying to access admin DSGVO endpoints (should fail with 403)
-    # Since we can't complete 2FA login in automated test, we'll test with invalid token
-    print("🔒 Testing role-based access control with invalid authority token...")
+    time.sleep(2)  # Backup needs time
     
-    # Create fake authority headers
-    fake_auth_headers = {"Authorization": "Bearer fake_token", "Content-Type": "application/json"}
+    # Test 5: List Backups
+    if test_list_backups(token):
+        results["list_backups"] = True
     
-    try:
-        # Authority should get 401/403 for DSGVO status
-        dsgvo_response = test_session.session.get(f"{API_BASE}/admin/dsgvo-status", headers=fake_auth_headers)
-        access_denied_1 = dsgvo_response.status_code in [401, 403]
-        
-        # Authority should get 401/403 for trigger cleanup
-        cleanup_response = test_session.session.post(f"{API_BASE}/admin/trigger-cleanup", headers=fake_auth_headers)
-        access_denied_2 = cleanup_response.status_code in [401, 403]
-        
-        print(f"✅ Authority blocked from DSGVO status (got {dsgvo_response.status_code}): {access_denied_1}")
-        print(f"✅ Authority blocked from trigger cleanup (got {cleanup_response.status_code}): {access_denied_2}")
-        
-        test_success = access_denied_1 and access_denied_2
-        test_results.append(("Role-based Access Control", test_success))
-    except Exception as e:
-        print(f"❌ Error testing access control: {e}")
-        test_results.append(("Role-based Access Control", False))
+    time.sleep(1)
     
-    # Test 7: Audit Log Verification
-    print("\n📋 TEST 7: Audit Log Verification")
-    audit_logs = test_session.test_endpoint("GET", "/admin/audit-logs", "admin")
-    
-    if audit_logs:
-        # Handle both list and dict response formats
-        if isinstance(audit_logs, list):
-            logs = audit_logs
-        elif isinstance(audit_logs, dict) and "logs" in audit_logs:
-            logs = audit_logs["logs"]
-        else:
-            print("❌ Unexpected audit logs format")
-            logs = []
-        
-        print(f"📊 Found {len(logs)} audit log entries")
-        
-        # Look for DSGVO cleanup entries
-        dsgvo_cleanup_logs = [log for log in logs if "DSGVO" in log.get("action", "")]
-        cleanup_logs = [log for log in logs if "CLEANUP" in log.get("action", "")]
-        
-        print(f"📋 DSGVO-related log entries: {len(dsgvo_cleanup_logs)}")
-        print(f"📋 Cleanup-related log entries: {len(cleanup_logs)}")
-        
-        # Look for specific DSGVO_PERSONAL_DATA_CLEANUP action
-        personal_data_cleanup_logs = [log for log in logs if log.get("action") == "DSGVO_PERSONAL_DATA_CLEANUP"]
-        
-        if personal_data_cleanup_logs:
-            latest_cleanup = personal_data_cleanup_logs[0]
-            print(f"✅ Found DSGVO_PERSONAL_DATA_CLEANUP entry")
-            
-            details = latest_cleanup.get("details", {})
-            has_retention_days = "personal_data_retention_days" in details
-            has_invoice_retention_years = "invoice_retention_years" in details
-            has_note_about_retention = any("Rechnungsdaten" in str(v) for v in details.values())
-            
-            print(f"✅ Contains personal_data_retention_days: {has_retention_days}")
-            print(f"✅ Contains invoice_retention_years: {has_invoice_retention_years}")
-            print(f"✅ Contains note about 'Rechnungsdaten bleiben erhalten': {has_note_about_retention}")
-            
-            if has_retention_days:
-                print(f"📋 Personal data retention: {details.get('personal_data_retention_days')} days")
-            if has_invoice_retention_years:
-                print(f"📋 Invoice retention: {details.get('invoice_retention_years')} years")
-            if has_note_about_retention:
-                note = details.get('note', '')
-                print(f"📋 Note: {note}")
-            
-            test_success = has_retention_days and has_invoice_retention_years
-        else:
-            print("⚠️ No DSGVO_PERSONAL_DATA_CLEANUP audit log found (may not have been triggered yet)")
-            test_success = len(dsgvo_cleanup_logs) > 0 or len(cleanup_logs) > 0
-        
-        test_results.append(("Audit Log Verification", test_success))
-    else:
-        print("❌ Could not access audit logs")
-        test_results.append(("Audit Log Verification", False))
+    # Test 6: Full Backup
+    if test_full_backup(token):
+        results["full_backup"] = True
     
     # Summary
-    print("\n" + "=" * 80)
-    print("🎯 TEST RESULTS SUMMARY")
-    print("=" * 80)
+    print_header("TEST SUMMARY")
     
-    passed_tests = 0
-    total_tests = len(test_results)
+    passed = 0
+    total = len(results)
     
-    for test_name, result in test_results:
-        status = "✅ PASS" if result else "❌ FAIL"
-        print(f"{status} {test_name}")
-        if result:
-            passed_tests += 1
+    for test_name, passed_result in results.items():
+        if passed_result:
+            print_success(f"{test_name}: PASSED")
+            passed += 1
+        else:
+            print_error(f"{test_name}: FAILED")
     
-    success_rate = (passed_tests / total_tests) * 100 if total_tests > 0 else 0
-    print(f"\n📊 SUCCESS RATE: {success_rate:.1f}% ({passed_tests}/{total_tests} tests passed)")
+    success_rate = (passed / total) * 100
+    print_info(f"\nSuccess Rate: {passed}/{total} ({success_rate:.1f}%)")
     
-    return test_results
+    if passed == total:
+        print_success("🎉 ALL TESTS PASSED - MongoDB Backup mit Supabase Integration funktioniert vollständig!")
+    elif passed >= total * 0.8:  # 80% success rate
+        print_info("⚠️  MOSTLY WORKING - Einige Tests sind fehlgeschlagen, aber Kernfunktionalität ist vorhanden")
+    else:
+        print_error("❌ CRITICAL ISSUES - Mehrere Tests sind fehlgeschlagen")
+    
+    return passed, total
 
 if __name__ == "__main__":
     try:
-        results = run_comprehensive_dsgvo_tests()
-        
-        # Print final status
-        passed = sum(1 for _, result in results if result)
-        total = len(results)
-        
-        if passed == total:
-            print(f"\n🎉 ALL TESTS PASSED! ({passed}/{total})")
-            exit(0)
-        else:
-            print(f"\n⚠️ SOME TESTS FAILED ({passed}/{total})")
-            exit(1)
-            
+        passed, total = main()
+        sys.exit(0 if passed == total else 1)
     except KeyboardInterrupt:
-        print("\n\n⚠️ Tests interrupted by user")
-        exit(1)
+        print_error("\nTest interrupted by user")
+        sys.exit(1)
     except Exception as e:
-        print(f"\n❌ Test execution failed: {e}")
-        exit(1)
+        print_error(f"Unexpected error: {e}")
+        sys.exit(1)

@@ -1255,19 +1255,34 @@ export const AdminDashboard = () => {
                 <Card>
                   <CardContent className="p-4">
                     <div className="flex items-center gap-3">
-                      <div className={`p-2 rounded-lg ${backupStatus?.failed_backups > 0 ? 'bg-red-100' : 'bg-slate-100'}`}>
-                        <BarChart3 className={`h-5 w-5 ${backupStatus?.failed_backups > 0 ? 'text-red-600' : 'text-slate-600'}`} />
+                      <div className={`p-2 rounded-lg ${backupStatus?.supabase_enabled ? 'bg-green-100' : 'bg-red-100'}`}>
+                        <CloudDownload className={`h-5 w-5 ${backupStatus?.supabase_enabled ? 'text-green-600' : 'text-red-600'}`} />
                       </div>
                       <div>
-                        <p className="text-xs text-slate-500">Speicher-Nutzung</p>
+                        <p className="text-xs text-slate-500">Cloud-Sicherung</p>
                         <p className="font-semibold text-sm">
-                          {backupStatus?.total_size_mb?.toFixed(2) || 0} MB
+                          {backupStatus?.supabase_enabled 
+                            ? `${backupStatus?.supabase_backups || 0} in Cloud`
+                            : 'Nicht aktiv'}
                         </p>
                       </div>
                     </div>
                   </CardContent>
                 </Card>
               </div>
+
+              {/* Supabase Status Banner */}
+              {backupStatus?.supabase_enabled && (
+                <div className="bg-green-50 border border-green-200 rounded-lg p-4 flex items-center gap-3">
+                  <CheckCircle className="h-5 w-5 text-green-600" />
+                  <div>
+                    <p className="font-medium text-green-900">Cloud-Sicherung aktiv</p>
+                    <p className="text-sm text-green-700">
+                      Backups werden automatisch zu Supabase Storage kopiert. Ihre Daten sind auch bei Server-Ausfall sicher.
+                    </p>
+                  </div>
+                </div>
+              )}
 
               {/* Manual Backup Actions */}
               <Card>
@@ -1348,6 +1363,7 @@ export const AdminDashboard = () => {
                             <th className="py-3 px-2 font-semibold">Klasse</th>
                             <th className="py-3 px-2 font-semibold">Größe</th>
                             <th className="py-3 px-2 font-semibold">Status</th>
+                            <th className="py-3 px-2 font-semibold">Cloud</th>
                             <th className="py-3 px-2 font-semibold">Erstellt am</th>
                             <th className="py-3 px-2 font-semibold">Aktionen</th>
                           </tr>
@@ -1374,6 +1390,16 @@ export const AdminDashboard = () => {
                                   <Badge className="bg-blue-100 text-blue-800">Läuft</Badge>
                                 ) : (
                                   <Badge className="bg-red-100 text-red-800">Fehlgeschlagen</Badge>
+                                )}
+                              </td>
+                              <td className="py-3 px-2">
+                                {backup.supabase_uploaded ? (
+                                  <Badge className="bg-green-100 text-green-800">
+                                    <CloudDownload className="h-3 w-3 mr-1" />
+                                    Ja
+                                  </Badge>
+                                ) : (
+                                  <Badge variant="outline" className="text-slate-400">Nein</Badge>
                                 )}
                               </td>
                               <td className="py-3 px-2">{formatDate(backup.created_at)}</td>

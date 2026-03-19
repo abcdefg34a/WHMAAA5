@@ -4,6 +4,7 @@
 # Vollständiges Backup- und Wiederherstellungssystem für:
 # - MongoDB Datenbank
 # - Dateien (Fotos, PDFs)
+# - Automatische Kopie zu Supabase Storage (Cloud-Sicherung)
 # ============================================================================
 
 import os
@@ -33,6 +34,148 @@ BACKUP_TEMP_DIR.mkdir(exist_ok=True)
 BACKUP_RETENTION_DAYS = int(os.environ.get('BACKUP_RETENTION_DAYS', 30))
 BACKUP_RETENTION_MONTHS = int(os.environ.get('BACKUP_RETENTION_MONTHS', 12))
 
+# Supabase Storage Configuration
+SUPABASE_URL = os.environ.get('SUPABASE_URL')
+SUPABASE_SERVICE_ROLE_KEY = os.environ.get('SUPABASE_SERVICE_ROLE_KEY')
+SUPABASE_BACKUP_BUCKET = "backups"  # Name des Backup-Buckets
+
+
+class SupabaseStorageClient:
+    """Client für Supabase Storage Operations"""
+    
+    def __init__(self):
+        self.enabled = bool(SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY)
+        self.client = None
+        
+        if self.enabled:
+            try:
+                from supabase import create_client, Client
+                self.client: Client = create_client(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY)
+                logger.info("✅ Supabase Storage Client initialisiert")
+            except Exception as e:
+                logger.error(f"❌ Supabase Storage Client Fehler: {e}")
+                self.enabled = False
+    
+    async def ensure_bucket_exists(self) -> bool:
+        """Stellt sicher, dass der Backup-Bucket existiert"""
+        if not self.enabled or not self.client:
+            return False
+        
+        try:
+            # Versuche Bucket-Info abzurufen
+            buckets = self.client.storage.list_buckets()
+            bucket_names = [b.name for b in buckets]
+            
+            if SUPABASE_BACKUP_BUCKET not in bucket_names:
+                # Bucket erstellen (privat)
+                self.client.storage.create_bucket(
+                    SUPABASE_BACKUP_BUCKET,
+                    options={"public": False}
+                )
+                logger.info(f"✅ Supabase Bucket '{SUPABASE_BACKUP_BUCKET}' erstellt")
+            else:
+                logger.info(f"✅ Supabase Bucket '{SUPABASE_BACKUP_BUCKET}' existiert bereits")
+            
+            return True
+        except Exception as e:
+            logger.error(f"❌ Bucket-Prüfung fehlgeschlagen: {e}")
+            return False
+    
+    async def upload_backup(self, local_path: Path, remote_path: str) -> Dict[str, Any]:
+        """Lädt eine Backup-Datei zu Supabase Storage hoch"""
+        if not self.enabled or not self.client:
+            return {"success": False, "error": "Supabase nicht konfiguriert"}
+        
+        try:
+            # Sicherstellen, dass Bucket existiert
+            await self.ensure_bucket_exists()
+            
+            # Datei lesen
+            with open(local_path, 'rb') as f:
+                file_data = f.read()
+            
+            # Content-Type bestimmen
+            if local_path.suffix == '.gz':
+                content_type = 'application/gzip'
+            elif local_path.suffix == '.zip':
+                content_type = 'application/zip'
+            else:
+                content_type = 'application/octet-stream'
+            
+            # Upload zu Supabase
+            result = self.client.storage.from_(SUPABASE_BACKUP_BUCKET).upload(
+                path=remote_path,
+                file=file_data,
+                file_options={"content-type": content_type, "upsert": "true"}
+            )
+            
+            file_size = local_path.stat().st_size
+            logger.info(f"✅ Backup zu Supabase hochgeladen: {remote_path} ({file_size} bytes)")
+            
+            return {
+                "success": True,
+                "remote_path": remote_path,
+                "bucket": SUPABASE_BACKUP_BUCKET,
+                "size_bytes": file_size
+            }
+            
+        except Exception as e:
+            error_msg = str(e)
+            logger.error(f"❌ Supabase Upload fehlgeschlagen: {error_msg}")
+            return {"success": False, "error": error_msg}
+    
+    async def download_backup(self, remote_path: str) -> Optional[bytes]:
+        """Lädt eine Backup-Datei von Supabase Storage herunter"""
+        if not self.enabled or not self.client:
+            return None
+        
+        try:
+            response = self.client.storage.from_(SUPABASE_BACKUP_BUCKET).download(remote_path)
+            logger.info(f"✅ Backup von Supabase heruntergeladen: {remote_path}")
+            return response
+        except Exception as e:
+            logger.error(f"❌ Supabase Download fehlgeschlagen: {e}")
+            return None
+    
+    async def delete_backup(self, remote_path: str) -> bool:
+        """Löscht eine Backup-Datei aus Supabase Storage"""
+        if not self.enabled or not self.client:
+            return False
+        
+        try:
+            self.client.storage.from_(SUPABASE_BACKUP_BUCKET).remove([remote_path])
+            logger.info(f"✅ Backup aus Supabase gelöscht: {remote_path}")
+            return True
+        except Exception as e:
+            logger.error(f"❌ Supabase Löschung fehlgeschlagen: {e}")
+            return False
+    
+    async def list_backups(self) -> List[Dict[str, Any]]:
+        """Listet alle Backups in Supabase Storage"""
+        if not self.enabled or not self.client:
+            return []
+        
+        try:
+            # Liste alle Dateien im Bucket
+            files = []
+            for folder in ['database/daily', 'database/monthly', 'storage/daily', 'storage/monthly']:
+                try:
+                    folder_files = self.client.storage.from_(SUPABASE_BACKUP_BUCKET).list(folder)
+                    for f in folder_files:
+                        if f.get('name') and not f.get('name').endswith('/'):
+                            files.append({
+                                "name": f.get('name'),
+                                "path": f"{folder}/{f.get('name')}",
+                                "size": f.get('metadata', {}).get('size', 0),
+                                "created_at": f.get('created_at')
+                            })
+                except:
+                    pass
+            return files
+        except Exception as e:
+            logger.error(f"❌ Supabase Auflistung fehlgeschlagen: {e}")
+            return []
+
 
 class BackupService:
     """Service für MongoDB Backup und Wiederherstellung"""
@@ -42,6 +185,9 @@ class BackupService:
         self.mongo_url = mongo_url
         self.db_name = db_name
         self.backup_dir = BACKUP_DIR
+        
+        # Initialize Supabase Storage Client
+        self.supabase_storage = SupabaseStorageClient()
         
         # Create subdirectories
         (self.backup_dir / "database" / "daily").mkdir(parents=True, exist_ok=True)
@@ -143,6 +289,22 @@ class BackupService:
             
             logger.info(f"Database backup completed: {filename} ({file_size} bytes)")
             
+            # Upload to Supabase Storage (Cloud-Sicherung)
+            supabase_result = None
+            if self.supabase_storage.enabled:
+                remote_path = f"database/{retention_class}/{filename}"
+                supabase_result = await self.supabase_storage.upload_backup(backup_path, remote_path)
+                
+                # Update backup job with Supabase info
+                if supabase_result.get("success"):
+                    await self.db.backup_jobs.update_one(
+                        {"id": backup_id},
+                        {"$set": {
+                            "supabase_path": remote_path,
+                            "supabase_uploaded": True
+                        }}
+                    )
+            
             # Log audit event
             await self._log_audit(
                 "BACKUP_SUCCESS",
@@ -153,7 +315,8 @@ class BackupService:
                     "type": "database",
                     "filename": filename,
                     "size_bytes": file_size,
-                    "retention_class": retention_class
+                    "retention_class": retention_class,
+                    "supabase_uploaded": supabase_result.get("success") if supabase_result else False
                 }
             )
             
@@ -163,7 +326,9 @@ class BackupService:
                 "filename": filename,
                 "path": str(backup_path),
                 "size_bytes": file_size,
-                "retention_class": retention_class
+                "retention_class": retention_class,
+                "supabase_uploaded": supabase_result.get("success") if supabase_result else False,
+                "supabase_path": supabase_result.get("remote_path") if supabase_result and supabase_result.get("success") else None
             }
             
         except Exception as e:
@@ -273,6 +438,22 @@ class BackupService:
             
             logger.info(f"Storage backup completed: {filename} ({files_backed_up} files, {file_size} bytes)")
             
+            # Upload to Supabase Storage (Cloud-Sicherung)
+            supabase_result = None
+            if self.supabase_storage.enabled:
+                remote_path = f"storage/{retention_class}/{filename}"
+                supabase_result = await self.supabase_storage.upload_backup(backup_path, remote_path)
+                
+                # Update backup job with Supabase info
+                if supabase_result.get("success"):
+                    await self.db.backup_jobs.update_one(
+                        {"id": backup_id},
+                        {"$set": {
+                            "supabase_path": remote_path,
+                            "supabase_uploaded": True
+                        }}
+                    )
+            
             await self._log_audit(
                 "BACKUP_SUCCESS",
                 triggered_by_user_id,
@@ -282,7 +463,8 @@ class BackupService:
                     "type": "storage",
                     "filename": filename,
                     "files_count": files_backed_up,
-                    "size_bytes": file_size
+                    "size_bytes": file_size,
+                    "supabase_uploaded": supabase_result.get("success") if supabase_result else False
                 }
             )
             
@@ -292,7 +474,9 @@ class BackupService:
                 "filename": filename,
                 "path": str(backup_path),
                 "size_bytes": file_size,
-                "files_backed_up": files_backed_up
+                "files_backed_up": files_backed_up,
+                "supabase_uploaded": supabase_result.get("success") if supabase_result else False,
+                "supabase_path": supabase_result.get("remote_path") if supabase_result and supabase_result.get("success") else None
             }
             
         except Exception as e:
@@ -720,6 +904,7 @@ class BackupService:
         # Count backups
         total_backups = await self.db.backup_jobs.count_documents({})
         failed_backups = await self.db.backup_jobs.count_documents({"status": "failed"})
+        supabase_backups = await self.db.backup_jobs.count_documents({"supabase_uploaded": True})
         
         # Calculate total size
         all_backups = await self.db.backup_jobs.find({"status": "success"}).to_list(length=None)
@@ -729,12 +914,14 @@ class BackupService:
             "last_database_backup": {
                 "date": last_db_backup["created_at"] if last_db_backup else None,
                 "filename": last_db_backup["file_name"] if last_db_backup else None,
-                "size": last_db_backup["file_size_bytes"] if last_db_backup else 0
+                "size": last_db_backup["file_size_bytes"] if last_db_backup else 0,
+                "supabase_uploaded": last_db_backup.get("supabase_uploaded", False) if last_db_backup else False
             } if last_db_backup else None,
             "last_storage_backup": {
                 "date": last_storage_backup["created_at"] if last_storage_backup else None,
                 "filename": last_storage_backup["file_name"] if last_storage_backup else None,
-                "size": last_storage_backup["file_size_bytes"] if last_storage_backup else 0
+                "size": last_storage_backup["file_size_bytes"] if last_storage_backup else 0,
+                "supabase_uploaded": last_storage_backup.get("supabase_uploaded", False) if last_storage_backup else False
             } if last_storage_backup else None,
             "last_error": {
                 "date": last_error["created_at"] if last_error else None,
@@ -743,12 +930,14 @@ class BackupService:
             } if last_error else None,
             "total_backups": total_backups,
             "failed_backups": failed_backups,
+            "supabase_backups": supabase_backups,
             "total_size_bytes": total_size,
             "total_size_mb": round(total_size / (1024 * 1024), 2),
             "retention_settings": {
                 "daily_retention_days": BACKUP_RETENTION_DAYS,
                 "monthly_retention_months": BACKUP_RETENTION_MONTHS
             },
+            "supabase_enabled": self.supabase_storage.enabled,
             "next_scheduled_run": "02:00 UTC (täglich)"
         }
     
