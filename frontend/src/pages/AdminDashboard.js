@@ -85,6 +85,14 @@ export const AdminDashboard = () => {
   const [scheduleSettings, setScheduleSettings] = useState(null);
   const [scheduleDialogOpen, setScheduleDialogOpen] = useState(false);
   const [savingSchedule, setSavingSchedule] = useState(false);
+  
+  // Storage Stats State
+  const [storageStats, setStorageStats] = useState(null);
+  const [cleaningUp, setCleaningUp] = useState(false);
+  
+  // Encryption State
+  const [encryptionSettings, setEncryptionSettings] = useState(null);
+  const [savingEncryption, setSavingEncryption] = useState(false);
 
   useEffect(() => {
     fetchData();
@@ -111,6 +119,8 @@ export const AdminDashboard = () => {
       fetchBackupStatus();
       fetchBackupHealth();
       fetchScheduleSettings();
+      fetchStorageStats();
+      fetchEncryptionSettings();
     }
   }, [activeTab]);
 
@@ -460,6 +470,95 @@ export const AdminDashboard = () => {
       case 'every_6h': return 'Alle 6 Stunden';
       case 'every_12h': return 'Alle 12 Stunden';
       default: return 'Täglich';
+    }
+  };
+
+  // ==================== SPEICHERPLATZ-ÜBERWACHUNG ====================
+  
+  const fetchStorageStats = async () => {
+    try {
+      const response = await axios.get(`${API}/admin/backups/storage-stats`);
+      setStorageStats(response.data);
+    } catch (error) {
+      console.error('Error fetching storage stats:', error);
+    }
+  };
+
+  const handleCleanupBackups = async () => {
+    setCleaningUp(true);
+    try {
+      toast.info('Alte Backups werden bereinigt...');
+      const response = await axios.post(`${API}/admin/backups/cleanup`);
+      
+      if (response.data.deleted_count > 0) {
+        toast.success(`${response.data.deleted_count} alte Backups gelöscht. ${response.data.freed_mb} MB freigegeben.`);
+      } else {
+        toast.info('Keine alten Backups zum Löschen gefunden.');
+      }
+      
+      fetchBackups();
+      fetchStorageStats();
+      fetchBackupStatus();
+    } catch (error) {
+      toast.error('Bereinigung fehlgeschlagen');
+    } finally {
+      setCleaningUp(false);
+    }
+  };
+
+  const handleEmergencyCleanup = async () => {
+    if (!confirm('⚠️ NOTFALL-BEREINIGUNG: Dies löscht die ältesten Backups bis 500 MB erreicht sind. Fortfahren?')) {
+      return;
+    }
+    
+    setCleaningUp(true);
+    try {
+      toast.info('Notfall-Bereinigung läuft...');
+      const response = await axios.post(`${API}/admin/backups/emergency-cleanup`, {
+        target_mb: 500
+      });
+      
+      toast.success(`${response.data.deleted_count} Backups gelöscht. ${response.data.freed_mb} MB freigegeben.`);
+      
+      fetchBackups();
+      fetchStorageStats();
+      fetchBackupStatus();
+    } catch (error) {
+      toast.error('Notfall-Bereinigung fehlgeschlagen');
+    } finally {
+      setCleaningUp(false);
+    }
+  };
+
+  // ==================== VERSCHLÜSSELUNG ====================
+  
+  const fetchEncryptionSettings = async () => {
+    try {
+      const response = await axios.get(`${API}/admin/backups/encryption`);
+      setEncryptionSettings(response.data);
+    } catch (error) {
+      console.error('Error fetching encryption settings:', error);
+    }
+  };
+
+  const handleToggleEncryption = async () => {
+    setSavingEncryption(true);
+    try {
+      const newValue = !encryptionSettings?.enabled;
+      const response = await axios.put(`${API}/admin/backups/encryption`, {
+        enabled: newValue
+      });
+      
+      if (response.data.status === 'success') {
+        toast.success(newValue ? '🔒 Verschlüsselung aktiviert!' : '🔓 Verschlüsselung deaktiviert');
+        setEncryptionSettings({ ...encryptionSettings, enabled: newValue });
+      } else {
+        toast.error(response.data.message || 'Fehler beim Ändern der Verschlüsselung');
+      }
+    } catch (error) {
+      toast.error('Fehler beim Ändern der Verschlüsselung');
+    } finally {
+      setSavingEncryption(false);
     }
   };
 
@@ -1423,6 +1522,107 @@ export const AdminDashboard = () => {
                 </Card>
               </div>
 
+              {/* Second Row KPI Cards: Storage & Encryption */}
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                {/* Speicherplatz */}
+                <Card className={storageStats?.status === 'critical' ? 'border-red-300 bg-red-50' : storageStats?.status === 'warning' ? 'border-amber-300 bg-amber-50' : ''}>
+                  <CardContent className="p-4">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-3">
+                        <div className={`p-2 rounded-lg ${
+                          storageStats?.status === 'critical' ? 'bg-red-100' : 
+                          storageStats?.status === 'warning' ? 'bg-amber-100' : 'bg-slate-100'
+                        }`}>
+                          <HardDrive className={`h-5 w-5 ${
+                            storageStats?.status === 'critical' ? 'text-red-600' : 
+                            storageStats?.status === 'warning' ? 'text-amber-600' : 'text-slate-600'
+                          }`} />
+                        </div>
+                        <div>
+                          <p className="text-xs text-slate-500">Speicherplatz</p>
+                          <p className={`font-semibold text-sm ${
+                            storageStats?.status === 'critical' ? 'text-red-700' : 
+                            storageStats?.status === 'warning' ? 'text-amber-700' : ''
+                          }`}>
+                            {storageStats?.total_size_mb?.toFixed(1) || 0} MB / {storageStats?.warning_threshold_mb || 1024} MB
+                          </p>
+                        </div>
+                      </div>
+                      {(storageStats?.status === 'warning' || storageStats?.status === 'critical') && (
+                        <Button 
+                          size="sm" 
+                          variant="outline"
+                          className="text-amber-600 border-amber-300"
+                          onClick={handleCleanupBackups}
+                          disabled={cleaningUp}
+                        >
+                          {cleaningUp ? <Loader2 className="h-4 w-4 animate-spin" /> : 'Bereinigen'}
+                        </Button>
+                      )}
+                    </div>
+                    {storageStats?.status !== 'healthy' && (
+                      <p className="text-xs mt-2 text-amber-600">{storageStats?.message}</p>
+                    )}
+                  </CardContent>
+                </Card>
+
+                {/* Verschlüsselung */}
+                <Card>
+                  <CardContent className="p-4">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-3">
+                        <div className={`p-2 rounded-lg ${encryptionSettings?.enabled ? 'bg-green-100' : 'bg-slate-100'}`}>
+                          <Lock className={`h-5 w-5 ${encryptionSettings?.enabled ? 'text-green-600' : 'text-slate-400'}`} />
+                        </div>
+                        <div>
+                          <p className="text-xs text-slate-500">Verschlüsselung</p>
+                          <p className="font-semibold text-sm">
+                            {encryptionSettings?.enabled ? '🔒 Aktiviert' : '🔓 Deaktiviert'}
+                          </p>
+                        </div>
+                      </div>
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={handleToggleEncryption}
+                        disabled={savingEncryption || !encryptionSettings?.available}
+                        className={encryptionSettings?.enabled ? 'text-red-600 border-red-300' : 'text-green-600 border-green-300'}
+                      >
+                        {savingEncryption ? <Loader2 className="h-4 w-4 animate-spin" /> : 
+                          encryptionSettings?.enabled ? 'Deaktivieren' : 'Aktivieren'}
+                      </Button>
+                    </div>
+                    {encryptionSettings?.enabled && (
+                      <p className="text-xs mt-2 text-green-600">AES-256 Verschlüsselung für neue Backups</p>
+                    )}
+                    {!encryptionSettings?.available && (
+                      <p className="text-xs mt-2 text-amber-600">Cryptography-Bibliothek nicht installiert</p>
+                    )}
+                  </CardContent>
+                </Card>
+
+                {/* Backup-Statistiken */}
+                <Card>
+                  <CardContent className="p-4">
+                    <div className="flex items-center gap-3">
+                      <div className="p-2 bg-blue-100 rounded-lg">
+                        <BarChart3 className="h-5 w-5 text-blue-600" />
+                      </div>
+                      <div>
+                        <p className="text-xs text-slate-500">Backup-Statistiken</p>
+                        <p className="font-semibold text-sm">
+                          {storageStats?.database_backups?.count || 0} DB / {storageStats?.storage_backups?.count || 0} Storage
+                        </p>
+                      </div>
+                    </div>
+                    <div className="mt-2 grid grid-cols-2 gap-2 text-xs text-slate-500">
+                      <span>DB: {storageStats?.database_backups?.size_mb?.toFixed(1) || 0} MB</span>
+                      <span>Storage: {storageStats?.storage_backups?.size_mb?.toFixed(1) || 0} MB</span>
+                    </div>
+                  </CardContent>
+                </Card>
+              </div>
+
               {/* Supabase Status Banner */}
               {backupStatus?.supabase_enabled && (
                 <div className="bg-green-50 border border-green-200 rounded-lg p-4 flex items-center gap-3">
@@ -1432,6 +1632,31 @@ export const AdminDashboard = () => {
                     <p className="text-sm text-green-700">
                       Backups werden automatisch zu Supabase Storage kopiert. Ihre Daten sind auch bei Server-Ausfall sicher.
                     </p>
+                  </div>
+                </div>
+              )}
+
+              {/* Storage Warning Banner */}
+              {storageStats?.status === 'critical' && (
+                <div className="bg-red-50 border border-red-200 rounded-lg p-4">
+                  <div className="flex items-center gap-3">
+                    <AlertCircle className="h-5 w-5 text-red-600" />
+                    <div className="flex-1">
+                      <p className="font-medium text-red-900">⚠️ Kritischer Speicherplatz!</p>
+                      <p className="text-sm text-red-700">
+                        Der Backup-Ordner ist über {storageStats.critical_threshold_mb} MB. 
+                        Bitte alte Backups löschen oder den Grenzwert erhöhen.
+                      </p>
+                    </div>
+                    <Button
+                      variant="destructive"
+                      size="sm"
+                      onClick={handleEmergencyCleanup}
+                      disabled={cleaningUp}
+                    >
+                      {cleaningUp ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Trash2 className="h-4 w-4 mr-2" />}
+                      Notfall-Bereinigung
+                    </Button>
                   </div>
                 </div>
               )}

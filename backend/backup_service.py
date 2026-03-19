@@ -5,6 +5,7 @@
 # - MongoDB Datenbank
 # - Dateien (Fotos, PDFs)
 # - Automatische Kopie zu Supabase Storage (Cloud-Sicherung)
+# - AES-256 Verschlüsselung für sensible Daten
 # ============================================================================
 
 import os
@@ -12,6 +13,8 @@ import gzip
 import shutil
 import asyncio
 import subprocess
+import base64
+import hashlib
 from datetime import datetime, timezone, timedelta
 from pathlib import Path
 from typing import Optional, List, Dict, Any
@@ -21,6 +24,15 @@ import json
 import logging
 from bson import json_util
 from motor.motor_asyncio import AsyncIOMotorClient, AsyncIOMotorDatabase
+
+# Cryptography für Verschlüsselung
+try:
+    from cryptography.fernet import Fernet
+    from cryptography.hazmat.primitives import hashes
+    from cryptography.hazmat.primitives.kdf.pbkdf2 import PBKDF2HMAC
+    ENCRYPTION_AVAILABLE = True
+except ImportError:
+    ENCRYPTION_AVAILABLE = False
 
 logger = logging.getLogger(__name__)
 
@@ -38,6 +50,108 @@ BACKUP_RETENTION_MONTHS = int(os.environ.get('BACKUP_RETENTION_MONTHS', 12))
 SUPABASE_URL = os.environ.get('SUPABASE_URL')
 SUPABASE_SERVICE_ROLE_KEY = os.environ.get('SUPABASE_SERVICE_ROLE_KEY')
 SUPABASE_BACKUP_BUCKET = "backups"  # Name des Backup-Buckets
+
+# Encryption Configuration
+BACKUP_ENCRYPTION_KEY = os.environ.get('BACKUP_ENCRYPTION_KEY')  # Optional: Custom key
+BACKUP_ENCRYPTION_ENABLED = os.environ.get('BACKUP_ENCRYPTION_ENABLED', 'false').lower() == 'true'
+
+
+class BackupEncryption:
+    """AES-256 Verschlüsselung für Backup-Dateien"""
+    
+    def __init__(self, key: Optional[str] = None):
+        self.enabled = ENCRYPTION_AVAILABLE
+        self.fernet = None
+        
+        if not ENCRYPTION_AVAILABLE:
+            logger.warning("Cryptography nicht installiert - Verschlüsselung deaktiviert")
+            return
+        
+        # Key generieren oder aus Umgebung laden
+        if key:
+            # Wenn Key angegeben, daraus Fernet-Key ableiten
+            self.fernet = self._derive_key(key)
+        elif BACKUP_ENCRYPTION_KEY:
+            self.fernet = self._derive_key(BACKUP_ENCRYPTION_KEY)
+        else:
+            # Generiere und speichere einen neuen Key
+            self._generate_and_save_key()
+    
+    def _derive_key(self, password: str) -> Fernet:
+        """Leitet einen Fernet-Key aus einem Passwort ab"""
+        salt = b'backup_service_salt_v1'  # Konstantes Salt für Konsistenz
+        kdf = PBKDF2HMAC(
+            algorithm=hashes.SHA256(),
+            length=32,
+            salt=salt,
+            iterations=100000,
+        )
+        key = base64.urlsafe_b64encode(kdf.derive(password.encode()))
+        return Fernet(key)
+    
+    def _generate_and_save_key(self):
+        """Generiert einen neuen Verschlüsselungsschlüssel"""
+        key = Fernet.generate_key()
+        self.fernet = Fernet(key)
+        
+        # Speichere Key in einer Datei (ACHTUNG: In Produktion besser in Secret Manager!)
+        key_file = BACKUP_DIR / ".encryption_key"
+        if not key_file.exists():
+            with open(key_file, 'wb') as f:
+                f.write(key)
+            logger.info("Neuer Verschlüsselungsschlüssel generiert und gespeichert")
+        else:
+            with open(key_file, 'rb') as f:
+                self.fernet = Fernet(f.read())
+    
+    def encrypt(self, data: bytes) -> bytes:
+        """Verschlüsselt Daten"""
+        if not self.enabled or not self.fernet:
+            return data
+        return self.fernet.encrypt(data)
+    
+    def decrypt(self, data: bytes) -> bytes:
+        """Entschlüsselt Daten"""
+        if not self.enabled or not self.fernet:
+            return data
+        try:
+            return self.fernet.decrypt(data)
+        except Exception as e:
+            logger.error(f"Entschlüsselung fehlgeschlagen: {e}")
+            raise ValueError("Entschlüsselung fehlgeschlagen - falscher Schlüssel?")
+    
+    def encrypt_file(self, input_path: Path, output_path: Path) -> bool:
+        """Verschlüsselt eine Datei"""
+        if not self.enabled or not self.fernet:
+            # Keine Verschlüsselung - einfach kopieren
+            shutil.copy(input_path, output_path)
+            return False
+        
+        with open(input_path, 'rb') as f:
+            data = f.read()
+        
+        encrypted = self.encrypt(data)
+        
+        with open(output_path, 'wb') as f:
+            f.write(encrypted)
+        
+        return True
+    
+    def decrypt_file(self, input_path: Path, output_path: Path) -> bool:
+        """Entschlüsselt eine Datei"""
+        if not self.enabled or not self.fernet:
+            shutil.copy(input_path, output_path)
+            return False
+        
+        with open(input_path, 'rb') as f:
+            data = f.read()
+        
+        decrypted = self.decrypt(data)
+        
+        with open(output_path, 'wb') as f:
+            f.write(decrypted)
+        
+        return True
 
 
 class SupabaseStorageClient:
@@ -235,11 +349,68 @@ class BackupService:
         # Initialize Supabase Storage Client
         self.supabase_storage = SupabaseStorageClient()
         
+        # Initialize Encryption
+        self.encryption = BackupEncryption()
+        self.encryption_enabled = BACKUP_ENCRYPTION_ENABLED
+        
         # Create subdirectories
         (self.backup_dir / "database" / "daily").mkdir(parents=True, exist_ok=True)
         (self.backup_dir / "database" / "monthly").mkdir(parents=True, exist_ok=True)
         (self.backup_dir / "storage" / "daily").mkdir(parents=True, exist_ok=True)
         (self.backup_dir / "storage" / "monthly").mkdir(parents=True, exist_ok=True)
+    
+    # ========================================================================
+    # ENCRYPTION SETTINGS
+    # ========================================================================
+    
+    async def get_encryption_settings(self) -> Dict[str, Any]:
+        """Gibt die Verschlüsselungseinstellungen zurück"""
+        settings = await self.db.backup_settings.find_one({"type": "encryption"})
+        
+        return {
+            "enabled": settings.get("enabled", False) if settings else self.encryption_enabled,
+            "available": ENCRYPTION_AVAILABLE,
+            "algorithm": "AES-256 (Fernet)" if ENCRYPTION_AVAILABLE else None,
+            "key_configured": bool(BACKUP_ENCRYPTION_KEY or (BACKUP_DIR / ".encryption_key").exists())
+        }
+    
+    async def update_encryption_settings(self, enabled: bool, user_id: str) -> Dict[str, Any]:
+        """Aktiviert oder deaktiviert die Verschlüsselung"""
+        
+        if not ENCRYPTION_AVAILABLE:
+            return {"status": "error", "message": "Cryptography-Bibliothek nicht installiert"}
+        
+        await self.db.backup_settings.update_one(
+            {"type": "encryption"},
+            {"$set": {
+                "type": "encryption",
+                "enabled": enabled,
+                "updated_at": datetime.now(timezone.utc).isoformat(),
+                "updated_by": user_id
+            }},
+            upsert=True
+        )
+        
+        self.encryption_enabled = enabled
+        
+        await self._log_audit(
+            "ENCRYPTION_SETTINGS_UPDATED",
+            user_id,
+            "settings",
+            "encryption",
+            {"enabled": enabled}
+        )
+        
+        return {
+            "status": "success",
+            "message": f"Verschlüsselung {'aktiviert' if enabled else 'deaktiviert'}",
+            "enabled": enabled
+        }
+    
+    async def _should_encrypt(self) -> bool:
+        """Prüft ob Verschlüsselung aktiviert ist"""
+        settings = await self.get_encryption_settings()
+        return settings.get("enabled", False) and ENCRYPTION_AVAILABLE
     
     # ========================================================================
     # DATABASE BACKUP
@@ -315,11 +486,28 @@ class BackupService:
                 "version": "1.0"
             }
             
+            # Prüfe ob Verschlüsselung aktiviert
+            should_encrypt = await self._should_encrypt()
+            is_encrypted = False
+            
             # Write compressed backup
             json_str = json.dumps(backup_data, ensure_ascii=False, indent=2)
             
             with gzip.open(backup_path, 'wt', encoding='utf-8') as f:
                 f.write(json_str)
+            
+            # Verschlüsseln wenn aktiviert
+            if should_encrypt:
+                # Neuer Pfad für verschlüsselte Datei
+                encrypted_filename = backup_path.stem + ".enc"  # db-backup-xxx.json.gz -> db-backup-xxx.json.enc
+                encrypted_path = backup_path.parent / encrypted_filename
+                self.encryption.encrypt_file(backup_path, encrypted_path)
+                # Original löschen
+                backup_path.unlink()
+                backup_path = encrypted_path
+                filename = encrypted_filename
+                is_encrypted = True
+                logger.info(f"Backup verschlüsselt: {filename}")
             
             file_size = backup_path.stat().st_size
             
@@ -329,7 +517,10 @@ class BackupService:
                 {"$set": {
                     "status": "success",
                     "finished_at": datetime.now(timezone.utc).isoformat(),
-                    "file_size_bytes": file_size
+                    "file_size_bytes": file_size,
+                    "file_name": filename,
+                    "storage_path": str(backup_path.relative_to(self.backup_dir)),
+                    "encrypted": is_encrypted
                 }}
             )
             
@@ -1407,6 +1598,271 @@ class BackupService:
             
         except Exception as e:
             return {"status": "error", "error": str(e)}
+    
+    # ========================================================================
+    # SPEICHERPLATZ-ÜBERWACHUNG
+    # ========================================================================
+    
+    # Konfigurierbare Grenzwerte
+    STORAGE_WARNING_THRESHOLD_MB = int(os.environ.get('BACKUP_WARNING_THRESHOLD_MB', 1024))  # 1GB default
+    STORAGE_CRITICAL_THRESHOLD_MB = int(os.environ.get('BACKUP_CRITICAL_THRESHOLD_MB', 2048))  # 2GB default
+    
+    async def get_storage_stats(self) -> Dict[str, Any]:
+        """Berechnet Speicherstatistiken des Backup-Ordners"""
+        
+        stats = {
+            "total_size_bytes": 0,
+            "total_size_mb": 0,
+            "database_backups": {"count": 0, "size_bytes": 0},
+            "storage_backups": {"count": 0, "size_bytes": 0},
+            "oldest_backup": None,
+            "newest_backup": None,
+            "warning_threshold_mb": self.STORAGE_WARNING_THRESHOLD_MB,
+            "critical_threshold_mb": self.STORAGE_CRITICAL_THRESHOLD_MB,
+            "status": "healthy",
+            "files": []
+        }
+        
+        # Durchsuche alle Backup-Dateien
+        for backup_type in ["database", "storage"]:
+            for retention in ["daily", "monthly"]:
+                folder = self.backup_dir / backup_type / retention
+                if folder.exists():
+                    for file in folder.iterdir():
+                        if file.is_file():
+                            file_size = file.stat().st_size
+                            file_mtime = datetime.fromtimestamp(file.stat().st_mtime, tz=timezone.utc)
+                            
+                            stats["total_size_bytes"] += file_size
+                            stats[f"{backup_type}_backups"]["count"] += 1
+                            stats[f"{backup_type}_backups"]["size_bytes"] += file_size
+                            
+                            stats["files"].append({
+                                "path": str(file),
+                                "name": file.name,
+                                "type": backup_type,
+                                "retention": retention,
+                                "size_bytes": file_size,
+                                "modified": file_mtime.isoformat()
+                            })
+                            
+                            # Track oldest and newest
+                            if stats["oldest_backup"] is None or file_mtime < datetime.fromisoformat(stats["oldest_backup"]):
+                                stats["oldest_backup"] = file_mtime.isoformat()
+                            if stats["newest_backup"] is None or file_mtime > datetime.fromisoformat(stats["newest_backup"]):
+                                stats["newest_backup"] = file_mtime.isoformat()
+        
+        # Berechne MB
+        stats["total_size_mb"] = round(stats["total_size_bytes"] / (1024 * 1024), 2)
+        stats["database_backups"]["size_mb"] = round(stats["database_backups"]["size_bytes"] / (1024 * 1024), 2)
+        stats["storage_backups"]["size_mb"] = round(stats["storage_backups"]["size_bytes"] / (1024 * 1024), 2)
+        
+        # Status bestimmen
+        if stats["total_size_mb"] >= self.STORAGE_CRITICAL_THRESHOLD_MB:
+            stats["status"] = "critical"
+            stats["message"] = f"⚠️ Kritisch: Backup-Speicher über {self.STORAGE_CRITICAL_THRESHOLD_MB} MB!"
+        elif stats["total_size_mb"] >= self.STORAGE_WARNING_THRESHOLD_MB:
+            stats["status"] = "warning"
+            stats["message"] = f"⚠️ Warnung: Backup-Speicher über {self.STORAGE_WARNING_THRESHOLD_MB} MB"
+        else:
+            stats["status"] = "healthy"
+            stats["message"] = "Speicherplatz im grünen Bereich"
+        
+        # Entferne Dateiliste aus der Antwort (zu groß)
+        del stats["files"]
+        
+        return stats
+    
+    async def cleanup_old_backups(self, force: bool = False) -> Dict[str, Any]:
+        """
+        Bereinigt alte Backups basierend auf Retention-Einstellungen.
+        force=True: Löscht auch wenn unter dem Grenzwert
+        """
+        
+        settings = await self.get_schedule_settings()
+        retention_days = settings.get("retention_days", 30)
+        retention_months = settings.get("retention_months", 12)
+        
+        now = datetime.now(timezone.utc)
+        deleted_files = []
+        freed_bytes = 0
+        
+        # Daily Backups bereinigen
+        for backup_type in ["database", "storage"]:
+            daily_folder = self.backup_dir / backup_type / "daily"
+            if daily_folder.exists():
+                for file in daily_folder.iterdir():
+                    if file.is_file():
+                        file_mtime = datetime.fromtimestamp(file.stat().st_mtime, tz=timezone.utc)
+                        age_days = (now - file_mtime).days
+                        
+                        if age_days > retention_days:
+                            file_size = file.stat().st_size
+                            
+                            # Lösche aus Supabase wenn vorhanden
+                            if self.supabase_storage.enabled:
+                                remote_path = f"{backup_type}/daily/{file.name}"
+                                await self.supabase_storage.delete_backup(remote_path)
+                            
+                            # Lösche lokal
+                            file.unlink()
+                            deleted_files.append({
+                                "name": file.name,
+                                "type": backup_type,
+                                "age_days": age_days,
+                                "size_bytes": file_size
+                            })
+                            freed_bytes += file_size
+                            logger.info(f"Deleted old daily backup: {file.name} (age: {age_days} days)")
+            
+            # Monthly Backups bereinigen
+            monthly_folder = self.backup_dir / backup_type / "monthly"
+            if monthly_folder.exists():
+                for file in monthly_folder.iterdir():
+                    if file.is_file():
+                        file_mtime = datetime.fromtimestamp(file.stat().st_mtime, tz=timezone.utc)
+                        age_months = (now.year - file_mtime.year) * 12 + (now.month - file_mtime.month)
+                        
+                        if age_months > retention_months:
+                            file_size = file.stat().st_size
+                            
+                            # Lösche aus Supabase
+                            if self.supabase_storage.enabled:
+                                remote_path = f"{backup_type}/monthly/{file.name}"
+                                await self.supabase_storage.delete_backup(remote_path)
+                            
+                            # Lösche lokal
+                            file.unlink()
+                            deleted_files.append({
+                                "name": file.name,
+                                "type": backup_type,
+                                "age_months": age_months,
+                                "size_bytes": file_size
+                            })
+                            freed_bytes += file_size
+                            logger.info(f"Deleted old monthly backup: {file.name} (age: {age_months} months)")
+        
+        # Backup-Jobs in DB aktualisieren
+        for deleted in deleted_files:
+            await self.db.backup_jobs.update_one(
+                {"file_name": deleted["name"]},
+                {"$set": {"status": "deleted", "deleted_at": now.isoformat()}}
+            )
+        
+        # Audit Log
+        if deleted_files:
+            await self._log_audit(
+                "BACKUP_CLEANUP",
+                None,
+                "system",
+                None,
+                {
+                    "deleted_count": len(deleted_files),
+                    "freed_mb": round(freed_bytes / (1024 * 1024), 2),
+                    "deleted_files": [d["name"] for d in deleted_files]
+                }
+            )
+        
+        return {
+            "status": "success",
+            "deleted_count": len(deleted_files),
+            "freed_bytes": freed_bytes,
+            "freed_mb": round(freed_bytes / (1024 * 1024), 2),
+            "deleted_files": deleted_files
+        }
+    
+    async def emergency_cleanup(self, target_mb: int = 500) -> Dict[str, Any]:
+        """
+        Notfall-Bereinigung: Löscht älteste Backups bis Zielgröße erreicht.
+        Behält mindestens 1 Backup von jedem Typ.
+        """
+        
+        stats = await self.get_storage_stats()
+        current_mb = stats["total_size_mb"]
+        
+        if current_mb <= target_mb:
+            return {
+                "status": "success",
+                "message": f"Kein Cleanup nötig. Aktuell: {current_mb} MB, Ziel: {target_mb} MB",
+                "deleted_count": 0
+            }
+        
+        # Sammle alle Backup-Dateien mit Metadaten
+        all_files = []
+        for backup_type in ["database", "storage"]:
+            for retention in ["daily", "monthly"]:
+                folder = self.backup_dir / backup_type / retention
+                if folder.exists():
+                    for file in folder.iterdir():
+                        if file.is_file():
+                            all_files.append({
+                                "path": file,
+                                "type": backup_type,
+                                "retention": retention,
+                                "size_bytes": file.stat().st_size,
+                                "mtime": file.stat().st_mtime
+                            })
+        
+        # Sortiere nach Alter (älteste zuerst)
+        all_files.sort(key=lambda x: x["mtime"])
+        
+        deleted_files = []
+        freed_bytes = 0
+        
+        # Behalte mindestens je 1 DB und 1 Storage Backup
+        db_count = sum(1 for f in all_files if f["type"] == "database")
+        storage_count = sum(1 for f in all_files if f["type"] == "storage")
+        
+        for file_info in all_files:
+            if stats["total_size_mb"] - (freed_bytes / (1024 * 1024)) <= target_mb:
+                break
+            
+            # Mindestens 1 Backup von jedem Typ behalten
+            if file_info["type"] == "database" and db_count <= 1:
+                continue
+            if file_info["type"] == "storage" and storage_count <= 1:
+                continue
+            
+            file_path = file_info["path"]
+            
+            # Lösche aus Supabase
+            if self.supabase_storage.enabled:
+                remote_path = f"{file_info['type']}/{file_info['retention']}/{file_path.name}"
+                await self.supabase_storage.delete_backup(remote_path)
+            
+            # Lösche lokal
+            file_path.unlink()
+            freed_bytes += file_info["size_bytes"]
+            deleted_files.append(file_path.name)
+            
+            if file_info["type"] == "database":
+                db_count -= 1
+            else:
+                storage_count -= 1
+            
+            logger.warning(f"Emergency cleanup: deleted {file_path.name}")
+        
+        # Audit Log
+        await self._log_audit(
+            "EMERGENCY_CLEANUP",
+            None,
+            "system",
+            None,
+            {
+                "deleted_count": len(deleted_files),
+                "freed_mb": round(freed_bytes / (1024 * 1024), 2),
+                "target_mb": target_mb,
+                "deleted_files": deleted_files
+            }
+        )
+        
+        return {
+            "status": "success",
+            "message": f"Notfall-Bereinigung abgeschlossen. {round(freed_bytes / (1024 * 1024), 2)} MB freigegeben.",
+            "deleted_count": len(deleted_files),
+            "freed_mb": round(freed_bytes / (1024 * 1024), 2),
+            "deleted_files": deleted_files
+        }
     
     # ========================================================================
     # BACKUP SCHEDULE SETTINGS

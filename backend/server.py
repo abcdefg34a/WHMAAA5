@@ -4263,6 +4263,56 @@ async def update_backup_schedule_route(
     data = await request.json()
     return await backup_service.update_schedule_settings(data, current_user.get("id"))
 
+@api_router.get("/admin/backups/storage-stats")
+async def get_storage_stats_route(current_user: dict = Depends(get_current_user)):
+    """Speicherplatz-Statistiken - nur Admin"""
+    if current_user.get("role") != "admin":
+        raise HTTPException(status_code=403, detail="Nur Admins können Backups verwalten")
+    
+    return await backup_service.get_storage_stats()
+
+@api_router.post("/admin/backups/cleanup")
+async def cleanup_backups_route(current_user: dict = Depends(get_current_user)):
+    """Alte Backups bereinigen - nur Admin"""
+    if current_user.get("role") != "admin":
+        raise HTTPException(status_code=403, detail="Nur Admins können Backups verwalten")
+    
+    return await backup_service.cleanup_old_backups()
+
+@api_router.post("/admin/backups/emergency-cleanup")
+async def emergency_cleanup_route(
+    request: Request,
+    current_user: dict = Depends(get_current_user)
+):
+    """Notfall-Bereinigung - nur Admin"""
+    if current_user.get("role") != "admin":
+        raise HTTPException(status_code=403, detail="Nur Admins können Backups verwalten")
+    
+    data = await request.json()
+    target_mb = data.get("target_mb", 500)
+    return await backup_service.emergency_cleanup(target_mb)
+
+@api_router.get("/admin/backups/encryption")
+async def get_encryption_settings_route(current_user: dict = Depends(get_current_user)):
+    """Verschlüsselungseinstellungen abrufen - nur Admin"""
+    if current_user.get("role") != "admin":
+        raise HTTPException(status_code=403, detail="Nur Admins können Backups verwalten")
+    
+    return await backup_service.get_encryption_settings()
+
+@api_router.put("/admin/backups/encryption")
+async def update_encryption_settings_route(
+    request: Request,
+    current_user: dict = Depends(get_current_user)
+):
+    """Verschlüsselung aktivieren/deaktivieren - nur Admin"""
+    if current_user.get("role") != "admin":
+        raise HTTPException(status_code=403, detail="Nur Admins können Backups verwalten")
+    
+    data = await request.json()
+    enabled = data.get("enabled", False)
+    return await backup_service.update_encryption_settings(enabled, current_user.get("id"))
+
 @api_router.get("/admin/backups")
 async def list_backups_route(
     backup_type: Optional[str] = None,
