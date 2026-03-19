@@ -151,30 +151,76 @@ class SupabaseStorageClient:
             return False
     
     async def list_backups(self) -> List[Dict[str, Any]]:
-        """Listet alle Backups in Supabase Storage"""
+        """Listet alle Backups in Supabase Storage mit Details"""
         if not self.enabled or not self.client:
             return []
         
         try:
-            # Liste alle Dateien im Bucket
             files = []
             for folder in ['database/daily', 'database/monthly', 'storage/daily', 'storage/monthly']:
                 try:
                     folder_files = self.client.storage.from_(SUPABASE_BACKUP_BUCKET).list(folder)
                     for f in folder_files:
                         if f.get('name') and not f.get('name').endswith('/'):
+                            # Bestimme Backup-Typ aus Pfad
+                            backup_type = 'database' if 'database' in folder else 'storage'
+                            retention_class = 'monthly' if 'monthly' in folder else 'daily'
+                            
+                            # Parse Datum aus Dateiname (z.B. db-backup-2026-03-19-10-00.json.gz)
+                            name = f.get('name', '')
+                            created_at = f.get('created_at')
+                            
+                            # Berechne Größe
+                            metadata = f.get('metadata', {})
+                            size = metadata.get('size', 0) if metadata else 0
+                            
                             files.append({
-                                "name": f.get('name'),
-                                "path": f"{folder}/{f.get('name')}",
-                                "size": f.get('metadata', {}).get('size', 0),
-                                "created_at": f.get('created_at')
+                                "name": name,
+                                "path": f"{folder}/{name}",
+                                "folder": folder,
+                                "backup_type": backup_type,
+                                "retention_class": retention_class,
+                                "size_bytes": size,
+                                "created_at": created_at,
+                                "id": f.get('id', name.replace('.', '_'))
                             })
-                except:
+                except Exception as folder_err:
+                    logger.warning(f"Fehler beim Auflisten von {folder}: {folder_err}")
                     pass
+            
+            # Sortiere nach Erstellungsdatum (neueste zuerst)
+            files.sort(key=lambda x: x.get('created_at', ''), reverse=True)
             return files
+            
         except Exception as e:
             logger.error(f"❌ Supabase Auflistung fehlgeschlagen: {e}")
             return []
+    
+    async def download_backup_to_file(self, remote_path: str, local_path: Path) -> bool:
+        """Lädt ein Backup von Supabase herunter und speichert es lokal"""
+        if not self.enabled or not self.client:
+            return False
+        
+        try:
+            # Download von Supabase
+            response = self.client.storage.from_(SUPABASE_BACKUP_BUCKET).download(remote_path)
+            
+            if response:
+                # Stelle sicher, dass das Verzeichnis existiert
+                local_path.parent.mkdir(parents=True, exist_ok=True)
+                
+                # Speichere Datei
+                with open(local_path, 'wb') as f:
+                    f.write(response)
+                
+                logger.info(f"✅ Backup von Supabase heruntergeladen: {remote_path} -> {local_path}")
+                return True
+            
+            return False
+            
+        except Exception as e:
+            logger.error(f"❌ Download von Supabase fehlgeschlagen: {e}")
+            return False
 
 
 class BackupService:
@@ -906,6 +952,254 @@ class BackupService:
             "deleted_daily": deleted_daily,
             "deleted_monthly": deleted_monthly
         }
+    
+    # ========================================================================
+    # CLOUD BACKUP FUNKTIONEN (Supabase)
+    # ========================================================================
+    
+    async def list_cloud_backups(self) -> List[Dict[str, Any]]:
+        """Listet alle Backups in Supabase Cloud"""
+        if not self.supabase_storage.enabled:
+            return []
+        
+        cloud_backups = await self.supabase_storage.list_backups()
+        
+        # Prüfe welche auch lokal vorhanden sind
+        for backup in cloud_backups:
+            local_path = self.backup_dir / backup['path']
+            backup['local_available'] = local_path.exists()
+        
+        return cloud_backups
+    
+    async def restore_from_cloud(
+        self,
+        cloud_path: str,
+        triggered_by_user_id: str,
+        confirm: bool = False
+    ) -> Dict[str, Any]:
+        """
+        Stellt ein Backup direkt von Supabase Cloud wieder her.
+        Nützlich wenn lokale Backups verloren gegangen sind.
+        """
+        if not confirm:
+            return {
+                "status": "confirmation_required",
+                "message": "Diese Aktion lädt das Backup von der Cloud und überschreibt bestehende Daten. Setzen Sie confirm=true um fortzufahren."
+            }
+        
+        if not self.supabase_storage.enabled:
+            return {"status": "error", "message": "Supabase Storage ist nicht konfiguriert"}
+        
+        # Bestimme Backup-Typ aus Pfad
+        is_database = 'database' in cloud_path
+        backup_type = 'database' if is_database else 'storage'
+        
+        # Create restore job
+        restore_id = str(datetime.now(timezone.utc).strftime("%Y%m%d%H%M%S"))
+        restore_job = {
+            "id": restore_id,
+            "backup_job_id": f"cloud_{cloud_path.replace('/', '_')}",
+            "restore_type": backup_type,
+            "source": "supabase_cloud",
+            "cloud_path": cloud_path,
+            "status": "running",
+            "started_at": datetime.now(timezone.utc).isoformat(),
+            "finished_at": None,
+            "triggered_by_user_id": triggered_by_user_id,
+            "error_message": None,
+            "created_at": datetime.now(timezone.utc).isoformat()
+        }
+        
+        await self.db.restore_jobs.insert_one(restore_job)
+        
+        await self._log_audit(
+            "CLOUD_RESTORE_STARTED",
+            triggered_by_user_id,
+            "restore",
+            restore_id,
+            {
+                "cloud_path": cloud_path,
+                "backup_type": backup_type,
+                "warning": "Backup wird von Supabase Cloud geladen"
+            }
+        )
+        
+        try:
+            logger.info(f"Starting cloud restore from: {cloud_path}")
+            
+            # Temporärer lokaler Pfad
+            temp_path = BACKUP_TEMP_DIR / Path(cloud_path).name
+            
+            # Download von Supabase
+            success = await self.supabase_storage.download_backup_to_file(cloud_path, temp_path)
+            
+            if not success:
+                raise Exception("Download von Supabase fehlgeschlagen")
+            
+            logger.info(f"Cloud backup downloaded to: {temp_path}")
+            
+            if is_database:
+                # Datenbank-Restore
+                result = await self._restore_database_from_file(temp_path, triggered_by_user_id, restore_id)
+            else:
+                # Storage-Restore
+                result = await self._restore_storage_from_file(temp_path, triggered_by_user_id, restore_id)
+            
+            # Cleanup temp file
+            if temp_path.exists():
+                temp_path.unlink()
+            
+            # Update restore job
+            await self.db.restore_jobs.update_one(
+                {"id": restore_id},
+                {"$set": {
+                    "status": "success" if result.get("status") == "success" else "failed",
+                    "finished_at": datetime.now(timezone.utc).isoformat(),
+                    "error_message": result.get("error")
+                }}
+            )
+            
+            if result.get("status") == "success":
+                await self._log_audit(
+                    "CLOUD_RESTORE_SUCCESS",
+                    triggered_by_user_id,
+                    "restore",
+                    restore_id,
+                    {
+                        "cloud_path": cloud_path,
+                        "collections_restored": result.get("collections_restored", [])
+                    }
+                )
+            
+            return {
+                "status": result.get("status", "error"),
+                "restore_id": restore_id,
+                "cloud_path": cloud_path,
+                "backup_type": backup_type,
+                "collections_restored": result.get("collections_restored", []),
+                "message": result.get("message", "Wiederherstellung von Cloud abgeschlossen")
+            }
+            
+        except Exception as e:
+            error_msg = str(e)
+            logger.error(f"Cloud restore failed: {error_msg}")
+            
+            await self.db.restore_jobs.update_one(
+                {"id": restore_id},
+                {"$set": {
+                    "status": "failed",
+                    "finished_at": datetime.now(timezone.utc).isoformat(),
+                    "error_message": error_msg
+                }}
+            )
+            
+            await self._log_audit(
+                "CLOUD_RESTORE_FAILED",
+                triggered_by_user_id,
+                "restore",
+                restore_id,
+                {"cloud_path": cloud_path, "error": error_msg}
+            )
+            
+            return {"status": "error", "message": error_msg, "restore_id": restore_id}
+    
+    async def _restore_database_from_file(
+        self,
+        backup_path: Path,
+        triggered_by_user_id: str,
+        restore_id: str
+    ) -> Dict[str, Any]:
+        """Interne Funktion: Stellt Datenbank aus einer Backup-Datei wieder her"""
+        try:
+            # Read backup
+            with gzip.open(backup_path, 'rt', encoding='utf-8') as f:
+                backup_data = json.load(f)
+            
+            metadata = backup_data.pop("_backup_metadata", {})
+            
+            # Helper function to convert $oid and $date fields
+            def convert_bson_fields(doc):
+                from bson import ObjectId
+                from datetime import datetime as dt
+                
+                if isinstance(doc, dict):
+                    if '$oid' in doc and len(doc) == 1:
+                        return ObjectId(doc['$oid'])
+                    if '$date' in doc and len(doc) == 1:
+                        date_val = doc['$date']
+                        if isinstance(date_val, str):
+                            return dt.fromisoformat(date_val.replace('Z', '+00:00'))
+                        elif isinstance(date_val, dict) and '$numberLong' in date_val:
+                            return dt.fromtimestamp(int(date_val['$numberLong']) / 1000)
+                        return date_val
+                    return {k: convert_bson_fields(v) for k, v in doc.items()}
+                elif isinstance(doc, list):
+                    return [convert_bson_fields(item) for item in doc]
+                return doc
+            
+            collections_restored = []
+            
+            for collection_name, documents in backup_data.items():
+                if not isinstance(documents, list):
+                    continue
+                
+                collection = self.db[collection_name]
+                
+                if collection_name not in ["backup_jobs", "restore_jobs"]:
+                    await collection.delete_many({})
+                    
+                    if documents:
+                        converted_docs = [convert_bson_fields(doc) for doc in documents]
+                        
+                        success_count = 0
+                        for doc in converted_docs:
+                            try:
+                                await collection.insert_one(doc)
+                                success_count += 1
+                            except Exception as e:
+                                logger.warning(f"Error inserting document: {e}")
+                        
+                        logger.info(f"  Restored {success_count}/{len(documents)} documents to {collection_name}")
+                        collections_restored.append(collection_name)
+            
+            return {
+                "status": "success",
+                "collections_restored": collections_restored,
+                "message": f"Datenbank wiederhergestellt: {len(collections_restored)} Collections"
+            }
+            
+        except Exception as e:
+            return {"status": "error", "error": str(e)}
+    
+    async def _restore_storage_from_file(
+        self,
+        backup_path: Path,
+        triggered_by_user_id: str,
+        restore_id: str
+    ) -> Dict[str, Any]:
+        """Interne Funktion: Stellt Storage-Dateien aus einem Backup wieder her"""
+        try:
+            # Extrahiere ZIP-Datei
+            storage_dir = self.backup_dir.parent / "storage"
+            storage_dir.mkdir(parents=True, exist_ok=True)
+            
+            files_restored = 0
+            with zipfile.ZipFile(backup_path, 'r') as zf:
+                for file_info in zf.infolist():
+                    if not file_info.is_dir():
+                        zf.extract(file_info, storage_dir)
+                        files_restored += 1
+            
+            logger.info(f"Storage restore completed: {files_restored} files")
+            
+            return {
+                "status": "success",
+                "files_restored": files_restored,
+                "message": f"Storage wiederhergestellt: {files_restored} Dateien"
+            }
+            
+        except Exception as e:
+            return {"status": "error", "error": str(e)}
     
     # ========================================================================
     # SYSTEM STATUS

@@ -4183,6 +4183,39 @@ async def get_backup_system_status(current_user: dict = Depends(get_current_user
     
     return await backup_service.get_system_status()
 
+@api_router.get("/admin/backups/cloud")
+async def list_cloud_backups_route(current_user: dict = Depends(get_current_user)):
+    """Liste aller Backups in Supabase Cloud - nur Admin"""
+    if current_user.get("role") != "admin":
+        raise HTTPException(status_code=403, detail="Nur Admins können Backups verwalten")
+    
+    cloud_backups = await backup_service.list_cloud_backups()
+    return cloud_backups
+
+@api_router.post("/admin/backups/cloud/restore")
+async def restore_from_cloud_route(
+    request: Request,
+    current_user: dict = Depends(get_current_user)
+):
+    """Backup direkt von Supabase Cloud wiederherstellen - nur Admin"""
+    if current_user.get("role") != "admin":
+        raise HTTPException(status_code=403, detail="Nur Admins können Backups wiederherstellen")
+    
+    data = await request.json()
+    cloud_path = data.get("cloud_path")
+    confirm = data.get("confirm", False)
+    
+    if not cloud_path:
+        raise HTTPException(status_code=400, detail="cloud_path ist erforderlich")
+    
+    result = await backup_service.restore_from_cloud(
+        cloud_path=cloud_path,
+        triggered_by_user_id=current_user.get("id"),
+        confirm=confirm
+    )
+    
+    return result
+
 @api_router.get("/admin/backups")
 async def list_backups_route(
     backup_type: Optional[str] = None,

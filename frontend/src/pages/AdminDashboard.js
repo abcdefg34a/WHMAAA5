@@ -69,6 +69,13 @@ export const AdminDashboard = () => {
   const [restoreDialogOpen, setRestoreDialogOpen] = useState(false);
   const [selectedBackup, setSelectedBackup] = useState(null);
   const [deleteBackupDialogOpen, setDeleteBackupDialogOpen] = useState(false);
+  
+  // Cloud Backup State
+  const [cloudBackups, setCloudBackups] = useState([]);
+  const [cloudBackupsLoading, setCloudBackupsLoading] = useState(false);
+  const [cloudRestoreDialogOpen, setCloudRestoreDialogOpen] = useState(false);
+  const [selectedCloudBackup, setSelectedCloudBackup] = useState(null);
+  const [showCloudBackups, setShowCloudBackups] = useState(false);
 
   useEffect(() => {
     fetchData();
@@ -309,6 +316,48 @@ export const AdminDashboard = () => {
       hour: '2-digit',
       minute: '2-digit'
     });
+  };
+
+  // ==================== CLOUD BACKUP FUNKTIONEN ====================
+  
+  const fetchCloudBackups = async () => {
+    setCloudBackupsLoading(true);
+    try {
+      const response = await axios.get(`${API}/admin/backups/cloud`);
+      setCloudBackups(response.data);
+    } catch (error) {
+      console.error('Error fetching cloud backups:', error);
+      toast.error('Fehler beim Laden der Cloud-Backups');
+    } finally {
+      setCloudBackupsLoading(false);
+    }
+  };
+
+  const handleRestoreFromCloud = async () => {
+    if (!selectedCloudBackup) return;
+    
+    setActionLoading(true);
+    try {
+      toast.info('Backup wird von Supabase Cloud geladen...');
+      const response = await axios.post(`${API}/admin/backups/cloud/restore`, {
+        cloud_path: selectedCloudBackup.path,
+        confirm: true
+      });
+      
+      if (response.data.status === 'success') {
+        toast.success(`Cloud-Wiederherstellung erfolgreich! ${response.data.collections_restored?.length || 0} Collections wiederhergestellt.`);
+        setCloudRestoreDialogOpen(false);
+        setSelectedCloudBackup(null);
+        fetchBackups();
+        fetchBackupStatus();
+      } else {
+        toast.error('Wiederherstellung fehlgeschlagen: ' + (response.data.message || 'Unbekannter Fehler'));
+      }
+    } catch (error) {
+      toast.error(error.response?.data?.detail || 'Cloud-Wiederherstellung fehlgeschlagen');
+    } finally {
+      setActionLoading(false);
+    }
   };
 
   const handleExportExcel = async () => {
@@ -1451,6 +1500,121 @@ export const AdminDashboard = () => {
                 </CardContent>
               </Card>
 
+              {/* Cloud Backups Section */}
+              <Card>
+                <CardHeader className="flex flex-row items-center justify-between">
+                  <div>
+                    <CardTitle className="flex items-center gap-2">
+                      <CloudDownload className="h-5 w-5 text-blue-600" />
+                      Cloud-Backups (Supabase)
+                    </CardTitle>
+                    <CardDescription>
+                      Backups in der Cloud - für Notfall-Wiederherstellung wenn Server-Daten verloren
+                    </CardDescription>
+                  </div>
+                  <div className="flex gap-2">
+                    <Button 
+                      variant="outline" 
+                      onClick={() => {
+                        setShowCloudBackups(!showCloudBackups);
+                        if (!showCloudBackups && cloudBackups.length === 0) {
+                          fetchCloudBackups();
+                        }
+                      }}
+                    >
+                      {showCloudBackups ? 'Ausblenden' : 'Cloud-Backups anzeigen'}
+                    </Button>
+                  </div>
+                </CardHeader>
+                
+                {showCloudBackups && (
+                  <CardContent>
+                    {cloudBackupsLoading ? (
+                      <div className="flex justify-center py-8">
+                        <Loader2 className="h-8 w-8 animate-spin text-slate-400" />
+                      </div>
+                    ) : cloudBackups.length === 0 ? (
+                      <div className="text-center py-8 text-slate-500">
+                        <CloudDownload className="h-12 w-12 mx-auto mb-2 text-slate-300" />
+                        <p>Keine Cloud-Backups gefunden</p>
+                        <Button variant="outline" className="mt-4" onClick={fetchCloudBackups}>
+                          <RefreshCw className="h-4 w-4 mr-2" />
+                          Erneut prüfen
+                        </Button>
+                      </div>
+                    ) : (
+                      <div className="space-y-4">
+                        <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 text-sm text-blue-800">
+                          <strong>Notfall-Wiederherstellung:</strong> Falls Ihre lokalen Daten verloren gegangen sind, 
+                          können Sie hier ein Backup direkt aus der Supabase Cloud wiederherstellen.
+                        </div>
+                        
+                        <div className="overflow-x-auto">
+                          <table className="w-full text-sm">
+                            <thead>
+                              <tr className="border-b text-left">
+                                <th className="py-3 px-2 font-semibold">Typ</th>
+                                <th className="py-3 px-2 font-semibold">Dateiname</th>
+                                <th className="py-3 px-2 font-semibold">Klasse</th>
+                                <th className="py-3 px-2 font-semibold">Lokal</th>
+                                <th className="py-3 px-2 font-semibold">Erstellt</th>
+                                <th className="py-3 px-2 font-semibold">Aktion</th>
+                              </tr>
+                            </thead>
+                            <tbody>
+                              {cloudBackups.map((backup, index) => (
+                                <tr key={index} className="border-b hover:bg-slate-50">
+                                  <td className="py-3 px-2">
+                                    <Badge variant={backup.backup_type === 'database' ? 'default' : 'secondary'}>
+                                      {backup.backup_type === 'database' ? 'Datenbank' : 'Storage'}
+                                    </Badge>
+                                  </td>
+                                  <td className="py-3 px-2 font-mono text-xs">{backup.name}</td>
+                                  <td className="py-3 px-2">
+                                    <Badge variant="outline">
+                                      {backup.retention_class === 'daily' ? 'Täglich' : 'Monatlich'}
+                                    </Badge>
+                                  </td>
+                                  <td className="py-3 px-2">
+                                    {backup.local_available ? (
+                                      <Badge className="bg-green-100 text-green-800">Vorhanden</Badge>
+                                    ) : (
+                                      <Badge className="bg-amber-100 text-amber-800">Nur Cloud</Badge>
+                                    )}
+                                  </td>
+                                  <td className="py-3 px-2">{formatDate(backup.created_at)}</td>
+                                  <td className="py-3 px-2">
+                                    <Button 
+                                      size="sm" 
+                                      variant="outline"
+                                      className="text-blue-600 border-blue-300 hover:bg-blue-50"
+                                      onClick={() => {
+                                        setSelectedCloudBackup(backup);
+                                        setCloudRestoreDialogOpen(true);
+                                      }}
+                                    >
+                                      <RefreshCw className="h-4 w-4 mr-1" />
+                                      Von Cloud wiederherstellen
+                                    </Button>
+                                  </td>
+                                </tr>
+                              ))}
+                            </tbody>
+                          </table>
+                        </div>
+                        
+                        <div className="flex justify-end">
+                          <Button variant="outline" size="sm" onClick={fetchCloudBackups}>
+                            <RefreshCw className="h-4 w-4 mr-2" />
+                            Liste aktualisieren
+                          </Button>
+                        </div>
+                      </div>
+                    )}
+                  </CardContent>
+                )}
+              </Card>
+
               {/* System Status */}
               {backupStatus?.last_error && (
                 <Card className="border-red-200 bg-red-50">
@@ -1804,6 +1968,50 @@ export const AdminDashboard = () => {
             >
               {actionLoading ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Trash2 className="h-4 w-4 mr-2" />}
               Endgültig löschen
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      {/* Cloud Restore Confirmation Dialog */}
+      <AlertDialog open={cloudRestoreDialogOpen} onOpenChange={setCloudRestoreDialogOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle className="flex items-center gap-2 text-blue-600">
+              <CloudDownload className="h-5 w-5" />
+              Von Cloud wiederherstellen
+            </AlertDialogTitle>
+            <AlertDialogDescription className="space-y-3">
+              <div className="bg-amber-50 border border-amber-200 rounded-lg p-3 text-amber-800">
+                <strong>⚠️ Warnung:</strong> Diese Aktion lädt das Backup von Supabase Cloud und überschreibt bestehende Daten!
+              </div>
+              <p>
+                Möchten Sie wirklich das Cloud-Backup <strong>{selectedCloudBackup?.name}</strong> wiederherstellen?
+              </p>
+              <p className="text-sm text-slate-500">
+                Pfad: {selectedCloudBackup?.path}
+              </p>
+              {selectedCloudBackup?.local_available && (
+                <p className="text-sm text-green-600">
+                  ✓ Dieses Backup ist auch lokal verfügbar. Sie können stattdessen das lokale Backup verwenden.
+                </p>
+              )}
+              {!selectedCloudBackup?.local_available && (
+                <p className="text-sm text-amber-600">
+                  ⚠ Dieses Backup existiert NUR in der Cloud und nicht mehr lokal.
+                </p>
+              )}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel onClick={() => setSelectedCloudBackup(null)}>Abbrechen</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={handleRestoreFromCloud}
+              className="bg-blue-600 hover:bg-blue-700"
+              disabled={actionLoading}
+            >
+              {actionLoading ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <CloudDownload className="h-4 w-4 mr-2" />}
+              Ja, von Cloud wiederherstellen
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
