@@ -15,7 +15,7 @@ import { Textarea } from '../components/ui/textarea';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '../components/ui/card';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../components/ui/select';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '../components/ui/tabs';
-import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '../components/ui/dialog';
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogFooter } from '../components/ui/dialog';
 import { Badge } from '../components/ui/badge';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger, DropdownMenuSeparator } from '../components/ui/dropdown-menu';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '../components/ui/alert-dialog';
@@ -76,6 +76,15 @@ export const AdminDashboard = () => {
   const [cloudRestoreDialogOpen, setCloudRestoreDialogOpen] = useState(false);
   const [selectedCloudBackup, setSelectedCloudBackup] = useState(null);
   const [showCloudBackups, setShowCloudBackups] = useState(false);
+  
+  // Backup Health/Verification State
+  const [backupHealth, setBackupHealth] = useState(null);
+  const [verifyingBackups, setVerifyingBackups] = useState(false);
+  
+  // Backup Schedule State
+  const [scheduleSettings, setScheduleSettings] = useState(null);
+  const [scheduleDialogOpen, setScheduleDialogOpen] = useState(false);
+  const [savingSchedule, setSavingSchedule] = useState(false);
 
   useEffect(() => {
     fetchData();
@@ -100,6 +109,8 @@ export const AdminDashboard = () => {
     if (activeTab === 'backups') {
       fetchBackups();
       fetchBackupStatus();
+      fetchBackupHealth();
+      fetchScheduleSettings();
     }
   }, [activeTab]);
 
@@ -357,6 +368,98 @@ export const AdminDashboard = () => {
       toast.error(error.response?.data?.detail || 'Cloud-Wiederherstellung fehlgeschlagen');
     } finally {
       setActionLoading(false);
+    }
+  };
+
+  // ==================== BACKUP VERIFIZIERUNG ====================
+  
+  const fetchBackupHealth = async () => {
+    try {
+      const response = await axios.get(`${API}/admin/backups/health`);
+      setBackupHealth(response.data);
+    } catch (error) {
+      console.error('Error fetching backup health:', error);
+    }
+  };
+
+  const handleVerifyAllBackups = async () => {
+    setVerifyingBackups(true);
+    try {
+      toast.info('Alle Backups werden überprüft...');
+      const response = await axios.post(`${API}/admin/backups/verify-all`);
+      
+      if (response.data.invalid === 0) {
+        toast.success(`✅ Alle ${response.data.valid} Backups sind gültig!`);
+      } else {
+        toast.warning(`⚠️ ${response.data.invalid} von ${response.data.total} Backups sind beschädigt!`);
+      }
+      
+      fetchBackupHealth();
+      fetchBackups();
+    } catch (error) {
+      toast.error('Verifizierung fehlgeschlagen');
+    } finally {
+      setVerifyingBackups(false);
+    }
+  };
+
+  const handleVerifySingleBackup = async (backupId) => {
+    try {
+      toast.info('Backup wird überprüft...');
+      const response = await axios.post(`${API}/admin/backups/${backupId}/verify`);
+      
+      if (response.data.valid) {
+        toast.success('✅ Backup ist gültig!');
+      } else {
+        toast.error(`❌ Backup beschädigt: ${response.data.errors?.[0] || 'Unbekannter Fehler'}`);
+      }
+      
+      fetchBackups();
+      fetchBackupHealth();
+    } catch (error) {
+      toast.error('Verifizierung fehlgeschlagen');
+    }
+  };
+
+  // ==================== BACKUP ZEITPLAN ====================
+  
+  const fetchScheduleSettings = async () => {
+    try {
+      const response = await axios.get(`${API}/admin/backups/schedule`);
+      setScheduleSettings(response.data);
+    } catch (error) {
+      console.error('Error fetching schedule settings:', error);
+    }
+  };
+
+  const handleSaveSchedule = async () => {
+    setSavingSchedule(true);
+    try {
+      const response = await axios.put(`${API}/admin/backups/schedule`, scheduleSettings);
+      
+      if (response.data.status === 'success') {
+        toast.success('Zeitplan-Einstellungen gespeichert!');
+        setScheduleDialogOpen(false);
+        fetchBackupStatus();
+      } else {
+        toast.error(response.data.message || 'Fehler beim Speichern');
+      }
+    } catch (error) {
+      toast.error(error.response?.data?.detail || 'Fehler beim Speichern');
+    } finally {
+      setSavingSchedule(false);
+    }
+  };
+
+  const formatTimeString = (hour, minute) => {
+    return `${hour.toString().padStart(2, '0')}:${minute.toString().padStart(2, '0')} Uhr`;
+  };
+
+  const getFrequencyLabel = (freq) => {
+    switch (freq) {
+      case 'every_6h': return 'Alle 6 Stunden';
+      case 'every_12h': return 'Alle 12 Stunden';
+      default: return 'Täglich';
     }
   };
 
@@ -1333,6 +1436,89 @@ export const AdminDashboard = () => {
                 </div>
               )}
 
+              {/* Backup Health Warning */}
+              {backupHealth?.health_status === 'warning' && (
+                <div className="bg-red-50 border border-red-200 rounded-lg p-4">
+                  <div className="flex items-center gap-3">
+                    <AlertCircle className="h-5 w-5 text-red-600" />
+                    <div className="flex-1">
+                      <p className="font-medium text-red-900">⚠️ Beschädigte Backups gefunden!</p>
+                      <p className="text-sm text-red-700">
+                        {backupHealth.verified_invalid} von {backupHealth.total_backups} Backups sind beschädigt oder nicht lesbar.
+                      </p>
+                      {backupHealth.invalid_backups?.length > 0 && (
+                        <ul className="mt-2 text-sm text-red-600">
+                          {backupHealth.invalid_backups.map((b, i) => (
+                            <li key={i}>• {b.filename}: {b.error}</li>
+                          ))}
+                        </ul>
+                      )}
+                    </div>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="border-red-300 text-red-600 hover:bg-red-100"
+                      onClick={handleVerifyAllBackups}
+                      disabled={verifyingBackups}
+                    >
+                      {verifyingBackups ? <Loader2 className="h-4 w-4 animate-spin" /> : 'Erneut prüfen'}
+                    </Button>
+                  </div>
+                </div>
+              )}
+
+              {/* Backup Verification Card */}
+              <Card>
+                <CardHeader className="flex flex-row items-center justify-between">
+                  <div>
+                    <CardTitle className="flex items-center gap-2">
+                      <Shield className="h-5 w-5 text-blue-600" />
+                      Backup-Integrität
+                    </CardTitle>
+                    <CardDescription>
+                      Überprüfen Sie, ob alle Backups gültig und wiederherstellbar sind
+                    </CardDescription>
+                  </div>
+                  <Button 
+                    onClick={handleVerifyAllBackups}
+                    disabled={verifyingBackups}
+                    variant="outline"
+                  >
+                    {verifyingBackups ? (
+                      <>
+                        <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                        Prüfe...
+                      </>
+                    ) : (
+                      <>
+                        <Shield className="h-4 w-4 mr-2" />
+                        Alle Backups prüfen
+                      </>
+                    )}
+                  </Button>
+                </CardHeader>
+                <CardContent>
+                  <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                    <div className="text-center p-3 bg-slate-50 rounded-lg">
+                      <p className="text-2xl font-bold text-slate-700">{backupHealth?.total_backups || 0}</p>
+                      <p className="text-xs text-slate-500">Gesamt</p>
+                    </div>
+                    <div className="text-center p-3 bg-green-50 rounded-lg">
+                      <p className="text-2xl font-bold text-green-600">{backupHealth?.verified_valid || 0}</p>
+                      <p className="text-xs text-green-600">Gültig</p>
+                    </div>
+                    <div className="text-center p-3 bg-red-50 rounded-lg">
+                      <p className="text-2xl font-bold text-red-600">{backupHealth?.verified_invalid || 0}</p>
+                      <p className="text-xs text-red-600">Beschädigt</p>
+                    </div>
+                    <div className="text-center p-3 bg-amber-50 rounded-lg">
+                      <p className="text-2xl font-bold text-amber-600">{backupHealth?.not_verified || 0}</p>
+                      <p className="text-xs text-amber-600">Nicht geprüft</p>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+
               {/* Manual Backup Actions */}
               <Card>
                 <CardHeader>
@@ -1371,9 +1557,31 @@ export const AdminDashboard = () => {
                       Komplett-Backup jetzt starten
                     </Button>
                   </div>
-                  <div className="mt-4 p-3 bg-slate-50 rounded-lg text-sm text-slate-600">
-                    <strong>Automatische Backups:</strong> Täglich um 02:00 Uhr (Datenbank), 02:30 Uhr (Storage). 
-                    Monatliche Backups am 1. jeden Monats um 01:00 Uhr.
+                  <div className="mt-4 p-3 bg-slate-50 rounded-lg text-sm text-slate-600 flex items-center justify-between">
+                    <div>
+                      <strong>Automatische Backups:</strong>{' '}
+                      {scheduleSettings ? (
+                        <>
+                          {getFrequencyLabel(scheduleSettings.backup_frequency)} um{' '}
+                          {formatTimeString(scheduleSettings.database_backup_hour, scheduleSettings.database_backup_minute)} (Datenbank),{' '}
+                          {formatTimeString(scheduleSettings.storage_backup_hour, scheduleSettings.storage_backup_minute)} (Storage).
+                          Monatliche am 1. um {formatTimeString(scheduleSettings.monthly_backup_hour, scheduleSettings.monthly_backup_minute)}.
+                        </>
+                      ) : (
+                        'Täglich um 02:00 Uhr (Datenbank), 02:30 Uhr (Storage).'
+                      )}
+                    </div>
+                    <Button 
+                      variant="outline" 
+                      size="sm"
+                      onClick={() => {
+                        if (!scheduleSettings) fetchScheduleSettings();
+                        setScheduleDialogOpen(true);
+                      }}
+                    >
+                      <Clock className="h-4 w-4 mr-1" />
+                      Zeitplan ändern
+                    </Button>
                   </div>
                 </CardContent>
               </Card>
@@ -1466,6 +1674,13 @@ export const AdminDashboard = () => {
                                     >
                                       <CloudDownload className="h-4 w-4 mr-2" />
                                       Herunterladen
+                                    </DropdownMenuItem>
+                                    <DropdownMenuItem 
+                                      onClick={() => handleVerifySingleBackup(backup.id)}
+                                      disabled={backup.status !== 'success'}
+                                    >
+                                      <Shield className="h-4 w-4 mr-2" />
+                                      Integrität prüfen
                                     </DropdownMenuItem>
                                     <DropdownMenuItem 
                                       onClick={() => {
@@ -2016,6 +2231,161 @@ export const AdminDashboard = () => {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      {/* Schedule Settings Dialog */}
+      <Dialog open={scheduleDialogOpen} onOpenChange={setScheduleDialogOpen}>
+        <DialogContent className="max-w-lg">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Clock className="h-5 w-5" />
+              Backup-Zeitplan konfigurieren
+            </DialogTitle>
+            <DialogDescription>
+              Passen Sie an, wann automatische Backups erstellt werden sollen.
+            </DialogDescription>
+          </DialogHeader>
+          
+          {scheduleSettings && (
+            <div className="space-y-6 py-4">
+              {/* Backup Frequency */}
+              <div className="space-y-2">
+                <label className="text-sm font-medium">Backup-Häufigkeit</label>
+                <select
+                  className="w-full p-2 border rounded-lg"
+                  value={scheduleSettings.backup_frequency}
+                  onChange={(e) => setScheduleSettings({...scheduleSettings, backup_frequency: e.target.value})}
+                >
+                  <option value="daily">Täglich</option>
+                  <option value="every_12h">Alle 12 Stunden</option>
+                  <option value="every_6h">Alle 6 Stunden</option>
+                </select>
+              </div>
+
+              {/* Database Backup Time */}
+              <div className="space-y-2">
+                <label className="text-sm font-medium">Datenbank-Backup Uhrzeit (UTC)</label>
+                <div className="flex gap-2">
+                  <input
+                    type="number"
+                    min="0"
+                    max="23"
+                    className="w-20 p-2 border rounded-lg text-center"
+                    value={scheduleSettings.database_backup_hour}
+                    onChange={(e) => setScheduleSettings({...scheduleSettings, database_backup_hour: parseInt(e.target.value) || 0})}
+                  />
+                  <span className="self-center">:</span>
+                  <input
+                    type="number"
+                    min="0"
+                    max="59"
+                    className="w-20 p-2 border rounded-lg text-center"
+                    value={scheduleSettings.database_backup_minute}
+                    onChange={(e) => setScheduleSettings({...scheduleSettings, database_backup_minute: parseInt(e.target.value) || 0})}
+                  />
+                  <span className="self-center text-sm text-slate-500">Uhr</span>
+                </div>
+              </div>
+
+              {/* Storage Backup Time */}
+              <div className="space-y-2">
+                <label className="text-sm font-medium">Storage-Backup Uhrzeit (UTC)</label>
+                <div className="flex gap-2">
+                  <input
+                    type="number"
+                    min="0"
+                    max="23"
+                    className="w-20 p-2 border rounded-lg text-center"
+                    value={scheduleSettings.storage_backup_hour}
+                    onChange={(e) => setScheduleSettings({...scheduleSettings, storage_backup_hour: parseInt(e.target.value) || 0})}
+                  />
+                  <span className="self-center">:</span>
+                  <input
+                    type="number"
+                    min="0"
+                    max="59"
+                    className="w-20 p-2 border rounded-lg text-center"
+                    value={scheduleSettings.storage_backup_minute}
+                    onChange={(e) => setScheduleSettings({...scheduleSettings, storage_backup_minute: parseInt(e.target.value) || 0})}
+                  />
+                  <span className="self-center text-sm text-slate-500">Uhr</span>
+                </div>
+              </div>
+
+              {/* Monthly Backup Time */}
+              <div className="space-y-2">
+                <label className="text-sm font-medium">Monatliches Backup Uhrzeit (UTC) - am 1. jeden Monats</label>
+                <div className="flex gap-2">
+                  <input
+                    type="number"
+                    min="0"
+                    max="23"
+                    className="w-20 p-2 border rounded-lg text-center"
+                    value={scheduleSettings.monthly_backup_hour}
+                    onChange={(e) => setScheduleSettings({...scheduleSettings, monthly_backup_hour: parseInt(e.target.value) || 0})}
+                  />
+                  <span className="self-center">:</span>
+                  <input
+                    type="number"
+                    min="0"
+                    max="59"
+                    className="w-20 p-2 border rounded-lg text-center"
+                    value={scheduleSettings.monthly_backup_minute}
+                    onChange={(e) => setScheduleSettings({...scheduleSettings, monthly_backup_minute: parseInt(e.target.value) || 0})}
+                  />
+                  <span className="self-center text-sm text-slate-500">Uhr</span>
+                </div>
+              </div>
+
+              {/* Retention Settings */}
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <label className="text-sm font-medium">Tägliche Backups aufbewahren</label>
+                  <div className="flex items-center gap-2">
+                    <input
+                      type="number"
+                      min="1"
+                      max="365"
+                      className="w-20 p-2 border rounded-lg text-center"
+                      value={scheduleSettings.retention_days}
+                      onChange={(e) => setScheduleSettings({...scheduleSettings, retention_days: parseInt(e.target.value) || 30})}
+                    />
+                    <span className="text-sm text-slate-500">Tage</span>
+                  </div>
+                </div>
+                <div className="space-y-2">
+                  <label className="text-sm font-medium">Monatliche Backups aufbewahren</label>
+                  <div className="flex items-center gap-2">
+                    <input
+                      type="number"
+                      min="1"
+                      max="120"
+                      className="w-20 p-2 border rounded-lg text-center"
+                      value={scheduleSettings.retention_months}
+                      onChange={(e) => setScheduleSettings({...scheduleSettings, retention_months: parseInt(e.target.value) || 12})}
+                    />
+                    <span className="text-sm text-slate-500">Monate</span>
+                  </div>
+                </div>
+              </div>
+
+              <div className="bg-amber-50 border border-amber-200 rounded-lg p-3 text-sm text-amber-800">
+                <strong>Hinweis:</strong> Änderungen werden sofort gespeichert, aber der Backup-Scheduler 
+                wird erst beim nächsten Server-Neustart aktualisiert.
+              </div>
+            </div>
+          )}
+
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setScheduleDialogOpen(false)}>
+              Abbrechen
+            </Button>
+            <Button onClick={handleSaveSchedule} disabled={savingSchedule}>
+              {savingSchedule ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <CheckCircle className="h-4 w-4 mr-2" />}
+              Speichern
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 };

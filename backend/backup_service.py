@@ -575,6 +575,213 @@ class BackupService:
         }
     
     # ========================================================================
+    # BACKUP VERIFIZIERUNG
+    # ========================================================================
+    
+    async def verify_backup(self, backup_id: str) -> Dict[str, Any]:
+        """
+        Verifiziert ein einzelnes Backup auf Integrität.
+        Prüft: Datei existiert, lesbar, Format korrekt, Inhalt valide
+        """
+        backup_job = await self.db.backup_jobs.find_one({"id": backup_id})
+        if not backup_job:
+            return {"status": "error", "message": "Backup nicht gefunden", "valid": False}
+        
+        backup_path = self.backup_dir / backup_job["storage_path"]
+        backup_type = backup_job.get("backup_type", "database")
+        
+        verification_result = {
+            "backup_id": backup_id,
+            "filename": backup_job.get("file_name"),
+            "backup_type": backup_type,
+            "checks": [],
+            "valid": True,
+            "errors": []
+        }
+        
+        # Check 1: Datei existiert
+        if not backup_path.exists():
+            verification_result["checks"].append({"name": "file_exists", "passed": False})
+            verification_result["valid"] = False
+            verification_result["errors"].append("Backup-Datei nicht gefunden")
+            
+            # Update backup job status
+            await self.db.backup_jobs.update_one(
+                {"id": backup_id},
+                {"$set": {"verified": False, "verification_error": "Datei nicht gefunden"}}
+            )
+            return verification_result
+        
+        verification_result["checks"].append({"name": "file_exists", "passed": True})
+        
+        # Check 2: Datei ist nicht leer
+        file_size = backup_path.stat().st_size
+        if file_size == 0:
+            verification_result["checks"].append({"name": "file_not_empty", "passed": False})
+            verification_result["valid"] = False
+            verification_result["errors"].append("Backup-Datei ist leer")
+        else:
+            verification_result["checks"].append({"name": "file_not_empty", "passed": True})
+        
+        # Check 3: Datei ist lesbar und Format korrekt
+        try:
+            if backup_type == "database":
+                # Prüfe gzip und JSON
+                with gzip.open(backup_path, 'rt', encoding='utf-8') as f:
+                    data = json.load(f)
+                
+                verification_result["checks"].append({"name": "gzip_readable", "passed": True})
+                verification_result["checks"].append({"name": "json_valid", "passed": True})
+                
+                # Check 4: Erwartete Struktur (Collections vorhanden)
+                expected_collections = ["users", "jobs", "audit_logs"]
+                found_collections = [k for k in data.keys() if not k.startswith("_")]
+                
+                has_data = any(len(data.get(c, [])) > 0 for c in found_collections)
+                verification_result["checks"].append({
+                    "name": "has_data",
+                    "passed": has_data,
+                    "details": f"Collections: {found_collections}"
+                })
+                
+                if not has_data:
+                    verification_result["errors"].append("Backup enthält keine Daten")
+                    verification_result["valid"] = False
+                
+                # Zähle Dokumente
+                doc_counts = {k: len(v) for k, v in data.items() if isinstance(v, list)}
+                verification_result["document_counts"] = doc_counts
+                verification_result["total_documents"] = sum(doc_counts.values())
+                
+            else:
+                # Storage Backup - prüfe ZIP
+                with zipfile.ZipFile(backup_path, 'r') as zf:
+                    # Teste Integrität
+                    bad_file = zf.testzip()
+                    if bad_file:
+                        verification_result["checks"].append({"name": "zip_integrity", "passed": False})
+                        verification_result["valid"] = False
+                        verification_result["errors"].append(f"Korrupte Datei im ZIP: {bad_file}")
+                    else:
+                        verification_result["checks"].append({"name": "zip_integrity", "passed": True})
+                    
+                    # Zähle Dateien
+                    file_list = zf.namelist()
+                    verification_result["file_count"] = len(file_list)
+                    verification_result["checks"].append({
+                        "name": "has_files",
+                        "passed": len(file_list) > 0,
+                        "details": f"{len(file_list)} Dateien"
+                    })
+                    
+        except gzip.BadGzipFile:
+            verification_result["checks"].append({"name": "gzip_readable", "passed": False})
+            verification_result["valid"] = False
+            verification_result["errors"].append("Ungültiges GZIP-Format")
+        except json.JSONDecodeError as e:
+            verification_result["checks"].append({"name": "json_valid", "passed": False})
+            verification_result["valid"] = False
+            verification_result["errors"].append(f"Ungültiges JSON: {str(e)}")
+        except zipfile.BadZipFile:
+            verification_result["checks"].append({"name": "zip_readable", "passed": False})
+            verification_result["valid"] = False
+            verification_result["errors"].append("Ungültiges ZIP-Format")
+        except Exception as e:
+            verification_result["valid"] = False
+            verification_result["errors"].append(f"Unbekannter Fehler: {str(e)}")
+        
+        # Update backup job mit Verifizierungsstatus
+        await self.db.backup_jobs.update_one(
+            {"id": backup_id},
+            {"$set": {
+                "verified": verification_result["valid"],
+                "verified_at": datetime.now(timezone.utc).isoformat(),
+                "verification_error": verification_result["errors"][0] if verification_result["errors"] else None
+            }}
+        )
+        
+        return verification_result
+    
+    async def verify_all_backups(self) -> Dict[str, Any]:
+        """Verifiziert alle Backups und gibt Zusammenfassung zurück"""
+        
+        backups = await self.db.backup_jobs.find({"status": "success"}).to_list(length=None)
+        
+        results = {
+            "total": len(backups),
+            "valid": 0,
+            "invalid": 0,
+            "errors": [],
+            "details": []
+        }
+        
+        for backup in backups:
+            result = await self.verify_backup(backup["id"])
+            results["details"].append({
+                "id": backup["id"],
+                "filename": backup.get("file_name"),
+                "valid": result["valid"],
+                "errors": result.get("errors", [])
+            })
+            
+            if result["valid"]:
+                results["valid"] += 1
+            else:
+                results["invalid"] += 1
+                results["errors"].append({
+                    "backup_id": backup["id"],
+                    "filename": backup.get("file_name"),
+                    "error": result.get("errors", ["Unbekannt"])[0]
+                })
+        
+        # Log audit wenn korrupte Backups gefunden
+        if results["invalid"] > 0:
+            await self._log_audit(
+                "BACKUP_VERIFICATION_WARNING",
+                None,
+                "system",
+                None,
+                {
+                    "total_backups": results["total"],
+                    "invalid_count": results["invalid"],
+                    "invalid_backups": results["errors"]
+                }
+            )
+            logger.warning(f"Backup verification found {results['invalid']} invalid backups!")
+        
+        return results
+    
+    async def get_backup_health(self) -> Dict[str, Any]:
+        """Gibt den Gesundheitsstatus aller Backups zurück"""
+        
+        # Zähle verifizierte und nicht-verifizierte Backups
+        total = await self.db.backup_jobs.count_documents({"status": "success"})
+        verified_valid = await self.db.backup_jobs.count_documents({"status": "success", "verified": True})
+        verified_invalid = await self.db.backup_jobs.count_documents({"status": "success", "verified": False})
+        not_verified = total - verified_valid - verified_invalid
+        
+        # Hole letzte korrupte Backups
+        invalid_backups = await self.db.backup_jobs.find(
+            {"status": "success", "verified": False}
+        ).sort("created_at", -1).limit(5).to_list(length=5)
+        
+        return {
+            "total_backups": total,
+            "verified_valid": verified_valid,
+            "verified_invalid": verified_invalid,
+            "not_verified": not_verified,
+            "health_status": "healthy" if verified_invalid == 0 else "warning",
+            "invalid_backups": [
+                {
+                    "id": b["id"],
+                    "filename": b.get("file_name"),
+                    "error": b.get("verification_error", "Unbekannt")
+                }
+                for b in invalid_backups
+            ]
+        }
+    
+    # ========================================================================
     # DATABASE RESTORE
     # ========================================================================
     
@@ -1200,6 +1407,111 @@ class BackupService:
             
         except Exception as e:
             return {"status": "error", "error": str(e)}
+    
+    # ========================================================================
+    # BACKUP SCHEDULE SETTINGS
+    # ========================================================================
+    
+    async def get_schedule_settings(self) -> Dict[str, Any]:
+        """Holt die aktuellen Backup-Zeitplan-Einstellungen"""
+        settings = await self.db.backup_settings.find_one({"type": "schedule"})
+        
+        if not settings:
+            # Default-Einstellungen
+            return {
+                "database_backup_hour": 2,
+                "database_backup_minute": 0,
+                "storage_backup_hour": 2,
+                "storage_backup_minute": 30,
+                "monthly_backup_hour": 1,
+                "monthly_backup_minute": 0,
+                "backup_frequency": "daily",  # daily, every_12h, every_6h
+                "retention_days": 30,
+                "retention_months": 12,
+                "enabled": True
+            }
+        
+        return {
+            "database_backup_hour": settings.get("database_backup_hour", 2),
+            "database_backup_minute": settings.get("database_backup_minute", 0),
+            "storage_backup_hour": settings.get("storage_backup_hour", 2),
+            "storage_backup_minute": settings.get("storage_backup_minute", 30),
+            "monthly_backup_hour": settings.get("monthly_backup_hour", 1),
+            "monthly_backup_minute": settings.get("monthly_backup_minute", 0),
+            "backup_frequency": settings.get("backup_frequency", "daily"),
+            "retention_days": settings.get("retention_days", 30),
+            "retention_months": settings.get("retention_months", 12),
+            "enabled": settings.get("enabled", True),
+            "updated_at": settings.get("updated_at"),
+            "updated_by": settings.get("updated_by")
+        }
+    
+    async def update_schedule_settings(
+        self,
+        settings: Dict[str, Any],
+        updated_by_user_id: str
+    ) -> Dict[str, Any]:
+        """Aktualisiert die Backup-Zeitplan-Einstellungen"""
+        
+        # Validierung
+        valid_frequencies = ["daily", "every_12h", "every_6h"]
+        if settings.get("backup_frequency") and settings["backup_frequency"] not in valid_frequencies:
+            return {"status": "error", "message": f"Ungültige Frequenz. Erlaubt: {valid_frequencies}"}
+        
+        # Stunden validieren (0-23)
+        for key in ["database_backup_hour", "storage_backup_hour", "monthly_backup_hour"]:
+            if key in settings:
+                if not 0 <= settings[key] <= 23:
+                    return {"status": "error", "message": f"{key} muss zwischen 0 und 23 sein"}
+        
+        # Minuten validieren (0-59)
+        for key in ["database_backup_minute", "storage_backup_minute", "monthly_backup_minute"]:
+            if key in settings:
+                if not 0 <= settings[key] <= 59:
+                    return {"status": "error", "message": f"{key} muss zwischen 0 und 59 sein"}
+        
+        # Update-Daten vorbereiten
+        update_data = {
+            "type": "schedule",
+            "updated_at": datetime.now(timezone.utc).isoformat(),
+            "updated_by": updated_by_user_id
+        }
+        
+        # Nur übergebene Felder aktualisieren
+        allowed_fields = [
+            "database_backup_hour", "database_backup_minute",
+            "storage_backup_hour", "storage_backup_minute",
+            "monthly_backup_hour", "monthly_backup_minute",
+            "backup_frequency", "retention_days", "retention_months", "enabled"
+        ]
+        
+        for field in allowed_fields:
+            if field in settings:
+                update_data[field] = settings[field]
+        
+        # Upsert in Datenbank
+        await self.db.backup_settings.update_one(
+            {"type": "schedule"},
+            {"$set": update_data},
+            upsert=True
+        )
+        
+        # Audit Log
+        await self._log_audit(
+            "BACKUP_SCHEDULE_UPDATED",
+            updated_by_user_id,
+            "settings",
+            "schedule",
+            {"new_settings": update_data}
+        )
+        
+        logger.info(f"Backup schedule updated by user {updated_by_user_id}: {update_data}")
+        
+        return {
+            "status": "success",
+            "message": "Zeitplan-Einstellungen aktualisiert. Bitte Server neu starten für sofortige Änderung.",
+            "settings": await self.get_schedule_settings()
+        }
     
     # ========================================================================
     # SYSTEM STATUS

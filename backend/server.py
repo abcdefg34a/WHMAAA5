@@ -4216,6 +4216,53 @@ async def restore_from_cloud_route(
     
     return result
 
+@api_router.get("/admin/backups/health")
+async def get_backup_health_route(current_user: dict = Depends(get_current_user)):
+    """Backup-Gesundheitsstatus - nur Admin"""
+    if current_user.get("role") != "admin":
+        raise HTTPException(status_code=403, detail="Nur Admins können Backups verwalten")
+    
+    return await backup_service.get_backup_health()
+
+@api_router.post("/admin/backups/verify-all")
+async def verify_all_backups_route(current_user: dict = Depends(get_current_user)):
+    """Alle Backups verifizieren - nur Admin"""
+    if current_user.get("role") != "admin":
+        raise HTTPException(status_code=403, detail="Nur Admins können Backups verwalten")
+    
+    return await backup_service.verify_all_backups()
+
+@api_router.post("/admin/backups/{backup_id}/verify")
+async def verify_backup_route(
+    backup_id: str,
+    current_user: dict = Depends(get_current_user)
+):
+    """Einzelnes Backup verifizieren - nur Admin"""
+    if current_user.get("role") != "admin":
+        raise HTTPException(status_code=403, detail="Nur Admins können Backups verwalten")
+    
+    return await backup_service.verify_backup(backup_id)
+
+@api_router.get("/admin/backups/schedule")
+async def get_backup_schedule_route(current_user: dict = Depends(get_current_user)):
+    """Backup-Zeitplan-Einstellungen abrufen - nur Admin"""
+    if current_user.get("role") != "admin":
+        raise HTTPException(status_code=403, detail="Nur Admins können Backups verwalten")
+    
+    return await backup_service.get_schedule_settings()
+
+@api_router.put("/admin/backups/schedule")
+async def update_backup_schedule_route(
+    request: Request,
+    current_user: dict = Depends(get_current_user)
+):
+    """Backup-Zeitplan-Einstellungen aktualisieren - nur Admin"""
+    if current_user.get("role") != "admin":
+        raise HTTPException(status_code=403, detail="Nur Admins können Backups verwalten")
+    
+    data = await request.json()
+    return await backup_service.update_schedule_settings(data, current_user.get("id"))
+
 @api_router.get("/admin/backups")
 async def list_backups_route(
     backup_type: Optional[str] = None,
