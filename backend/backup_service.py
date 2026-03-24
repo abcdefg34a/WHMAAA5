@@ -15,6 +15,7 @@ import asyncio
 import subprocess
 import base64
 import hashlib
+import tempfile
 from datetime import datetime, timezone, timedelta
 from pathlib import Path
 from typing import Optional, List, Dict, Any
@@ -838,6 +839,38 @@ class BackupService:
         else:
             verification_result["checks"].append({"name": "file_not_empty", "passed": True})
         
+        # Check 2.5: Ist die Datei verschlüsselt?
+        is_encrypted = str(backup_path).endswith('.enc')
+        verification_result["encrypted"] = is_encrypted
+        
+        if is_encrypted:
+            verification_result["checks"].append({"name": "encrypted", "passed": True, "details": "Datei ist verschlüsselt"})
+            
+            # Bei verschlüsselten Dateien: Entschlüsseln und dann prüfen
+            if not self.encryption.enabled or not self.encryption.fernet:
+                verification_result["checks"].append({"name": "decryption", "passed": False})
+                verification_result["valid"] = False
+                verification_result["errors"].append("Verschlüsselung nicht konfiguriert - kann nicht verifizieren")
+                return verification_result
+            
+            try:
+                # Temporär entschlüsseln
+                import tempfile
+                with tempfile.NamedTemporaryFile(suffix='.json.gz', delete=False) as tmp:
+                    tmp_path = Path(tmp.name)
+                
+                self.encryption.decrypt_file(backup_path, tmp_path)
+                verification_result["checks"].append({"name": "decryption", "passed": True})
+                
+                # Jetzt mit der entschlüsselten Datei weiterarbeiten
+                backup_path = tmp_path
+                
+            except Exception as e:
+                verification_result["checks"].append({"name": "decryption", "passed": False})
+                verification_result["valid"] = False
+                verification_result["errors"].append(f"Entschlüsselung fehlgeschlagen: {str(e)}")
+                return verification_result
+        
         # Check 3: Datei ist lesbar und Format korrekt
         try:
             if backup_type == "database":
@@ -904,6 +937,13 @@ class BackupService:
         except Exception as e:
             verification_result["valid"] = False
             verification_result["errors"].append(f"Unbekannter Fehler: {str(e)}")
+        finally:
+            # Temporäre entschlüsselte Datei löschen wenn vorhanden
+            if is_encrypted and 'tmp_path' in locals() and tmp_path.exists():
+                try:
+                    tmp_path.unlink()
+                except:
+                    pass
         
         # Update backup job mit Verifizierungsstatus
         await self.db.backup_jobs.update_one(
