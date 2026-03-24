@@ -3819,9 +3819,9 @@ class AuditLogResponse(BaseModel):
     id: str
     timestamp: str
     action: str
-    user_id: str
-    user_name: str
-    details: Dict[str, Any]
+    user_id: Optional[str] = "system"
+    user_name: Optional[str] = "System"
+    details: Dict[str, Any] = {}
 
 @api_router.get("/admin/audit-logs", response_model=List[AuditLogResponse])
 async def get_audit_logs(
@@ -3982,43 +3982,39 @@ async def get_jobs_paginated(
 # ==================== DATABASE BACKUP ====================
 
 @api_router.post("/admin/backup")
-async def create_backup(user: dict = Depends(get_current_user)):
-    """Create a database backup (Admin only)"""
+async def create_backup(
+    backup_type: str = "database",
+    user: dict = Depends(get_current_user)
+):
+    """Create a backup using the full backup service (Admin only)"""
     if user["role"] != UserRole.ADMIN:
         raise HTTPException(status_code=403, detail="Admin only")
     
     try:
-        backup_time = datetime.now().strftime("%Y%m%d_%H%M%S")
-        backup_data = {
-            "created_at": datetime.now(timezone.utc).isoformat(),
-            "created_by": user["name"],
-            "collections": {}
-        }
+        if backup_type == "database":
+            result = await backup_service.create_database_backup(
+                triggered_by_user_id=user["id"],
+                retention_class="daily"
+            )
+        elif backup_type == "storage":
+            result = await backup_service.create_storage_backup(
+                triggered_by_user_id=user["id"],
+                retention_class="daily"
+            )
+        else:
+            raise HTTPException(status_code=400, detail="Ungültiger Backup-Typ. Erlaubt: database, storage")
         
-        # Export collections
-        collections = ["users", "jobs", "audit_logs", "password_resets"]
-        for collection_name in collections:
-            docs = await db[collection_name].find({}, {"_id": 0}).to_list(None)
-            backup_data["collections"][collection_name] = docs
-        
-        # Save backup file
-        backup_file = BACKUP_DIR / f"backup_{backup_time}.json"
-        async with aiofiles.open(backup_file, 'w') as f:
-            await f.write(json.dumps(backup_data, ensure_ascii=False, indent=2, default=str))
-        
-        # Log audit
-        await log_audit("DATABASE_BACKUP", user["id"], user["name"], {
-            "filename": f"backup_{backup_time}.json",
-            "collections": collections
-        })
-        
-        logger.info(f"Database backup created: {backup_file}")
-        
-        return {
-            "message": "Backup erfolgreich erstellt",
-            "filename": f"backup_{backup_time}.json",
-            "size": backup_file.stat().st_size
-        }
+        if result.get("status") == "success":
+            return {
+                "message": "Backup erfolgreich erstellt",
+                "filename": result.get("filename"),
+                "size": result.get("size_bytes"),
+                "supabase_uploaded": result.get("supabase_uploaded", False),
+                "supabase_path": result.get("supabase_path")
+            }
+        else:
+            raise HTTPException(status_code=500, detail=result.get("error", "Backup fehlgeschlagen"))
+            
     except Exception as e:
         logger.error(f"Backup failed: {e}")
         raise HTTPException(status_code=500, detail=f"Backup fehlgeschlagen: {str(e)}")
