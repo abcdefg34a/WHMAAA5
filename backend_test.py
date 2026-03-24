@@ -22,7 +22,7 @@ import time
 from datetime import datetime
 
 # Backend URL aus Frontend .env
-BACKEND_URL = "https://react-state-sync.preview.emergentagent.com/api"
+BACKEND_URL = "https://cost-automation.preview.emergentagent.com/api"
 
 # Test-Credentials
 ADMIN_EMAIL = "admin@test.de"

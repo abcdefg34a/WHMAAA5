@@ -6,7 +6,7 @@ import json
 from datetime import datetime
 
 class MongoDBAtlasConnectionTester:
-    def __init__(self, base_url="https://react-state-sync.preview.emergentagent.com/api"):
+    def __init__(self, base_url="https://cost-automation.preview.emergentagent.com/api"):
         self.base_url = base_url
         self.admin_token = None
         self.tests_run = 0

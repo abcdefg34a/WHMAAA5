@@ -803,6 +803,7 @@ class JobCreate(BaseModel):
     # Sicherstellung-specific fields
     sicherstellung_reason: Optional[str] = None
     vehicle_category: Optional[str] = None  # "under_3_5t" or "over_3_5t"
+    vehicle_category_id: Optional[str] = None  # Reference to vehicle category for dynamic pricing
     ordering_authority: Optional[str] = None
     contact_attempts: Optional[bool] = None
     contact_attempts_notes: Optional[str] = None
@@ -1953,20 +1954,82 @@ async def calculate_category_price(
         ]
     }
 
-# NEW: Calculate job costs based on service pricing
+# NEW: Calculate job costs based on service pricing OR vehicle category
 @api_router.get("/jobs/{job_id}/calculate-costs")
 async def calculate_job_costs(job_id: str, user: dict = Depends(get_current_user)):
-    """Calculate costs for a job based on the towing service's pricing settings"""
+    """Calculate costs for a job based on vehicle category pricing or towing service's pricing settings"""
     job = await db.jobs.find_one({"id": job_id})
     if not job:
         raise HTTPException(status_code=404, detail="Auftrag nicht gefunden")
     
-    service = await db.users.find_one({"id": job.get("assigned_service_id")})
-    if not service:
-        return {"total": 0, "breakdown": []}
-    
     breakdown = []
     total = 0.0
+    
+    # NEW: Check if job has a vehicle category assigned (new dynamic pricing)
+    vehicle_category_id = job.get("vehicle_category_id")
+    if vehicle_category_id:
+        category = await db.vehicle_categories.find_one({"id": vehicle_category_id})
+        if category:
+            base_price = category.get("base_price", 0)
+            daily_rate = category.get("daily_rate", 0)
+            category_name = category.get("name", "Unbekannt")
+            
+            # Calculate days in yard
+            days = 1
+            if job.get("in_yard_at"):
+                in_yard_date = datetime.fromisoformat(job["in_yard_at"].replace("Z", "+00:00"))
+                now = datetime.now(timezone.utc)
+                days = max(1, (now - in_yard_date).days + 1)
+            elif job.get("towed_at"):
+                # Fallback: use towed_at if in_yard_at not set
+                towed_date = datetime.fromisoformat(job["towed_at"].replace("Z", "+00:00"))
+                now = datetime.now(timezone.utc)
+                days = max(1, (now - towed_date).days + 1)
+            
+            # Add base price (first 24h)
+            breakdown.append({"label": f"{category_name} - Grundpreis (erste 24h)", "amount": base_price})
+            total += base_price
+            
+            # Add daily rate for additional days
+            if days > 1 and daily_rate > 0:
+                additional_days_cost = (days - 1) * daily_rate
+                breakdown.append({"label": f"{days - 1} × weitere 24h à {daily_rate:.2f}€", "amount": additional_days_cost})
+                total += additional_days_cost
+            
+            # Note: We can still add service-specific surcharges on top
+            service = await db.users.find_one({"id": job.get("assigned_service_id")})
+            if service:
+                # Night surcharge (check if towed at night: 22:00 - 06:00)
+                if job.get("towed_at"):
+                    towed_time = datetime.fromisoformat(job["towed_at"].replace("Z", "+00:00"))
+                    hour = towed_time.hour
+                    if hour >= 22 or hour < 6:
+                        night_surcharge = service.get("night_surcharge", 0) or 0
+                        if night_surcharge > 0:
+                            breakdown.append({"label": "Nachtzuschlag", "amount": night_surcharge})
+                            total += night_surcharge
+                
+                # Weekend surcharge (Saturday/Sunday)
+                if job.get("towed_at"):
+                    towed_time = datetime.fromisoformat(job["towed_at"].replace("Z", "+00:00"))
+                    if towed_time.weekday() >= 5:  # Saturday = 5, Sunday = 6
+                        weekend_surcharge = service.get("weekend_surcharge", 0) or 0
+                        if weekend_surcharge > 0:
+                            breakdown.append({"label": "Wochenendzuschlag", "amount": weekend_surcharge})
+                            total += weekend_surcharge
+                
+                # Processing fee
+                processing_fee = service.get("processing_fee", 0) or 0
+                if processing_fee > 0:
+                    breakdown.append({"label": "Bearbeitungsgebühr", "amount": processing_fee})
+                    total += processing_fee
+            
+            return {"total": round(total, 2), "breakdown": breakdown, "pricing_source": "vehicle_category", "category_name": category_name}
+    
+    # FALLBACK: Original service-based pricing logic
+    service = await db.users.find_one({"id": job.get("assigned_service_id")})
+    if not service:
+        return {"total": 0, "breakdown": [], "pricing_source": "none"}
     
     # Check if time-based pricing is enabled
     time_based_applied = False
@@ -2046,7 +2109,7 @@ async def calculate_job_costs(job_id: str, user: dict = Depends(get_current_user
                 breakdown.append({"label": "Wochenendzuschlag", "amount": weekend_surcharge})
                 total += weekend_surcharge
     
-    return {"total": round(total, 2), "breakdown": breakdown}
+    return {"total": round(total, 2), "breakdown": breakdown, "pricing_source": "service"}
 
 # ==================== AUTHORITY EMPLOYEE MANAGEMENT ====================
 
@@ -2487,6 +2550,8 @@ async def create_job(
         "estimated_vehicle_value": data.estimated_vehicle_value,
         "is_empty_trip": False,
         "calculated_costs": None,
+        # NEW: Vehicle category for dynamic pricing
+        "vehicle_category_id": data.vehicle_category_id,
         # NEW: Track if job was created by towing service
         "created_by_service": user["role"] == UserRole.TOWING_SERVICE,
         "idempotency_key": idempotency_key

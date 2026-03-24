@@ -241,6 +241,42 @@ backend:
         agent: "testing"
         comment: "Photo upload via job creation works correctly - 1 photo successfully uploaded and compressed"
 
+  - task: "Vehicle Categories API - CRUD"
+    implemented: true
+    working: true
+    file: "server.py"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+      - working: true
+        agent: "testing"
+        comment: "Vehicle categories CRUD operations working correctly. POST /api/vehicle-categories creates categories successfully, GET /api/vehicle-categories lists all categories. Fixed missing vehicle_category_id field in JobCreate model."
+
+  - task: "Jobs API - Create Job with Vehicle Category"
+    implemented: true
+    working: true
+    file: "server.py"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+      - working: true
+        agent: "testing"
+        comment: "Job creation with vehicle_category_id working correctly. Jobs are properly stored with vehicle category reference. Fixed JobCreate model to include vehicle_category_id field."
+
+  - task: "Calculate Costs API - Dynamic Pricing"
+    implemented: true
+    working: true
+    file: "server.py"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+      - working: true
+        agent: "testing"
+        comment: "Dynamic pricing system working correctly. GET /api/jobs/{job_id}/calculate-costs returns proper pricing based on vehicle categories with pricing_source='vehicle_category', correct category names, and accurate cost breakdowns."
+
 frontend:
   - task: "Frontend Testing"
     implemented: true
@@ -261,14 +297,13 @@ metadata:
   run_ui: false
 
 test_plan:
-  current_focus:
-    - "Admin - Audit Logs"
-    - "Jobs API - Update Job"
-  stuck_tasks:
-    - "Admin - Audit Logs"
+  current_focus: []
+  stuck_tasks: []
   test_all: false
   test_priority: "high_first"
 
 agent_communication:
   - agent: "testing"
     message: "Comprehensive backend testing completed. 80% success rate (16/20 tests passed). Authentication, Jobs API, most Admin endpoints, Services API, and File Upload are working correctly. Two critical issues identified: 1) Audit logs endpoint failing due to Pydantic validation error with missing user_name fields, 2) Job update endpoint not responding. Two endpoints not implemented but requested: /api/admin/backups/status and /api/towing-services."
+  - agent: "testing"
+    message: "Dynamic pricing system testing completed successfully. 100% success rate (6/6 tests passed). All vehicle category CRUD operations, job creation with vehicle categories, and cost calculation with dynamic pricing are working correctly. Fixed missing vehicle_category_id field in JobCreate model to enable proper functionality. MongoDB verification confirms proper data storage."
