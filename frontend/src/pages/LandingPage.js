@@ -61,10 +61,10 @@ export const LandingPage = () => {
       <header className="bg-white border-b border-slate-200" role="banner">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex justify-between items-center h-16">
-            <a href="/" className="flex items-center gap-2" aria-label="AbschleppPortal - Zur Startseite">
+            <a href="/" className="flex items-center gap-2" aria-label="Wer Hat Mein Auto Abgeschleppt? - Zur Startseite">
               <Car className="h-8 w-8 text-slate-900" aria-hidden="true" />
               <span className="font-bold text-xl text-slate-900" style={{ fontFamily: 'Chivo, sans-serif' }}>
-                AbschleppPortal
+                Wer Hat Mein Auto Abgeschleppt?
               </span>
             </a>
             {/* Login button removed - access only via /portal */}
@@ -478,7 +478,7 @@ export const LandingPage = () => {
             <div className="flex items-center gap-2">
               <Car className="h-8 w-8" aria-hidden="true" />
               <span className="font-bold text-xl" style={{ fontFamily: 'Chivo, sans-serif' }}>
-                AbschleppPortal
+                Wer Hat Mein Auto Abgeschleppt?
               </span>
             </div>
             <nav className="flex flex-col md:flex-row items-center gap-4 md:gap-8" aria-label="Rechtliche Hinweise">
@@ -503,7 +503,7 @@ export const LandingPage = () => {
                 </a>
               </div>
               <p className="text-slate-400 text-sm">
-                © {new Date().getFullYear()} AbschleppPortal. Alle Rechte vorbehalten.
+                © {new Date().getFullYear()} Wer Hat Mein Auto Abgeschleppt? Alle Rechte vorbehalten.
               </p>
             </nav>
           </div>

@@ -247,10 +247,10 @@ export const PortalPage = () => {
       <header className="bg-white border-b border-slate-200" role="banner">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex justify-between items-center h-16">
-            <a href="/" className="flex items-center gap-2" aria-label="AbschleppPortal - Zur Startseite">
+            <a href="/" className="flex items-center gap-2" aria-label="Wer Hat Mein Auto Abgeschleppt? - Zur Startseite">
               <Car className="h-8 w-8 text-slate-900" aria-hidden="true" />
-              <span className="font-bold text-xl text-slate-900" style={{ fontFamily: 'Chivo, sans-serif' }}>
-                AbschleppPortal
+              <span className="font-bold text-lg text-slate-900" style={{ fontFamily: 'Chivo, sans-serif' }}>
+                Wer Hat Mein Auto Abgeschleppt?
               </span>
               <span className="ml-2 px-2 py-1 bg-slate-200 text-slate-600 text-xs rounded">
                 Interner Bereich
@@ -699,7 +699,7 @@ export const PortalPage = () => {
 
       {/* Footer */}
       <footer className="mt-auto py-6 text-center text-sm text-slate-500">
-        <p>© {new Date().getFullYear()} AbschleppPortal. Alle Rechte vorbehalten.</p>
+        <p>© {new Date().getFullYear()} Wer Hat Mein Auto Abgeschleppt? Alle Rechte vorbehalten.</p>
       </footer>
     </div>
   );

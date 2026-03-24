@@ -26,10 +26,10 @@ const BarrierefreiheitPage = () => {
       <header className="bg-white border-b border-slate-200" role="banner">
         <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex justify-between items-center h-16">
-            <a href="/" className="flex items-center gap-2" aria-label="AbschleppPortal - Zur Startseite">
+            <a href="/" className="flex items-center gap-2" aria-label="Wer Hat Mein Auto Abgeschleppt? - Zur Startseite">
               <Car className="h-8 w-8 text-slate-900" aria-hidden="true" />
-              <span className="font-bold text-xl text-slate-900" style={{ fontFamily: 'Chivo, sans-serif' }}>
-                AbschleppPortal
+              <span className="font-bold text-lg text-slate-900" style={{ fontFamily: 'Chivo, sans-serif' }}>
+                Wer Hat Mein Auto Abgeschleppt?
               </span>
             </a>
             <Button
@@ -55,7 +55,7 @@ const BarrierefreiheitPage = () => {
           {/* Einleitung */}
           <section aria-labelledby="intro-heading">
             <p className="text-lg text-slate-600">
-              Diese Erklärung zur Barrierefreiheit gilt für die Webanwendung <strong>AbschleppPortal</strong> 
+              Diese Erklärung zur Barrierefreiheit gilt für die Webanwendung <strong>Wer Hat Mein Auto Abgeschleppt?</strong> 
               (erreichbar unter der aktuellen Domain). Die Betreiber sind bestrebt, die Webanwendung im 
               Einklang mit den nationalen Rechtsvorschriften zur Umsetzung der EU-Richtlinie 2016/2102 
               barrierefrei zugänglich zu machen.
@@ -219,7 +219,7 @@ const BarrierefreiheitPage = () => {
       <footer className="bg-slate-900 text-white py-8 px-4 mt-12" role="contentinfo">
         <div className="max-w-4xl mx-auto text-center">
           <p className="text-slate-400 text-sm">
-            © {new Date().getFullYear()} AbschleppPortal. Alle Rechte vorbehalten.
+            © {new Date().getFullYear()} Wer Hat Mein Auto Abgeschleppt? Alle Rechte vorbehalten.
           </p>
           <nav className="mt-4 flex justify-center gap-6" aria-label="Rechtliche Hinweise">
             <a href="/datenschutz" className="text-slate-400 hover:text-white text-sm underline">Datenschutz</a>
