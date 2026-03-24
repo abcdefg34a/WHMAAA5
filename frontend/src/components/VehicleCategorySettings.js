@@ -56,7 +56,7 @@ const VehicleCategorySettings = ({ onClose }) => {
 
   const fetchCategories = async () => {
     try {
-      const response = await axios.get(`${API}/vehicle-categories`);
+      const response = await axios.get(`${API}/api/vehicle-categories`);
       setCategories(response.data);
     } catch (error) {
       console.error('Error fetching categories:', error);
@@ -73,14 +73,14 @@ const VehicleCategorySettings = ({ onClose }) => {
 
     try {
       if (editingId) {
-        await axios.put(`${API}/vehicle-categories/${editingId}`, {
+        await axios.put(`${API}/api/vehicle-categories/${editingId}`, {
           ...formData,
           base_price: parseFloat(formData.base_price),
           daily_rate: parseFloat(formData.daily_rate)
         });
         toast.success('Kategorie aktualisiert');
       } else {
-        await axios.post(`${API}/vehicle-categories`, {
+        await axios.post(`${API}/api/vehicle-categories`, {
           ...formData,
           base_price: parseFloat(formData.base_price),
           daily_rate: parseFloat(formData.daily_rate)
@@ -99,7 +99,7 @@ const VehicleCategorySettings = ({ onClose }) => {
     if (!window.confirm('Kategorie wirklich löschen?')) return;
     
     try {
-      await axios.delete(`${API}/vehicle-categories/${id}`);
+      await axios.delete(`${API}/api/vehicle-categories/${id}`);
       toast.success('Kategorie gelöscht');
       fetchCategories();
     } catch (error) {
@@ -145,7 +145,7 @@ const VehicleCategorySettings = ({ onClose }) => {
   const importAllHamburgTemplates = async () => {
     try {
       for (const template of HAMBURG_TEMPLATES) {
-        await axios.post(`${API}/vehicle-categories`, {
+        await axios.post(`${API}/api/vehicle-categories`, {
           name: template.name,
           description: template.description,
           base_price: template.base_price,
