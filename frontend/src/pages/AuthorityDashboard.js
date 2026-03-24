@@ -125,7 +125,9 @@ export const AuthorityDashboard = () => {
   // NEW: Job type and Sicherstellung fields
   const [jobType, setJobType] = useState('towing');
   const [sicherstellungReason, setSicherstellungReason] = useState('');
-  const [vehicleCategory, setVehicleCategory] = useState('under_3_5t');
+  const [vehicleCategory, setVehicleCategory] = useState('');
+  const [selectedVehicleCategoryId, setSelectedVehicleCategoryId] = useState('');
+  const [vehicleCategories, setVehicleCategories] = useState([]);
   const [orderingAuthority, setOrderingAuthority] = useState('');
   const [contactAttempts, setContactAttempts] = useState(false);
   const [contactAttemptsNotes, setContactAttemptsNotes] = useState('');
@@ -151,6 +153,7 @@ export const AuthorityDashboard = () => {
   useEffect(() => {
     fetchJobs();
     fetchLinkedServices();
+    fetchVehicleCategories();
     if (user?.is_main_authority) {
       fetchEmployees();
     }
@@ -235,6 +238,15 @@ export const AuthorityDashboard = () => {
       setLinkedServices(response.data);
     } catch (error) {
       console.error('Error fetching services:', error);
+    }
+  };
+
+  const fetchVehicleCategories = async () => {
+    try {
+      const response = await axios.get(`${API}/vehicle-categories`);
+      setVehicleCategories(response.data);
+    } catch (error) {
+      console.error('Error fetching vehicle categories:', error);
     }
   };
 
@@ -400,7 +412,8 @@ export const AuthorityDashboard = () => {
         // NEW: Job type and Sicherstellung fields
         job_type: jobType,
         sicherstellung_reason: jobType === 'sicherstellung' ? sicherstellungReason : null,
-        vehicle_category: jobType === 'sicherstellung' ? vehicleCategory : null,
+        vehicle_category: vehicleCategory || null,
+        vehicle_category_id: selectedVehicleCategoryId || null,
         ordering_authority: jobType === 'sicherstellung' ? orderingAuthority : null,
         contact_attempts: jobType === 'sicherstellung' ? contactAttempts : null,
         contact_attempts_notes: jobType === 'sicherstellung' && contactAttempts ? contactAttemptsNotes : null,
@@ -426,7 +439,8 @@ export const AuthorityDashboard = () => {
       setSelectedServiceId('');
       setJobType('towing');
       setSicherstellungReason('');
-      setVehicleCategory('under_3_5t');
+      setVehicleCategory('');
+      setSelectedVehicleCategoryId('');
       setOrderingAuthority('');
       setContactAttempts(false);
       setContactAttemptsNotes('');
@@ -680,6 +694,64 @@ export const AuthorityDashboard = () => {
                       </div>
                     </div>
 
+                    {/* Fahrzeugkategorie für ALLE Auftragsarten */}
+                    <div className="space-y-2 p-4 bg-blue-50 border border-blue-200 rounded-lg">
+                      <Label className="text-blue-800">Fahrzeugkategorie & Verwahrgebühren</Label>
+                      {vehicleCategories.length > 0 ? (
+                        <Select 
+                          value={selectedVehicleCategoryId} 
+                          onValueChange={(value) => {
+                            setSelectedVehicleCategoryId(value);
+                            const cat = vehicleCategories.find(c => c.id === value);
+                            if (cat) {
+                              setVehicleCategory(cat.name);
+                            }
+                          }}
+                        >
+                          <SelectTrigger>
+                            <SelectValue placeholder="Kategorie wählen..." />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {vehicleCategories.filter(c => c.is_active).map(cat => (
+                              <SelectItem key={cat.id} value={cat.id}>
+                                <div className="flex items-center justify-between w-full gap-4">
+                                  <span>{cat.name}</span>
+                                  <span className="text-green-600 font-medium">{cat.base_price.toFixed(2)} €</span>
+                                </div>
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      ) : (
+                        <div className="text-sm text-amber-600 bg-amber-50 p-3 rounded-lg">
+                          ⚠️ Keine Preiskategorien angelegt. 
+                          <button 
+                            type="button"
+                            onClick={() => setActiveTab('fees')}
+                            className="ml-1 underline font-medium"
+                          >
+                            Jetzt anlegen
+                          </button>
+                        </div>
+                      )}
+                      {selectedVehicleCategoryId && vehicleCategories.find(c => c.id === selectedVehicleCategoryId) && (
+                        <div className="bg-green-50 border border-green-200 rounded-lg p-3 mt-2">
+                          <div className="flex justify-between text-sm">
+                            <span className="text-green-700">Grundpreis (erste 24h):</span>
+                            <span className="font-bold text-green-800">
+                              {vehicleCategories.find(c => c.id === selectedVehicleCategoryId)?.base_price.toFixed(2)} €
+                            </span>
+                          </div>
+                          <div className="flex justify-between text-sm mt-1">
+                            <span className="text-green-700">Je weitere 24h:</span>
+                            <span className="font-medium text-green-800">
+                              + {vehicleCategories.find(c => c.id === selectedVehicleCategoryId)?.daily_rate.toFixed(2)} €
+                            </span>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+
                     {/* Sicherstellung-specific fields */}
                     {jobType === 'sicherstellung' && (
                       <div className="space-y-4 p-4 bg-amber-50 border border-amber-200 rounded-lg">
@@ -698,19 +770,6 @@ export const AuthorityDashboard = () => {
                                 <SelectItem value="eigentumssicherung">Eigentumssicherung (wertvoll/ungesichert)</SelectItem>
                                 <SelectItem value="technische_maengel">Technische Mängel / Beweissicherung</SelectItem>
                                 <SelectItem value="strafrechtlich">Strafrechtliche Beschlagnahme</SelectItem>
-                              </SelectContent>
-                            </Select>
-                          </div>
-
-                          <div className="space-y-2">
-                            <Label>Fahrzeugkategorie</Label>
-                            <Select value={vehicleCategory} onValueChange={setVehicleCategory}>
-                              <SelectTrigger>
-                                <SelectValue />
-                              </SelectTrigger>
-                              <SelectContent>
-                                <SelectItem value="under_3_5t">PKW/Krad bis 3,5t</SelectItem>
-                                <SelectItem value="over_3_5t">Fahrzeuge ab 3,5t</SelectItem>
                               </SelectContent>
                             </Select>
                           </div>
