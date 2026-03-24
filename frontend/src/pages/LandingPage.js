@@ -117,6 +117,7 @@ export const LandingPage = () => {
                     value={searchQuery}
                     onChange={(e) => setSearchQuery(e.target.value.toUpperCase())}
                     placeholder="B AB 1234 oder FIN..."
+                    maxLength={17}
                     className="text-xl md:text-2xl font-bold text-center py-3 px-4 w-full border-0 outline-none tracking-wider"
                     style={{ fontFamily: 'monospace' }}
                     aria-describedby="search-format-hint"
