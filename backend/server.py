@@ -3405,10 +3405,11 @@ async def generate_pdf(job_id: str, token: str):
         [Paragraph("<b>FIN</b>", cell_style), Paragraph(job.get('vin') or '-', cell_style)],
         [Paragraph("<b>Abschleppgrund</b>", cell_style), Paragraph(wrap_text(job['tow_reason'], 50), cell_style)],
     ]
-    if job.get('created_by_dienstnummer'):
+    # Zeige nur Behörde, NICHT die Dienstnummer des Mitarbeiters
+    if job.get('created_by_authority'):
         vehicle_data.append([
             Paragraph("<b>Erfasst von</b>", cell_style), 
-            Paragraph(f"{job.get('created_by_name') or '-'} ({job['created_by_dienstnummer']})", cell_style)
+            Paragraph(f"{job.get('created_by_authority') or '-'}", cell_style)
         ])
     
     vehicle_table = Table(vehicle_data, colWidths=[4.5*cm, 12.5*cm])
@@ -3658,7 +3659,7 @@ async def export_jobs_csv(
     
     fieldnames = [
         'Auftragsnummer', 'Kennzeichen', 'FIN', 'Abschleppgrund', 'Status',
-        'Standort', 'Behörde', 'Dienstnummer', 'Abschleppdienst',
+        'Standort', 'Behörde', 'Abschleppdienst',
         'Erstellt am', 'Vor Ort', 'Abgeschleppt', 'Im Hof', 'Abgeholt',
         'Halter Name', 'Halter Adresse', 'Zahlungsart', 'Betrag'
     ]
@@ -3680,7 +3681,6 @@ async def export_jobs_csv(
             'Status': status_map.get(job.get('status', ''), job.get('status', '')),
             'Standort': job.get('location_address', ''),
             'Behörde': job.get('created_by_authority', ''),
-            'Dienstnummer': job.get('created_by_dienstnummer', ''),
             'Abschleppdienst': job.get('assigned_service_name', ''),
             'Erstellt am': job.get('created_at', '')[:19].replace('T', ' ') if job.get('created_at') else '',
             'Vor Ort': job.get('on_site_at', '')[:19].replace('T', ' ') if job.get('on_site_at') else '',
@@ -3745,7 +3745,7 @@ async def export_jobs_excel(
     
     headers = [
         'Auftragsnummer', 'Kennzeichen', 'FIN', 'Abschleppgrund', 'Status',
-        'Standort', 'Behörde', 'Dienstnummer', 'Abschleppdienst',
+        'Standort', 'Behörde', 'Abschleppdienst',
         'Erstellt am', 'Vor Ort', 'Abgeschleppt', 'Im Hof', 'Abgeholt',
         'Halter Name', 'Halter Adresse', 'Zahlungsart', 'Betrag'
     ]
@@ -3771,7 +3771,6 @@ async def export_jobs_excel(
             status_map.get(job.get('status', ''), job.get('status', '')),
             job.get('location_address', ''),
             job.get('created_by_authority', ''),
-            job.get('created_by_dienstnummer', ''),
             job.get('assigned_service_name', ''),
             job.get('created_at', '')[:19].replace('T', ' ') if job.get('created_at') else '',
             job.get('on_site_at', '')[:19].replace('T', ' ') if job.get('on_site_at') else '',
