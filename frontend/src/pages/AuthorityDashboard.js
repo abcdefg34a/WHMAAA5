@@ -6,7 +6,7 @@ import {
   Car, MapPin, Camera, Plus, LogOut, FileText, Menu, X,
   Search, Clock, ChevronRight, Trash2, Link as LinkIcon, CheckCircle,
   Users, UserPlus, Lock, Unlock, Key, Badge, Download, Filter, Calendar, Settings,
-  User
+  User, Euro
 } from 'lucide-react';
 import { Button } from '../components/ui/button';
 import { Input } from '../components/ui/input';
@@ -20,6 +20,7 @@ import { MapContainer, TileLayer, Marker, useMapEvents } from 'react-leaflet';
 import { toast } from 'sonner';
 import { Pagination } from '../components/Pagination';
 import TwoFactorSetup from '../components/profile/TwoFactorSetup';
+import VehicleCategorySettings from '../components/VehicleCategorySettings';
 import 'leaflet/dist/leaflet.css';
 import L from 'leaflet';
 
@@ -134,6 +135,7 @@ export const AuthorityDashboard = () => {
   const [editJobDialogOpen, setEditJobDialogOpen] = useState(false);
   const [editingJobData, setEditingJobData] = useState(false);
   const [selectedJobForEdit, setSelectedJobForEdit] = useState(null);
+  const [vehicleCategoryDialogOpen, setVehicleCategoryDialogOpen] = useState(false);
   const [editJobData, setEditJobData] = useState({
     license_plate: '',
     vin: '',
@@ -627,6 +629,10 @@ export const AuthorityDashboard = () => {
             <TabsTrigger data-testid="tab-profile" value="profile" className="flex items-center gap-2">
               <User className="h-4 w-4" />
               Profil
+            </TabsTrigger>
+            <TabsTrigger data-testid="tab-fees" value="fees" className="flex items-center gap-2">
+              <Euro className="h-4 w-4" />
+              Gebühren
             </TabsTrigger>
           </TabsList>
 
@@ -1426,6 +1432,25 @@ export const AuthorityDashboard = () => {
           {/* Profile Tab */}
           <TabsContent value="profile">
             <TwoFactorSetup />
+          </TabsContent>
+
+          {/* Gebühren Tab */}
+          <TabsContent value="fees">
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <Euro className="h-5 w-5" />
+                  Fahrzeugkategorien & Gebühren
+                </CardTitle>
+                <CardDescription>
+                  Verwalten Sie Ihre Preiskategorien für verschiedene Fahrzeugtypen.
+                  Diese werden bei der Kostenberechnung verwendet.
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                <VehicleCategorySettings />
+              </CardContent>
+            </Card>
           </TabsContent>
         </Tabs>
       </main>

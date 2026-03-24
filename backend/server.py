@@ -732,6 +732,18 @@ class UpdateCostsRequest(BaseModel):
     tow_cost: float
     daily_cost: float
 
+# NEW: Fahrzeugkategorien mit Preisen (Hamburg-Modell)
+class VehicleCategoryPrice(BaseModel):
+    id: Optional[str] = None
+    name: str  # z.B. "PKW bis 4t"
+    description: Optional[str] = None  # z.B. "Kraftfahrzeug mit einer zulässigen Gesamtmasse bis 4t"
+    base_price: float  # Grundpreis für erste 24h
+    daily_rate: float  # Preis pro weitere 24h
+    is_active: bool = True
+
+class VehicleCategoryPriceList(BaseModel):
+    categories: List[VehicleCategoryPrice]
+
 # NEW: Extended pricing settings for towing services
 class PricingSettingsRequest(BaseModel):
     # Zeitbasiert
@@ -861,6 +873,7 @@ class JobResponse(BaseModel):
     job_type: Optional[str] = "towing"
     sicherstellung_reason: Optional[str] = None
     vehicle_category: Optional[str] = None
+    vehicle_category_id: Optional[str] = None  # Referenz zur Preiskategorie
     ordering_authority: Optional[str] = None
     contact_attempts: Optional[bool] = None
     contact_attempts_notes: Optional[str] = None
@@ -1809,6 +1822,136 @@ async def update_company_info(data: CompanyInfoUpdate, user: dict = Depends(get_
     })
     
     return UserResponse(**updated_user)
+
+# ==================== FAHRZEUGKATEGORIEN-PREISE ====================
+
+@api_router.get("/vehicle-categories")
+async def get_vehicle_categories(user: dict = Depends(get_current_user)):
+    """Hole alle Fahrzeugkategorien mit Preisen für den aktuellen Benutzer"""
+    if user["role"] not in [UserRole.AUTHORITY, UserRole.TOWING_SERVICE]:
+        raise HTTPException(status_code=403, detail="Nicht berechtigt")
+    
+    # Hole Kategorien für diesen Benutzer
+    categories = await db.vehicle_categories.find({"owner_id": user["id"]}).to_list(100)
+    
+    # Entferne MongoDB _id
+    for cat in categories:
+        cat.pop("_id", None)
+    
+    return categories
+
+@api_router.post("/vehicle-categories")
+async def create_vehicle_category(category: VehicleCategoryPrice, user: dict = Depends(get_current_user)):
+    """Neue Fahrzeugkategorie mit Preisen anlegen"""
+    if user["role"] not in [UserRole.AUTHORITY, UserRole.TOWING_SERVICE]:
+        raise HTTPException(status_code=403, detail="Nicht berechtigt")
+    
+    new_category = {
+        "id": str(uuid.uuid4()),
+        "owner_id": user["id"],
+        "owner_type": user["role"],
+        "name": category.name,
+        "description": category.description,
+        "base_price": category.base_price,
+        "daily_rate": category.daily_rate,
+        "is_active": category.is_active,
+        "created_at": datetime.now(timezone.utc).isoformat()
+    }
+    
+    await db.vehicle_categories.insert_one(new_category)
+    
+    await log_audit("VEHICLE_CATEGORY_CREATED", user["id"], user.get("name", ""), {
+        "category_name": category.name,
+        "base_price": category.base_price,
+        "daily_rate": category.daily_rate
+    })
+    
+    new_category.pop("_id", None)
+    return new_category
+
+@api_router.put("/vehicle-categories/{category_id}")
+async def update_vehicle_category(category_id: str, category: VehicleCategoryPrice, user: dict = Depends(get_current_user)):
+    """Fahrzeugkategorie aktualisieren"""
+    if user["role"] not in [UserRole.AUTHORITY, UserRole.TOWING_SERVICE]:
+        raise HTTPException(status_code=403, detail="Nicht berechtigt")
+    
+    existing = await db.vehicle_categories.find_one({"id": category_id, "owner_id": user["id"]})
+    if not existing:
+        raise HTTPException(status_code=404, detail="Kategorie nicht gefunden")
+    
+    update_data = {
+        "name": category.name,
+        "description": category.description,
+        "base_price": category.base_price,
+        "daily_rate": category.daily_rate,
+        "is_active": category.is_active,
+        "updated_at": datetime.now(timezone.utc).isoformat()
+    }
+    
+    await db.vehicle_categories.update_one({"id": category_id}, {"$set": update_data})
+    
+    await log_audit("VEHICLE_CATEGORY_UPDATED", user["id"], user.get("name", ""), {
+        "category_id": category_id,
+        "category_name": category.name
+    })
+    
+    updated = await db.vehicle_categories.find_one({"id": category_id}, {"_id": 0})
+    return updated
+
+@api_router.delete("/vehicle-categories/{category_id}")
+async def delete_vehicle_category(category_id: str, user: dict = Depends(get_current_user)):
+    """Fahrzeugkategorie löschen"""
+    if user["role"] not in [UserRole.AUTHORITY, UserRole.TOWING_SERVICE]:
+        raise HTTPException(status_code=403, detail="Nicht berechtigt")
+    
+    existing = await db.vehicle_categories.find_one({"id": category_id, "owner_id": user["id"]})
+    if not existing:
+        raise HTTPException(status_code=404, detail="Kategorie nicht gefunden")
+    
+    await db.vehicle_categories.delete_one({"id": category_id})
+    
+    await log_audit("VEHICLE_CATEGORY_DELETED", user["id"], user.get("name", ""), {
+        "category_id": category_id,
+        "category_name": existing.get("name")
+    })
+    
+    return {"status": "deleted"}
+
+@api_router.post("/vehicle-categories/calculate")
+async def calculate_category_price(
+    category_id: str = None,
+    days: int = 1,
+    user: dict = Depends(get_current_user)
+):
+    """Berechne Preis basierend auf Kategorie und Standtagen"""
+    if not category_id:
+        raise HTTPException(status_code=400, detail="category_id erforderlich")
+    
+    category = await db.vehicle_categories.find_one({"id": category_id})
+    if not category:
+        raise HTTPException(status_code=404, detail="Kategorie nicht gefunden")
+    
+    base_price = category.get("base_price", 0)
+    daily_rate = category.get("daily_rate", 0)
+    
+    # Erste 24h = Grundpreis, danach Tagessatz
+    if days <= 1:
+        total = base_price
+    else:
+        total = base_price + ((days - 1) * daily_rate)
+    
+    return {
+        "category_id": category_id,
+        "category_name": category.get("name"),
+        "days": days,
+        "base_price": base_price,
+        "daily_rate": daily_rate,
+        "total": total,
+        "breakdown": [
+            {"label": f"Grundpreis (erste 24h)", "amount": base_price},
+            {"label": f"{days - 1} × weitere 24h à {daily_rate}€", "amount": (days - 1) * daily_rate} if days > 1 else None
+        ]
+    }
 
 # NEW: Calculate job costs based on service pricing
 @api_router.get("/jobs/{job_id}/calculate-costs")

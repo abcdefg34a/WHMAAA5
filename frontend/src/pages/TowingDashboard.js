@@ -23,6 +23,7 @@ import { MapContainer, TileLayer, Marker, Popup, useMapEvents } from 'react-leaf
 import { toast } from 'sonner';
 import { Pagination } from '../components/Pagination';
 import TwoFactorSetup from '../components/profile/TwoFactorSetup';
+import VehicleCategorySettings from '../components/VehicleCategorySettings';
 import 'leaflet/dist/leaflet.css';
 import L from 'leaflet';
 
@@ -1311,6 +1312,10 @@ export const TowingDashboard = () => {
               <CheckCircle className="h-4 w-4" />
               Abgeholt ({filterJobs('released').length})
             </TabsTrigger>
+            <TabsTrigger data-testid="tab-fees" value="fees" className="flex items-center gap-2">
+              <Euro className="h-4 w-4" />
+              Gebühren
+            </TabsTrigger>
           </TabsList>
 
           {/* Incoming Jobs */}
@@ -1514,6 +1519,24 @@ export const TowingDashboard = () => {
           {/* Profile Tab */}
           <TabsContent value="profile">
             <TwoFactorSetup />
+          </TabsContent>
+
+          {/* Gebühren Tab */}
+          <TabsContent value="fees">
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <Euro className="h-5 w-5" />
+                  Fahrzeugkategorien & Gebühren
+                </CardTitle>
+                <CardDescription>
+                  Verwalten Sie Ihre Preiskategorien für verschiedene Fahrzeugtypen.
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                <VehicleCategorySettings />
+              </CardContent>
+            </Card>
           </TabsContent>
         </Tabs>
 
