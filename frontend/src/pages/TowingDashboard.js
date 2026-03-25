@@ -776,6 +776,36 @@ export const TowingDashboard = () => {
   }, [jobs, serviceNotes, servicePhotos, selectedJob]);
 
   // Optimized release with useCallback
+  // Reset form - defined early to avoid circular dependency
+  const resetReleaseForm = useCallback(() => {
+    setOwnerFirstName('');
+    setOwnerLastName('');
+    setOwnerAddress('');
+    setPaymentMethod('cash');
+    setPaymentAmount('');
+  }, []);
+
+  // PDF download - defined early to avoid circular dependency  
+  const downloadPDF = useCallback(async (jobId, jobNumber) => {
+    try {
+      const tokenRes = await axios.get(`${API}/jobs/${jobId}/pdf/token`);
+      const response = await axios.get(`${API}/jobs/${jobId}/pdf?token=${tokenRes.data.token}`, {
+        responseType: 'blob'
+      });
+      const url = window.URL.createObjectURL(new Blob([response.data]));
+      const link = document.createElement('a');
+      link.href = url;
+      link.setAttribute('download', `Abschleppprotokoll_${jobNumber || jobId}.pdf`);
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      window.URL.revokeObjectURL(url);
+    } catch (error) {
+      console.error('PDF download error:', error);
+      toast.error('PDF konnte nicht heruntergeladen werden');
+    }
+  }, []);
+
   const handleReleaseVehicle = useCallback(async () => {
     if (!selectedJob) return;
 
@@ -806,14 +836,6 @@ export const TowingDashboard = () => {
       toast.error('Fehler bei der Freigabe');
     }
   }, [selectedJob, ownerFirstName, ownerLastName, ownerAddress, paymentMethod, paymentAmount, fetchJobs, downloadPDF, resetReleaseForm]);
-
-  const resetReleaseForm = useCallback(() => {
-    setOwnerFirstName('');
-    setOwnerLastName('');
-    setOwnerAddress('');
-    setPaymentMethod('cash');
-    setPaymentAmount('');
-  }, []);
 
   const handlePhotoUpload = async (e) => {
     const files = Array.from(e.target.files);
@@ -1008,27 +1030,6 @@ export const TowingDashboard = () => {
     in_yard: jobs.filter(j => j.status === 'in_yard' || j.status === 'delivered_to_authority').length,
     released: jobs.filter(j => j.status === 'released').length
   }), [jobs]);
-
-  // Optimized PDF download with loading state
-  const downloadPDF = useCallback(async (jobId, jobNumber) => {
-    try {
-      const tokenRes = await axios.get(`${API}/jobs/${jobId}/pdf/token`);
-      const response = await axios.get(`${API}/jobs/${jobId}/pdf?token=${tokenRes.data.token}`, {
-        responseType: 'blob'
-      });
-      const url = window.URL.createObjectURL(new Blob([response.data]));
-      const link = document.createElement('a');
-      link.href = url;
-      link.setAttribute('download', `Abschleppprotokoll_${jobNumber || jobId}.pdf`);
-      document.body.appendChild(link);
-      link.click();
-      link.remove();
-      window.URL.revokeObjectURL(url);
-    } catch (error) {
-      console.error('PDF download error:', error);
-      toast.error('PDF konnte nicht heruntergeladen werden');
-    }
-  }, []);
 
   return (
     <div className="min-h-screen bg-slate-50">
