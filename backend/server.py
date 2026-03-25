@@ -1813,8 +1813,18 @@ async def update_costs(data: UpdateCostsRequest, user: dict = Depends(get_curren
     if user["role"] != UserRole.TOWING_SERVICE:
         raise HTTPException(status_code=403, detail="Only towing services can update costs")
     
+    # Only main account can update costs
+    if user.get("parent_service_id"):
+        raise HTTPException(status_code=403, detail="Nur der Haupt-Account kann Preise ändern")
+    
     await db.users.update_one(
         {"id": user["id"]},
+        {"$set": {"tow_cost": data.tow_cost, "daily_cost": data.daily_cost}}
+    )
+    
+    # Also update employees to inherit new prices
+    await db.users.update_many(
+        {"parent_service_id": user["id"]},
         {"$set": {"tow_cost": data.tow_cost, "daily_cost": data.daily_cost}}
     )
     
@@ -1828,6 +1838,10 @@ async def update_pricing_settings(data: PricingSettingsRequest, user: dict = Dep
     """Update extended pricing settings for towing service"""
     if user["role"] != UserRole.TOWING_SERVICE:
         raise HTTPException(status_code=403, detail="Only towing services can update pricing")
+    
+    # Only main account can update pricing
+    if user.get("parent_service_id"):
+        raise HTTPException(status_code=403, detail="Nur der Haupt-Account kann Preise ändern")
     
     update_data = {}
     if data.time_based_enabled is not None:
@@ -1890,6 +1904,10 @@ async def update_company_info(data: CompanyInfoUpdate, user: dict = Depends(get_
     if user["role"] != UserRole.TOWING_SERVICE:
         raise HTTPException(status_code=403, detail="Nur Abschleppdienste können Firmendaten ändern")
     
+    # Only main account can update company info
+    if user.get("parent_service_id"):
+        raise HTTPException(status_code=403, detail="Nur der Haupt-Account kann Firmendaten ändern")
+    
     update_data = {}
     if data.company_name is not None:
         update_data["company_name"] = data.company_name
@@ -1908,6 +1926,25 @@ async def update_company_info(data: CompanyInfoUpdate, user: dict = Depends(get_
     
     if update_data:
         await db.users.update_one({"id": user["id"]}, {"$set": update_data})
+        
+        # Also update employees to inherit company info
+        employee_update = {}
+        if data.company_name is not None:
+            employee_update["company_name"] = data.company_name
+        if data.yard_address is not None:
+            employee_update["yard_address"] = data.yard_address
+        if data.yard_lat is not None:
+            employee_update["yard_lat"] = data.yard_lat
+        if data.yard_lng is not None:
+            employee_update["yard_lng"] = data.yard_lng
+        if data.phone is not None:
+            employee_update["phone"] = data.phone
+            
+        if employee_update:
+            await db.users.update_many(
+                {"parent_service_id": user["id"]},
+                {"$set": employee_update}
+            )
     
     updated_user = await db.users.find_one({"id": user["id"]}, {"_id": 0, "password": 0})
     

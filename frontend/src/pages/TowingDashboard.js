@@ -1165,26 +1165,31 @@ export const TowingDashboard = () => {
               </div>
 
               {/* Settings Button */}
-              <Button
-                data-testid="settings-btn"
-                variant="outline"
-                size="sm"
-                onClick={() => setSettingsDialogOpen(true)}
-                title="Preise anpassen"
-              >
-                <Euro className="h-4 w-4" />
-              </Button>
+              {/* Settings Button - nur für Hauptaccount */}
+              {isMainAccount && (
+                <Button
+                  data-testid="settings-btn"
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setSettingsDialogOpen(true)}
+                  title="Preise anpassen"
+                >
+                  <Euro className="h-4 w-4" />
+                </Button>
+              )}
 
-              {/* Company Info Button */}
-              <Button
-                data-testid="company-info-btn"
-                variant="outline"
-                size="sm"
-                onClick={openCompanyInfoDialog}
-                title="Firmendaten bearbeiten"
-              >
-                <Building2 className="h-4 w-4" />
-              </Button>
+              {/* Company Info Button - nur für Hauptaccount */}
+              {isMainAccount && (
+                <Button
+                  data-testid="company-info-btn"
+                  variant="outline"
+                  size="sm"
+                  onClick={openCompanyInfoDialog}
+                  title="Firmendaten bearbeiten"
+                >
+                  <Building2 className="h-4 w-4" />
+                </Button>
+              )}
 
               {/* Notification Settings */}
               <div className="flex items-center gap-1 border rounded-md px-2 py-1 bg-slate-50">
@@ -1352,17 +1357,21 @@ export const TowingDashboard = () => {
                       </DropdownMenuItem>
                     )}
                     
-                    {/* Company Info */}
-                    <DropdownMenuItem onClick={openCompanyInfoDialog} className="cursor-pointer">
-                      <Building2 className="h-4 w-4 mr-2 text-blue-600" />
-                      <span>Firmendaten bearbeiten</span>
-                    </DropdownMenuItem>
+                    {/* Company Info - nur für Hauptaccount */}
+                    {isMainAccount && (
+                      <DropdownMenuItem onClick={openCompanyInfoDialog} className="cursor-pointer">
+                        <Building2 className="h-4 w-4 mr-2 text-blue-600" />
+                        <span>Firmendaten bearbeiten</span>
+                      </DropdownMenuItem>
+                    )}
                     
-                    {/* Prices */}
-                    <DropdownMenuItem onClick={() => setSettingsDialogOpen(true)} className="cursor-pointer">
-                      <Euro className="h-4 w-4 mr-2 text-orange-600" />
-                      <span>Preise anpassen</span>
-                    </DropdownMenuItem>
+                    {/* Prices - nur für Hauptaccount */}
+                    {isMainAccount && (
+                      <DropdownMenuItem onClick={() => setSettingsDialogOpen(true)} className="cursor-pointer">
+                        <Euro className="h-4 w-4 mr-2 text-orange-600" />
+                        <span>Preise anpassen</span>
+                      </DropdownMenuItem>
+                    )}
                     
                     <DropdownMenuSeparator />
                     
