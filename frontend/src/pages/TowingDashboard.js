@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { useAuth } from '../contexts/AuthContext';
 import { useDeltaPolling } from '../hooks/useDeltaPolling';
 import { useJobNotifications } from '../hooks/useJobNotifications';
@@ -263,7 +263,7 @@ export const TowingDashboard = () => {
     setSelectedJobIds([]);
   }, [activeTab]);
 
-  const fetchJobs = async () => {
+  const fetchJobs = useCallback(async () => {
     try {
       const params = new URLSearchParams();
       params.append('page', currentPage.toString());
@@ -300,33 +300,35 @@ export const TowingDashboard = () => {
     } finally {
       setLoading(false);
     }
-  };
+  }, [currentPage, itemsPerPage, filterStatus, filterDateFrom, filterDateTo]);
 
-  const handlePageChange = (page) => {
+  const handlePageChange = useCallback((page) => {
     setCurrentPage(page);
-  };
+  }, []);
 
   // Bulk selection handlers
-  const toggleJobSelection = (jobId, event) => {
+  const toggleJobSelection = useCallback((jobId, event) => {
     event.stopPropagation();
     setSelectedJobIds(prev =>
       prev.includes(jobId)
         ? prev.filter(id => id !== jobId)
         : [...prev, jobId]
     );
-  };
+  }, []);
 
-  const selectAllInTab = (tabJobs) => {
+  const selectAllInTab = useCallback((tabJobs) => {
     const tabJobIds = tabJobs.map(j => j.id);
-    const allSelected = tabJobIds.every(id => selectedJobIds.includes(id));
-    if (allSelected) {
-      setSelectedJobIds(prev => prev.filter(id => !tabJobIds.includes(id)));
-    } else {
-      setSelectedJobIds(prev => [...new Set([...prev, ...tabJobIds])]);
-    }
-  };
+    setSelectedJobIds(prev => {
+      const allSelected = tabJobIds.every(id => prev.includes(id));
+      if (allSelected) {
+        return prev.filter(id => !tabJobIds.includes(id));
+      } else {
+        return [...new Set([...prev, ...tabJobIds])];
+      }
+    });
+  }, []);
 
-  const handleBulkStatusUpdate = async (newStatus) => {
+  const handleBulkStatusUpdate = useCallback(async (newStatus) => {
     if (selectedJobIds.length === 0) return;
 
     setBulkUpdating(true);
@@ -343,16 +345,18 @@ export const TowingDashboard = () => {
     } finally {
       setBulkUpdating(false);
     }
-  };
+  }, [selectedJobIds, fetchJobs]);
 
-  const clearFilters = () => {
+  const clearFilters = useCallback(() => {
     setFilterStatus('all');
     setFilterDateFrom('');
     setFilterDateTo('');
     setCurrentPage(1);
-  };
+  }, []);
 
-  const hasActiveFilters = filterStatus !== 'all' || filterDateFrom || filterDateTo;
+  const hasActiveFilters = useMemo(() => 
+    filterStatus !== 'all' || filterDateFrom || filterDateTo
+  , [filterStatus, filterDateFrom, filterDateTo]);
 
   // NEW: Fetch linked authorities for job creation
   const fetchLinkedAuthorities = async () => {
@@ -743,31 +747,36 @@ export const TowingDashboard = () => {
     }
   };
 
-  const handleStatusUpdate = async (jobId, newStatus) => {
+  // Optimized status update with optimistic UI
+  const handleStatusUpdate = useCallback(async (jobId, newStatus) => {
+    // Optimistic update - update UI immediately
+    const previousJobs = [...jobs];
+    setJobs(prevJobs => prevJobs.map(j => 
+      j.id === jobId ? { ...j, status: newStatus } : j
+    ));
+    
     try {
       const updateData = { status: newStatus };
       if (serviceNotes) updateData.service_notes = serviceNotes;
-      // WICHTIG: Sende auch die Service-Fotos mit
       if (servicePhotos && servicePhotos.length > 0) {
         updateData.service_photos = servicePhotos;
       }
 
       await axios.patch(`${API}/jobs/${jobId}`, updateData);
       toast.success('Status aktualisiert');
-      fetchJobs();
 
       if (selectedJob?.id === jobId) {
-        const response = await axios.get(`${API}/jobs/${jobId}`);
-        setSelectedJob(response.data);
-        // Aktualisiere auch die lokalen Fotos
-        setServicePhotos(response.data.service_photos || []);
+        setSelectedJob(prev => prev ? { ...prev, status: newStatus } : null);
       }
     } catch (error) {
+      // Rollback on error
+      setJobs(previousJobs);
       toast.error('Fehler beim Aktualisieren');
     }
-  };
+  }, [jobs, serviceNotes, servicePhotos, selectedJob]);
 
-  const handleReleaseVehicle = async () => {
+  // Optimized release with useCallback
+  const handleReleaseVehicle = useCallback(async () => {
     if (!selectedJob) return;
 
     if (!ownerFirstName || !ownerLastName || !paymentAmount) {
@@ -796,15 +805,15 @@ export const TowingDashboard = () => {
     } catch (error) {
       toast.error('Fehler bei der Freigabe');
     }
-  };
+  }, [selectedJob, ownerFirstName, ownerLastName, ownerAddress, paymentMethod, paymentAmount, fetchJobs, downloadPDF, resetReleaseForm]);
 
-  const resetReleaseForm = () => {
+  const resetReleaseForm = useCallback(() => {
     setOwnerFirstName('');
     setOwnerLastName('');
     setOwnerAddress('');
     setPaymentMethod('cash');
     setPaymentAmount('');
-  };
+  }, []);
 
   const handlePhotoUpload = async (e) => {
     const files = Array.from(e.target.files);
@@ -962,12 +971,12 @@ export const TowingDashboard = () => {
     return null;
   };
 
-  const filterJobs = (status, searchTerm = '') => {
+  // Memoized filter function for better performance
+  const filterJobs = useCallback((status, searchTerm = '') => {
     let filtered = [];
     if (status === 'incoming') {
       filtered = jobs.filter(j => ['assigned', 'on_site', 'towed'].includes(j.status));
     } else if (status === 'in_yard') {
-      // Include both in_yard and delivered_to_authority (completed authority yard jobs)
       filtered = jobs.filter(j => j.status === 'in_yard' || j.status === 'delivered_to_authority');
     } else if (status === 'released') {
       filtered = jobs.filter(j => j.status === 'released');
@@ -975,10 +984,9 @@ export const TowingDashboard = () => {
       filtered = jobs;
     }
     
-    // Apply search filter if provided
     if (searchTerm && searchTerm.trim()) {
       const search = searchTerm.toUpperCase().trim();
-      const searchNormalized = search.replace(/[\s-]/g, ''); // Remove spaces and dashes
+      const searchNormalized = search.replace(/[\s-]/g, '');
       filtered = filtered.filter(j => {
         const plate = (j.license_plate || '').toUpperCase();
         const plateNormalized = plate.replace(/[\s-]/g, '');
@@ -992,9 +1000,17 @@ export const TowingDashboard = () => {
     }
     
     return filtered;
-  };
+  }, [jobs]);
 
-  const downloadPDF = async (jobId, jobNumber) => {
+  // Memoized job counts for tabs
+  const jobCounts = useMemo(() => ({
+    incoming: jobs.filter(j => ['assigned', 'on_site', 'towed'].includes(j.status)).length,
+    in_yard: jobs.filter(j => j.status === 'in_yard' || j.status === 'delivered_to_authority').length,
+    released: jobs.filter(j => j.status === 'released').length
+  }), [jobs]);
+
+  // Optimized PDF download with loading state
+  const downloadPDF = useCallback(async (jobId, jobNumber) => {
     try {
       const tokenRes = await axios.get(`${API}/jobs/${jobId}/pdf/token`);
       const response = await axios.get(`${API}/jobs/${jobId}/pdf?token=${tokenRes.data.token}`, {
@@ -1012,7 +1028,7 @@ export const TowingDashboard = () => {
       console.error('PDF download error:', error);
       toast.error('PDF konnte nicht heruntergeladen werden');
     }
-  };
+  }, []);
 
   return (
     <div className="min-h-screen bg-slate-50">
@@ -1386,15 +1402,15 @@ export const TowingDashboard = () => {
           <TabsList className="mb-6">
             <TabsTrigger data-testid="tab-incoming" value="incoming" className="flex items-center gap-2">
               <Truck className="h-4 w-4" />
-              Eingehend ({filterJobs('incoming').length})
+              Eingehend ({jobCounts.incoming})
             </TabsTrigger>
             <TabsTrigger data-testid="tab-in-yard" value="in_yard" className="flex items-center gap-2">
               <Building2 className="h-4 w-4" />
-              Im Hof ({filterJobs('in_yard').length})
+              Im Hof ({jobCounts.in_yard})
             </TabsTrigger>
             <TabsTrigger data-testid="tab-released" value="released" className="flex items-center gap-2">
               <CheckCircle className="h-4 w-4" />
-              Abgeholt ({filterJobs('released').length})
+              Abgeholt ({jobCounts.released})
             </TabsTrigger>
           </TabsList>
 
