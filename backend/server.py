@@ -3458,14 +3458,18 @@ async def add_service_photo(job_id: str, photo: str = Form(...), user: dict = De
 @api_router.get("/search/vehicle", response_model=VehicleSearchResult)
 async def search_vehicle(q: str):
     search_term = q.upper().strip()
-    # Also create normalized version without spaces and dashes
+    # Create normalized version without spaces and dashes
     search_normalized = search_term.replace(" ", "").replace("-", "")
+    
+    # Create a flexible regex that allows optional spaces/dashes between each character
+    # E.g., "AA123" becomes "A[\s-]*A[\s-]*1[\s-]*2[\s-]*3"
+    flexible_pattern = r"[\s-]*".join(re.escape(c) for c in search_normalized)
     
     job = await db.jobs.find_one({
         "$or": [
             {"license_plate": search_term},
             {"license_plate": search_normalized},
-            {"license_plate": {"$regex": f"^{re.escape(search_normalized)}$", "$options": "i"}},
+            {"license_plate": {"$regex": f"^{flexible_pattern}$", "$options": "i"}},
             {"vin": search_term},
             {"vin": search_normalized}
         ],
