@@ -111,15 +111,18 @@ backend:
 
   - task: "Jobs API - Update Job"
     implemented: true
-    working: false
+    working: true
     file: "server.py"
-    stuck_count: 1
+    stuck_count: 0
     priority: "high"
     needs_retesting: false
     status_history:
       - working: false
         agent: "testing"
         comment: "PUT /api/jobs/{id} endpoint not responding (timeout or network issue)"
+      - working: true
+        agent: "testing"
+        comment: "CRITICAL FIX VERIFIED: Both PUT /api/jobs/{job_id} and PATCH /api/jobs/{job_id} now working without timeout. Successfully updated job status from 'assigned' to 'on_site' to 'towed' using both endpoints."
 
   - task: "Admin - Get Users"
     implemented: true
@@ -135,15 +138,18 @@ backend:
 
   - task: "Admin - Audit Logs"
     implemented: true
-    working: false
+    working: true
     file: "server.py"
-    stuck_count: 2
+    stuck_count: 0
     priority: "high"
     needs_retesting: false
     status_history:
       - working: false
         agent: "testing"
         comment: "GET /api/admin/audit-logs failing with Pydantic validation error - some audit log entries missing user_name field"
+      - working: true
+        agent: "testing"
+        comment: "CRITICAL FIX VERIFIED: GET /api/admin/audit-logs now working without Pydantic validation errors. Successfully retrieved 100 audit logs. The fix handles missing user_name fields with proper defaults."
 
   - task: "Admin - Database Backup"
     implemented: true
@@ -337,3 +343,5 @@ agent_communication:
     message: "Implemented 5 action items: 1) Fixed PDF timestamp bug for authority_yard jobs - now uses delivered_to_authority_at instead of in_yard_at. 2) Added backend validation for authority_yard job creation - requires yard selection and price category. 3) UX improvement for target yard already implemented - defaults to yard_model setting. 4) Extended status filter with 'delivered_to_authority' option in both dashboards. 5) Added mark-invoice-as-paid functionality with new backend endpoint and frontend button."
   - agent: "testing"
     message: "New features testing completed successfully. 100% success rate (11/11 tests passed). All authentication systems working correctly. Authority yard job validation properly implemented - correctly rejects jobs without authority_yard_id or authority_price_category_id when target_yard='authority_yard'. Invoice mark-as-paid functionality working perfectly - can mark invoices as paid and prevents duplicate marking. All regression tests (jobs list, cost calculation) also passing."
+  - agent: "testing"
+    message: "CRITICAL FIXES VERIFIED: Both critical issues have been successfully resolved. 1) Audit Logs Fix: GET /api/admin/audit-logs now returns 100 audit logs without Pydantic validation errors, properly handling missing user_name fields with defaults. 2) Job Update Fix: Both PUT /api/jobs/{job_id} and PATCH /api/jobs/{job_id} now work without timeout issues - successfully tested status updates from 'assigned' to 'on_site' to 'towed'. All authentication working correctly with provided test credentials."

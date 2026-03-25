@@ -2988,6 +2988,7 @@ async def get_job(job_id: str, user: dict = Depends(get_current_user)):
     return JobResponse(**job)
 
 @api_router.patch("/jobs/{job_id}", response_model=JobResponse)
+@api_router.put("/jobs/{job_id}", response_model=JobResponse)
 async def update_job(job_id: str, data: JobUpdate, user: dict = Depends(get_current_user)):
     job = await db.jobs.find_one({"id": job_id}, {"_id": 0})
     if not job:
@@ -4593,7 +4594,20 @@ async def get_audit_logs(
     
     logs = await db.audit_logs.find(query, {"_id": 0}).sort("timestamp", -1).skip(skip).limit(limit).to_list(limit)
     
-    return [AuditLogResponse(**log) for log in logs]
+    # Ensure all logs have required fields with defaults
+    sanitized_logs = []
+    for log in logs:
+        sanitized_log = {
+            "id": log.get("id", str(uuid.uuid4())),
+            "timestamp": log.get("timestamp", datetime.now(timezone.utc).isoformat()),
+            "action": log.get("action", "UNKNOWN"),
+            "user_id": log.get("user_id") or "system",
+            "user_name": log.get("user_name") or "System",
+            "details": log.get("details") or {}
+        }
+        sanitized_logs.append(sanitized_log)
+    
+    return [AuditLogResponse(**log) for log in sanitized_logs]
 
 @api_router.get("/admin/audit-logs/count")
 async def get_audit_logs_count(user: dict = Depends(get_current_user)):
