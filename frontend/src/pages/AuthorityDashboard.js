@@ -867,7 +867,7 @@ export const AuthorityDashboard = () => {
             )}
             <TabsTrigger data-testid="tab-my-jobs" value="jobs" className="flex items-center gap-2">
               <FileText className="h-4 w-4" />
-              {user?.is_main_authority ? 'Alle Aufträge' : 'Meine Aufträge'}
+              {user?.is_main_authority ? 'Alle Aufträge' : user?.sub_role === 'yard' ? 'Aufträge' : 'Meine Aufträge'}
             </TabsTrigger>
             {/* Im Hof Tab - für alle sichtbar, aber Freigabe nur für Admin und Hof-Mitarbeiter */}
             {authoritySettings.yard_model === 'authority_yard' && (
