@@ -857,8 +857,9 @@ class JobUpdate(BaseModel):
     owner_address: Optional[str] = None
     payment_method: Optional[str] = None
     payment_amount: Optional[float] = None
-    # NEW: Empty trip flag
+    # NEW: Empty trip flag and reason
     is_empty_trip: Optional[bool] = None
+    empty_trip_reason: Optional[str] = None  # 'vehicle_gone', 'driver_present', 'driver_not_found'
 
 # NEW: Model for editing job vehicle data (Kennzeichen, FIN, etc.)
 class JobEditData(BaseModel):
@@ -937,6 +938,7 @@ class JobResponse(BaseModel):
     contact_attempts_notes: Optional[str] = None
     estimated_vehicle_value: Optional[float] = None
     is_empty_trip: Optional[bool] = None
+    empty_trip_reason: Optional[str] = None  # 'vehicle_gone', 'driver_present', 'driver_not_found'
     # NEW: Calculated costs breakdown
     calculated_costs: Optional[dict] = None
     # NEW: Track if created by towing service
@@ -2991,6 +2993,8 @@ async def update_job(job_id: str, data: JobUpdate, user: dict = Depends(get_curr
     
     if data.is_empty_trip is not None:
         update_data["is_empty_trip"] = data.is_empty_trip
+    if data.empty_trip_reason is not None:
+        update_data["empty_trip_reason"] = data.empty_trip_reason
     
     if data.photos:
         update_data["photos"] = data.photos

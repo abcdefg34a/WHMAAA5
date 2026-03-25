@@ -181,7 +181,8 @@ export const TowingDashboard = () => {
 
   // NEW: Empty Trip (Leerfahrt) Dialog state
   const [emptyTripDialogOpen, setEmptyTripDialogOpen] = useState(false);
-  const [emptyTripReason, setEmptyTripReason] = useState('vehicle_gone'); // 'vehicle_gone' or 'driver_present'
+  const [emptyTripReason, setEmptyTripReason] = useState('vehicle_gone'); 
+  // Reasons: 'vehicle_gone' (Auto nicht da), 'driver_present' (Halter aufgetaucht), 'driver_not_found' (Halter nicht aufgetaucht)
   const [emptyTripDriverFirstName, setEmptyTripDriverFirstName] = useState('');
   const [emptyTripDriverLastName, setEmptyTripDriverLastName] = useState('');
   const [emptyTripDriverAddress, setEmptyTripDriverAddress] = useState('');
@@ -509,13 +510,16 @@ export const TowingDashboard = () => {
 
   // NEW: Handle Empty Trip submission with PDF
   const handleEmptyTripSubmit = async () => {
+    // Validation based on reason
     if (emptyTripReason === 'driver_present') {
       if (!emptyTripDriverFirstName || !emptyTripDriverLastName) {
-        toast.error('Bitte geben Sie den Namen des Fahrers ein');
+        toast.error('Bitte geben Sie den Namen des Halters ein');
         return;
       }
     }
-    if (!emptyTripPaymentAmount) {
+    
+    // Allow 0€ for driver_not_found reason
+    if (emptyTripReason !== 'driver_not_found' && !emptyTripPaymentAmount) {
       toast.error('Bitte geben Sie den Betrag ein');
       return;
     }
@@ -524,12 +528,19 @@ export const TowingDashboard = () => {
     try {
       // Build service notes based on reason
       let serviceNotes = '';
+      const paymentAmount = parseFloat(emptyTripPaymentAmount) || 0;
+      
       if (emptyTripReason === 'vehicle_gone') {
         serviceNotes = 'Leerfahrt - Fahrzeug war nicht mehr vor Ort';
-      } else {
-        serviceNotes = `Leerfahrt - Fahrer vor Ort angetroffen: ${emptyTripDriverFirstName} ${emptyTripDriverLastName}`;
+      } else if (emptyTripReason === 'driver_present') {
+        serviceNotes = `Leerfahrt - Halter vor Ort angetroffen: ${emptyTripDriverFirstName} ${emptyTripDriverLastName}`;
         if (emptyTripDriverAddress) {
           serviceNotes += `, Adresse: ${emptyTripDriverAddress}`;
+        }
+      } else if (emptyTripReason === 'driver_not_found') {
+        serviceNotes = 'Leerfahrt - Halter nicht aufgetaucht, Fahrzeug nicht gefunden';
+        if (paymentAmount === 0) {
+          serviceNotes += ' - KOSTEN OFFEN - Behörde muss Halter kontaktieren';
         }
       }
 
@@ -537,15 +548,20 @@ export const TowingDashboard = () => {
       await axios.patch(`${API}/jobs/${selectedJob.id}`, {
         status: 'released',
         is_empty_trip: true,
+        empty_trip_reason: emptyTripReason,
         service_notes: serviceNotes,
         owner_first_name: emptyTripReason === 'driver_present' ? emptyTripDriverFirstName : null,
         owner_last_name: emptyTripReason === 'driver_present' ? emptyTripDriverLastName : null,
         owner_address: emptyTripReason === 'driver_present' ? emptyTripDriverAddress : null,
-        payment_method: emptyTripPaymentMethod,
-        payment_amount: parseFloat(emptyTripPaymentAmount)
+        payment_method: paymentAmount > 0 ? emptyTripPaymentMethod : 'offen',
+        payment_amount: paymentAmount
       });
 
-      toast.success('Leerfahrt erfasst!');
+      if (paymentAmount === 0 && emptyTripReason === 'driver_not_found') {
+        toast.success('Leerfahrt erfasst! Kosten offen - Behörde wird benachrichtigt.');
+      } else {
+        toast.success('Leerfahrt erfasst!');
+      }
 
       // Generate and download PDF
       const tokenRes = await axios.get(`${API}/jobs/${selectedJob.id}/pdf/token`);
@@ -2485,12 +2501,39 @@ export const TowingDashboard = () => {
                     className="w-4 h-4"
                   />
                   <div>
-                    <span className="font-medium">Fahrer vor Ort angetroffen</span>
-                    <span className="text-xs text-slate-500 block">Halter/Fahrer konnte Fahrzeug selbst entfernen</span>
+                    <span className="font-medium">Halter vor Ort angetroffen</span>
+                    <span className="text-xs text-slate-500 block">Halter konnte Fahrzeug selbst entfernen</span>
+                  </div>
+                </label>
+                <label className={`flex items-center gap-3 p-3 border rounded-lg cursor-pointer transition-colors ${emptyTripReason === 'driver_not_found' ? 'border-red-500 bg-red-50' : 'border-slate-200 hover:bg-slate-50'}`}>
+                  <input
+                    type="radio"
+                    name="emptyTripReason"
+                    value="driver_not_found"
+                    checked={emptyTripReason === 'driver_not_found'}
+                    onChange={(e) => {
+                      setEmptyTripReason(e.target.value);
+                      setEmptyTripPaymentAmount('0');
+                    }}
+                    className="w-4 h-4"
+                  />
+                  <div>
+                    <span className="font-medium text-red-700">Halter nicht aufgetaucht</span>
+                    <span className="text-xs text-red-500 block">Fahrzeug nicht gefunden - Kosten offen</span>
                   </div>
                 </label>
               </div>
             </div>
+
+            {/* Warning for driver_not_found */}
+            {emptyTripReason === 'driver_not_found' && (
+              <div className="p-4 bg-red-50 border border-red-200 rounded-lg">
+                <p className="text-sm text-red-800">
+                  <strong>⚠️ Kosten offen!</strong><br />
+                  Die Behörde wird benachrichtigt und muss den Halter mit Kennzeichen <strong>{selectedJob?.license_plate}</strong> kontaktieren, um die Leerfahrt-Kosten einzufordern.
+                </p>
+              </div>
+            )}
 
             {/* Driver Info - only if driver present */}
             {emptyTripReason === 'driver_present' && (
@@ -2528,42 +2571,48 @@ export const TowingDashboard = () => {
               </div>
             )}
 
-            {/* Payment Section */}
-            <div className="space-y-4 p-4 bg-orange-50 border border-orange-200 rounded-lg">
-              <h4 className="font-medium text-orange-800">Leerfahrt-Kosten</h4>
+            {/* Payment Section - only show if not driver_not_found OR if they want to charge */}
+            <div className={`space-y-4 p-4 ${emptyTripReason === 'driver_not_found' ? 'bg-red-50 border border-red-200' : 'bg-orange-50 border border-orange-200'} rounded-lg`}>
+              <h4 className={`font-medium ${emptyTripReason === 'driver_not_found' ? 'text-red-800' : 'text-orange-800'}`}>
+                {emptyTripReason === 'driver_not_found' ? 'Leerfahrt-Kosten (offen)' : 'Leerfahrt-Kosten'}
+              </h4>
 
               {/* Show configured empty trip fee */}
-              {user?.empty_trip_fee > 0 && (
+              {user?.empty_trip_fee > 0 && emptyTripReason !== 'driver_not_found' && (
                 <div className="flex justify-between items-center text-sm">
                   <span className="text-orange-700">Ihr Leerfahrt-Preis:</span>
                   <span className="font-bold text-orange-900">{user.empty_trip_fee.toFixed(2)} €</span>
                 </div>
               )}
 
-              <div className="space-y-2">
-                <Label>Zahlungsart *</Label>
-                <RadioGroup value={emptyTripPaymentMethod} onValueChange={setEmptyTripPaymentMethod}>
-                  <div className="flex items-center space-x-4">
-                    <div className="flex items-center space-x-2">
-                      <RadioGroupItem value="cash" id="emptyTripCash" />
-                      <Label htmlFor="emptyTripCash" className="cursor-pointer">Bar</Label>
+              {emptyTripReason !== 'driver_not_found' && (
+                <div className="space-y-2">
+                  <Label>Zahlungsart *</Label>
+                  <RadioGroup value={emptyTripPaymentMethod} onValueChange={setEmptyTripPaymentMethod}>
+                    <div className="flex items-center space-x-4">
+                      <div className="flex items-center space-x-2">
+                        <RadioGroupItem value="cash" id="emptyTripCash" />
+                        <Label htmlFor="emptyTripCash" className="cursor-pointer">Bar</Label>
+                      </div>
+                      <div className="flex items-center space-x-2">
+                        <RadioGroupItem value="card" id="emptyTripCard" />
+                        <Label htmlFor="emptyTripCard" className="cursor-pointer">Karte</Label>
+                      </div>
+                      <div className="flex items-center space-x-2">
+                        <RadioGroupItem value="invoice" id="emptyTripInvoice" />
+                        <Label htmlFor="emptyTripInvoice" className="cursor-pointer">Rechnung</Label>
+                      </div>
                     </div>
-                    <div className="flex items-center space-x-2">
-                      <RadioGroupItem value="card" id="emptyTripCard" />
-                      <Label htmlFor="emptyTripCard" className="cursor-pointer">Karte</Label>
-                    </div>
-                    <div className="flex items-center space-x-2">
-                      <RadioGroupItem value="invoice" id="emptyTripInvoice" />
-                      <Label htmlFor="emptyTripInvoice" className="cursor-pointer">Rechnung</Label>
-                    </div>
-                  </div>
-                </RadioGroup>
-              </div>
+                  </RadioGroup>
+                </div>
+              )}
 
               <div className="space-y-2">
                 <div className="flex justify-between items-center">
-                  <Label htmlFor="emptyTripAmount">Betrag (€) *</Label>
-                  {user?.empty_trip_fee > 0 && emptyTripPaymentAmount !== user.empty_trip_fee.toString() && (
+                  <Label htmlFor="emptyTripAmount">
+                    {emptyTripReason === 'driver_not_found' ? 'Offener Betrag (€)' : 'Betrag (€) *'}
+                  </Label>
+                  {user?.empty_trip_fee > 0 && emptyTripPaymentAmount !== user.empty_trip_fee.toString() && emptyTripReason !== 'driver_not_found' && (
                     <Button
                       type="button"
                       variant="ghost"
