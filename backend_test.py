@@ -1,400 +1,389 @@
 #!/usr/bin/env python3
 """
-Backend Test Suite for Weight Categories Pricing System
-Tests the flexible weight categories pricing system for the German towing app.
+AbschleppPortal Backup System Comprehensive Test Suite
+Tests all backup-related endpoints with admin authentication
 """
 
 import requests
 import json
-import sys
-import os
-from datetime import datetime
-import uuid
+import time
+from typing import Dict, Any, Optional
 
-# Get backend URL from environment
-BACKEND_URL = os.environ.get('REACT_APP_BACKEND_URL', 'https://dual-yard-system.preview.emergentagent.com')
-API_BASE = f"{BACKEND_URL}/api"
+# Configuration
+BASE_URL = "https://dual-yard-system.preview.emergentagent.com/api"
+ADMIN_EMAIL = "admin@test.de"
+ADMIN_PASSWORD = "Admin123!"
 
-# Test credentials
-TOWING_SERVICE_CREDENTIALS = {
-    "email": "abschlepp@test.de",
-    "password": "Abschlepp123!"
-}
-
-AUTHORITY_CREDENTIALS = {
-    "email": "behoerde@test.de", 
-    "password": "Behoerde123!"
-}
-
-class WeightCategoriesTest:
+class BackupSystemTester:
     def __init__(self):
-        self.towing_token = None
-        self.authority_token = None
-        self.towing_service_id = None
-        self.job_id = None
-        self.weight_category_id = None
+        self.session = requests.Session()
+        self.admin_token = None
         self.test_results = []
         
-    def log_result(self, test_name, success, details=""):
-        """Log test result"""
-        status = "✅ PASS" if success else "❌ FAIL"
-        print(f"{status}: {test_name}")
-        if details:
-            print(f"   Details: {details}")
-        self.test_results.append({
+    def log_test(self, test_name: str, success: bool, details: str = "", response_data: Any = None):
+        """Log test results"""
+        result = {
             "test": test_name,
             "success": success,
-            "details": details
-        })
+            "details": details,
+            "response_data": response_data
+        }
+        self.test_results.append(result)
+        status = "✅ PASS" if success else "❌ FAIL"
+        print(f"{status} {test_name}: {details}")
         
-    def make_request(self, method, endpoint, data=None, token=None, expected_status=200):
-        """Make HTTP request with error handling"""
-        url = f"{API_BASE}{endpoint}"
-        headers = {"Content-Type": "application/json"}
-        if token:
-            headers["Authorization"] = f"Bearer {token}"
-            
+    def authenticate_admin(self) -> bool:
+        """Authenticate as admin user"""
         try:
-            if method.upper() == "GET":
-                response = requests.get(url, headers=headers, timeout=30)
-            elif method.upper() == "POST":
-                response = requests.post(url, headers=headers, json=data, timeout=30)
-            elif method.upper() == "PATCH":
-                response = requests.patch(url, headers=headers, json=data, timeout=30)
-            elif method.upper() == "PUT":
-                response = requests.put(url, headers=headers, json=data, timeout=30)
-            else:
-                raise ValueError(f"Unsupported method: {method}")
-                
-            print(f"Request: {method} {endpoint} -> Status: {response.status_code}")
-            
-            if response.status_code != expected_status:
-                print(f"Expected status {expected_status}, got {response.status_code}")
-                print(f"Response: {response.text}")
-                return None, response.status_code
-                
-            return response.json() if response.content else {}, response.status_code
-            
-        except requests.exceptions.RequestException as e:
-            print(f"Request failed: {e}")
-            return None, 0
-            
-    def test_1_towing_service_login(self):
-        """Test 1: Towing Service Login"""
-        print("\n=== Test 1: Towing Service Login ===")
-        
-        response, status = self.make_request(
-            "POST", "/auth/login", 
-            TOWING_SERVICE_CREDENTIALS,
-            expected_status=200
-        )
-        
-        if response and "access_token" in response:
-            self.towing_token = response["access_token"]
-            self.towing_service_id = response["user"]["id"]
-            self.log_result("Towing Service Login", True, f"Token received, Service ID: {self.towing_service_id}")
-            return True
-        else:
-            self.log_result("Towing Service Login", False, f"Login failed with status {status}")
-            return False
-            
-    def test_2_save_weight_categories(self):
-        """Test 2: Save Weight Categories via PATCH /api/services/pricing-settings"""
-        print("\n=== Test 2: Save Weight Categories ===")
-        
-        if not self.towing_token:
-            self.log_result("Save Weight Categories", False, "No towing service token available")
-            return False
-            
-        weight_categories_data = {
-            "tow_cost": 150,
-            "daily_cost": 25,
-            "processing_fee": 50,
-            "weight_categories": [
-                {
-                    "name": "PKW bis 3,5t",
-                    "min_weight": None,
-                    "max_weight": 3.5,
-                    "surcharge": 0,
-                    "is_default": True
-                },
-                {
-                    "name": "LKW 3,5-7,5t",
-                    "min_weight": 3.5,
-                    "max_weight": 7.5,
-                    "surcharge": 100
-                },
-                {
-                    "name": "Schwerlast über 7,5t",
-                    "min_weight": 7.5,
-                    "max_weight": None,
-                    "surcharge": 200
+            response = self.session.post(
+                f"{BASE_URL}/auth/login",
+                json={
+                    "email": ADMIN_EMAIL,
+                    "password": ADMIN_PASSWORD
                 }
-            ]
-        }
-        
-        response, status = self.make_request(
-            "PATCH", "/services/pricing-settings",
-            weight_categories_data,
-            token=self.towing_token,
-            expected_status=200
-        )
-        
-        if response:
-            print(f"Response keys: {list(response.keys())}")
-            if "weight_categories" in response:
-                weight_categories = response["weight_categories"]
-                print(f"Weight categories: {weight_categories}")
-                if len(weight_categories) == 3:
-                    # Find the LKW category for later use
-                    for cat in weight_categories:
-                        if cat["name"] == "LKW 3,5-7,5t":
-                            self.weight_category_id = cat["id"]
-                            break
-                            
-                    self.log_result("Save Weight Categories", True, 
-                                  f"3 weight categories saved successfully. LKW category ID: {self.weight_category_id}")
-                    return True
-                else:
-                    self.log_result("Save Weight Categories", False, 
-                                  f"Expected 3 categories, got {len(weight_categories)}")
-                    return False
-            else:
-                self.log_result("Save Weight Categories", False, f"No weight_categories in response. Keys: {list(response.keys())}")
-                return False
-        else:
-            self.log_result("Save Weight Categories", False, f"Failed with status {status}")
-            return False
+            )
             
-    def test_3_authority_login(self):
-        """Test 3: Authority Login"""
-        print("\n=== Test 3: Authority Login ===")
-        
-        response, status = self.make_request(
-            "POST", "/auth/login",
-            AUTHORITY_CREDENTIALS,
-            expected_status=200
-        )
-        
-        if response and "access_token" in response:
-            self.authority_token = response["access_token"]
-            self.log_result("Authority Login", True, "Token received")
-            return True
-        else:
-            self.log_result("Authority Login", False, f"Login failed with status {status}")
-            return False
-            
-    def test_4_fetch_service_weight_categories(self):
-        """Test 4: Fetch Service Weight Categories via GET /api/services/{service_id}/weight-categories"""
-        print("\n=== Test 4: Fetch Service Weight Categories ===")
-        
-        if not self.authority_token or not self.towing_service_id:
-            self.log_result("Fetch Service Weight Categories", False, "Missing authority token or service ID")
-            return False
-            
-        response, status = self.make_request(
-            "GET", f"/services/{self.towing_service_id}/weight-categories",
-            token=self.authority_token,
-            expected_status=200
-        )
-        
-        if response and "weight_categories" in response:
-            weight_categories = response["weight_categories"]
-            if len(weight_categories) == 3:
-                # Verify the categories
-                category_names = [cat["name"] for cat in weight_categories]
-                expected_names = ["PKW bis 3,5t", "LKW 3,5-7,5t", "Schwerlast über 7,5t"]
-                
-                if all(name in category_names for name in expected_names):
-                    self.log_result("Fetch Service Weight Categories", True, 
-                                  f"Retrieved 3 categories: {category_names}")
-                    return True
-                else:
-                    self.log_result("Fetch Service Weight Categories", False, 
-                                  f"Category names mismatch. Got: {category_names}")
-                    return False
-            else:
-                self.log_result("Fetch Service Weight Categories", False, 
-                              f"Expected 3 categories, got {len(weight_categories)}")
-                return False
-        else:
-            self.log_result("Fetch Service Weight Categories", False, f"Failed with status {status}")
-            return False
-            
-    def test_5_create_job_with_weight_category(self):
-        """Test 5: Create Job with Weight Category"""
-        print("\n=== Test 5: Create Job with Weight Category ===")
-        
-        if not self.authority_token or not self.towing_service_id or not self.weight_category_id:
-            self.log_result("Create Job with Weight Category", False, 
-                          "Missing authority token, service ID, or weight category ID")
-            return False
-            
-        job_data = {
-            "license_plate": "TEST-WEIGHT-001",
-            "tow_reason": "Falschparken",
-            "location_address": "Teststraße 123, Hamburg",
-            "location_lat": 53.5511,
-            "location_lng": 9.9937,
-            "assigned_service_id": self.towing_service_id,
-            "weight_category_id": self.weight_category_id,
-            "weight_category_name": "LKW 3,5-7,5t",
-            "weight_category_surcharge": 100
-        }
-        
-        response, status = self.make_request(
-            "POST", "/jobs",
-            job_data,
-            token=self.authority_token,
-            expected_status=200
-        )
-        
-        if response and "id" in response:
-            self.job_id = response["id"]
-            job_number = response.get("job_number", "N/A")
-            
-            # Verify weight category fields are stored
-            if (response.get("weight_category_id") == self.weight_category_id and
-                response.get("weight_category_name") == "LKW 3,5-7,5t" and
-                response.get("weight_category_surcharge") == 100):
-                
-                self.log_result("Create Job with Weight Category", True, 
-                              f"Job created with ID: {self.job_id}, Number: {job_number}")
+            if response.status_code == 200:
+                data = response.json()
+                self.admin_token = data.get("access_token")
+                self.session.headers.update({
+                    "Authorization": f"Bearer {self.admin_token}"
+                })
+                self.log_test("Admin Authentication", True, f"Successfully authenticated as {ADMIN_EMAIL}")
                 return True
             else:
-                self.log_result("Create Job with Weight Category", False, 
-                              "Weight category fields not properly stored in job")
+                self.log_test("Admin Authentication", False, f"Failed with status {response.status_code}: {response.text}")
                 return False
-        else:
-            self.log_result("Create Job with Weight Category", False, f"Failed with status {status}")
-            return False
-            
-    def test_6_calculate_costs(self):
-        """Test 6: Calculate Costs with Weight Category Surcharge"""
-        print("\n=== Test 6: Calculate Costs ===")
-        
-        if not self.authority_token or not self.job_id:
-            self.log_result("Calculate Costs", False, "Missing authority token or job ID")
-            return False
-            
-        response, status = self.make_request(
-            "GET", f"/jobs/{self.job_id}/calculate-costs",
-            token=self.authority_token,
-            expected_status=200
-        )
-        
-        if response and "breakdown" in response:
-            breakdown = response["breakdown"]
-            total_cost = response.get("total_cost", 0)
-            
-            # Look for the weight category surcharge in breakdown
-            weight_surcharge_found = False
-            for item in breakdown:
-                if "LKW 3,5-7,5t" in item.get("label", "") and item.get("amount") == 100:
-                    weight_surcharge_found = True
-                    break
-                    
-            if weight_surcharge_found:
-                self.log_result("Calculate Costs", True, 
-                              f"Weight category surcharge found in breakdown. Total: €{total_cost}")
-                return True
-            else:
-                breakdown_labels = [item.get("label", "") for item in breakdown]
-                self.log_result("Calculate Costs", False, 
-                              f"Weight category surcharge not found. Breakdown: {breakdown_labels}")
-                return False
-        else:
-            self.log_result("Calculate Costs", False, f"Failed with status {status}")
-            return False
-            
-    def test_7_mongodb_verification(self):
-        """Test 7: MongoDB Verification - Check if weight category fields are stored correctly"""
-        print("\n=== Test 7: MongoDB Verification ===")
-        
-        if not self.authority_token or not self.job_id:
-            self.log_result("MongoDB Verification", False, "Missing authority token or job ID")
-            return False
-            
-        # Get job details to verify MongoDB storage
-        response, status = self.make_request(
-            "GET", f"/jobs/{self.job_id}",
-            token=self.authority_token,
-            expected_status=200
-        )
-        
-        if response:
-            # Check if all weight category fields are present and correct
-            weight_category_id = response.get("weight_category_id")
-            weight_category_name = response.get("weight_category_name")
-            weight_category_surcharge = response.get("weight_category_surcharge")
-            
-            if (weight_category_id == self.weight_category_id and
-                weight_category_name == "LKW 3,5-7,5t" and
-                weight_category_surcharge == 100):
                 
-                self.log_result("MongoDB Verification", True, 
-                              "All weight category fields stored correctly in MongoDB")
-                return True
-            else:
-                self.log_result("MongoDB Verification", False, 
-                              f"Weight category fields incorrect: ID={weight_category_id}, "
-                              f"Name={weight_category_name}, Surcharge={weight_category_surcharge}")
-                return False
-        else:
-            self.log_result("MongoDB Verification", False, f"Failed to retrieve job with status {status}")
+        except Exception as e:
+            self.log_test("Admin Authentication", False, f"Exception: {str(e)}")
             return False
+    
+    def test_backup_system_status(self):
+        """Test GET /api/admin/backups/system-status"""
+        try:
+            response = self.session.get(f"{BASE_URL}/admin/backups/system-status")
             
+            if response.status_code == 200:
+                data = response.json()
+                self.log_test("Backup System Status", True, 
+                            f"Retrieved system status successfully", data)
+            else:
+                self.log_test("Backup System Status", False, 
+                            f"Failed with status {response.status_code}: {response.text}")
+                
+        except Exception as e:
+            self.log_test("Backup System Status", False, f"Exception: {str(e)}")
+    
+    def test_backup_health(self):
+        """Test GET /api/admin/backups/health"""
+        try:
+            response = self.session.get(f"{BASE_URL}/admin/backups/health")
+            
+            if response.status_code == 200:
+                data = response.json()
+                self.log_test("Backup Health Status", True, 
+                            f"Retrieved health status successfully", data)
+            else:
+                self.log_test("Backup Health Status", False, 
+                            f"Failed with status {response.status_code}: {response.text}")
+                
+        except Exception as e:
+            self.log_test("Backup Health Status", False, f"Exception: {str(e)}")
+    
+    def test_cloud_backups(self):
+        """Test GET /api/admin/backups/cloud"""
+        try:
+            response = self.session.get(f"{BASE_URL}/admin/backups/cloud")
+            
+            if response.status_code == 200:
+                data = response.json()
+                self.log_test("Cloud Backups List", True, 
+                            f"Retrieved cloud backups successfully", data)
+            else:
+                self.log_test("Cloud Backups List", False, 
+                            f"Failed with status {response.status_code}: {response.text}")
+                
+        except Exception as e:
+            self.log_test("Cloud Backups List", False, f"Exception: {str(e)}")
+    
+    def test_verify_all_backups(self):
+        """Test POST /api/admin/backups/verify-all"""
+        try:
+            response = self.session.post(f"{BASE_URL}/admin/backups/verify-all")
+            
+            if response.status_code == 200:
+                data = response.json()
+                self.log_test("Verify All Backups", True, 
+                            f"Backup verification initiated successfully", data)
+            else:
+                self.log_test("Verify All Backups", False, 
+                            f"Failed with status {response.status_code}: {response.text}")
+                
+        except Exception as e:
+            self.log_test("Verify All Backups", False, f"Exception: {str(e)}")
+    
+    def test_delete_corrupted_backups(self):
+        """Test DELETE /api/admin/backups/corrupted"""
+        try:
+            response = self.session.delete(f"{BASE_URL}/admin/backups/corrupted")
+            
+            if response.status_code == 200:
+                data = response.json()
+                self.log_test("Delete Corrupted Backups", True, 
+                            f"Corrupted backups deletion completed", data)
+            else:
+                self.log_test("Delete Corrupted Backups", False, 
+                            f"Failed with status {response.status_code}: {response.text}")
+                
+        except Exception as e:
+            self.log_test("Delete Corrupted Backups", False, f"Exception: {str(e)}")
+    
+    def test_backup_schedule(self):
+        """Test GET /api/admin/backups/schedule"""
+        try:
+            response = self.session.get(f"{BASE_URL}/admin/backups/schedule")
+            
+            if response.status_code == 200:
+                data = response.json()
+                self.log_test("Backup Schedule", True, 
+                            f"Retrieved backup schedule successfully", data)
+            else:
+                self.log_test("Backup Schedule", False, 
+                            f"Failed with status {response.status_code}: {response.text}")
+                
+        except Exception as e:
+            self.log_test("Backup Schedule", False, f"Exception: {str(e)}")
+    
+    def test_storage_stats(self):
+        """Test GET /api/admin/backups/storage-stats"""
+        try:
+            response = self.session.get(f"{BASE_URL}/admin/backups/storage-stats")
+            
+            if response.status_code == 200:
+                data = response.json()
+                self.log_test("Storage Statistics", True, 
+                            f"Retrieved storage stats successfully", data)
+            else:
+                self.log_test("Storage Statistics", False, 
+                            f"Failed with status {response.status_code}: {response.text}")
+                
+        except Exception as e:
+            self.log_test("Storage Statistics", False, f"Exception: {str(e)}")
+    
+    def test_create_database_backup_old_endpoint(self):
+        """Test POST /api/admin/backup with backup_type=database (old endpoint)"""
+        try:
+            response = self.session.post(
+                f"{BASE_URL}/admin/backup",
+                params={"backup_type": "database"}
+            )
+            
+            if response.status_code == 200:
+                data = response.json()
+                self.log_test("Create Database Backup (Old Endpoint)", True, 
+                            f"Database backup created successfully", data)
+            else:
+                self.log_test("Create Database Backup (Old Endpoint)", False, 
+                            f"Failed with status {response.status_code}: {response.text}")
+                
+        except Exception as e:
+            self.log_test("Create Database Backup (Old Endpoint)", False, f"Exception: {str(e)}")
+    
+    def test_create_storage_backup_old_endpoint(self):
+        """Test POST /api/admin/backup with backup_type=storage (old endpoint)"""
+        try:
+            response = self.session.post(
+                f"{BASE_URL}/admin/backup",
+                params={"backup_type": "storage"}
+            )
+            
+            if response.status_code == 200:
+                data = response.json()
+                self.log_test("Create Storage Backup (Old Endpoint)", True, 
+                            f"Storage backup created successfully", data)
+            else:
+                self.log_test("Create Storage Backup (Old Endpoint)", False, 
+                            f"Failed with status {response.status_code}: {response.text}")
+                
+        except Exception as e:
+            self.log_test("Create Storage Backup (Old Endpoint)", False, f"Exception: {str(e)}")
+    
+    def test_create_database_backup_new_endpoint(self):
+        """Test POST /api/admin/backups/run-database-backup (new endpoint)"""
+        try:
+            response = self.session.post(f"{BASE_URL}/admin/backups/run-database-backup")
+            
+            if response.status_code == 200:
+                data = response.json()
+                self.log_test("Create Database Backup (New Endpoint)", True, 
+                            f"Database backup created successfully", data)
+            else:
+                self.log_test("Create Database Backup (New Endpoint)", False, 
+                            f"Failed with status {response.status_code}: {response.text}")
+                
+        except Exception as e:
+            self.log_test("Create Database Backup (New Endpoint)", False, f"Exception: {str(e)}")
+    
+    def test_create_storage_backup_new_endpoint(self):
+        """Test POST /api/admin/backups/run-storage-backup (new endpoint)"""
+        try:
+            response = self.session.post(f"{BASE_URL}/admin/backups/run-storage-backup")
+            
+            if response.status_code == 200:
+                data = response.json()
+                self.log_test("Create Storage Backup (New Endpoint)", True, 
+                            f"Storage backup created successfully", data)
+            else:
+                self.log_test("Create Storage Backup (New Endpoint)", False, 
+                            f"Failed with status {response.status_code}: {response.text}")
+                
+        except Exception as e:
+            self.log_test("Create Storage Backup (New Endpoint)", False, f"Exception: {str(e)}")
+    
+    def test_list_backups(self):
+        """Test GET /api/admin/backups"""
+        try:
+            response = self.session.get(f"{BASE_URL}/admin/backups")
+            
+            if response.status_code == 200:
+                data = response.json()
+                backup_count = len(data) if isinstance(data, list) else data.get('count', 'unknown')
+                self.log_test("List All Backups", True, 
+                            f"Retrieved {backup_count} backups successfully", data)
+            else:
+                self.log_test("List All Backups", False, 
+                            f"Failed with status {response.status_code}: {response.text}")
+                
+        except Exception as e:
+            self.log_test("List All Backups", False, f"Exception: {str(e)}")
+    
+    def test_cleanup_backups(self):
+        """Test POST /api/admin/backups/cleanup"""
+        try:
+            response = self.session.post(f"{BASE_URL}/admin/backups/cleanup")
+            
+            if response.status_code == 200:
+                data = response.json()
+                self.log_test("Cleanup Old Backups", True, 
+                            f"Backup cleanup completed successfully", data)
+            else:
+                self.log_test("Cleanup Old Backups", False, 
+                            f"Failed with status {response.status_code}: {response.text}")
+                
+        except Exception as e:
+            self.log_test("Cleanup Old Backups", False, f"Exception: {str(e)}")
+    
+    def test_backup_with_json_body(self):
+        """Test if there's a POST /api/admin/backups endpoint that accepts JSON body"""
+        try:
+            # Test database backup with JSON body
+            response = self.session.post(
+                f"{BASE_URL}/admin/backups",
+                json={"backup_type": "database"}
+            )
+            
+            if response.status_code == 200:
+                data = response.json()
+                self.log_test("Create Backup with JSON Body (Database)", True, 
+                            f"Database backup created with JSON body", data)
+            elif response.status_code == 404:
+                self.log_test("Create Backup with JSON Body (Database)", False, 
+                            f"Endpoint not found - using alternative endpoints instead")
+            else:
+                self.log_test("Create Backup with JSON Body (Database)", False, 
+                            f"Failed with status {response.status_code}: {response.text}")
+                
+        except Exception as e:
+            self.log_test("Create Backup with JSON Body (Database)", False, f"Exception: {str(e)}")
+        
+        try:
+            # Test storage backup with JSON body
+            response = self.session.post(
+                f"{BASE_URL}/admin/backups",
+                json={"backup_type": "storage"}
+            )
+            
+            if response.status_code == 200:
+                data = response.json()
+                self.log_test("Create Backup with JSON Body (Storage)", True, 
+                            f"Storage backup created with JSON body", data)
+            elif response.status_code == 404:
+                self.log_test("Create Backup with JSON Body (Storage)", False, 
+                            f"Endpoint not found - using alternative endpoints instead")
+            else:
+                self.log_test("Create Backup with JSON Body (Storage)", False, 
+                            f"Failed with status {response.status_code}: {response.text}")
+                
+        except Exception as e:
+            self.log_test("Create Backup with JSON Body (Storage)", False, f"Exception: {str(e)}")
+    
     def run_all_tests(self):
-        """Run all weight categories tests"""
-        print("🚀 Starting Weight Categories Pricing System Tests")
-        print(f"Backend URL: {BACKEND_URL}")
-        print("=" * 60)
+        """Run all backup system tests"""
+        print("=" * 80)
+        print("ABSCHLEPPPORTAL BACKUP SYSTEM COMPREHENSIVE TEST")
+        print("=" * 80)
         
-        tests = [
-            self.test_1_towing_service_login,
-            self.test_2_save_weight_categories,
-            self.test_3_authority_login,
-            self.test_4_fetch_service_weight_categories,
-            self.test_5_create_job_with_weight_category,
-            self.test_6_calculate_costs,
-            self.test_7_mongodb_verification
-        ]
+        # Authenticate first
+        if not self.authenticate_admin():
+            print("❌ Authentication failed - cannot proceed with tests")
+            return
         
-        passed = 0
-        total = len(tests)
+        print("\n" + "=" * 50)
+        print("TESTING BACKUP SYSTEM ENDPOINTS")
+        print("=" * 50)
         
-        for test in tests:
-            try:
-                if test():
-                    passed += 1
-            except Exception as e:
-                print(f"❌ Test failed with exception: {e}")
-                self.log_result(test.__name__, False, f"Exception: {e}")
-                
-        print("\n" + "=" * 60)
-        print(f"📊 Test Results: {passed}/{total} tests passed")
+        # Test all backup endpoints
+        self.test_backup_system_status()
+        self.test_backup_health()
+        self.test_cloud_backups()
+        self.test_verify_all_backups()
+        self.test_delete_corrupted_backups()
+        self.test_backup_schedule()
+        self.test_storage_stats()
+        self.test_list_backups()
+        self.test_cleanup_backups()
         
-        if passed == total:
-            print("🎉 All weight categories tests PASSED!")
-            return True
-        else:
-            print(f"⚠️  {total - passed} test(s) FAILED")
-            return False
-
-def main():
-    """Main test runner"""
-    tester = WeightCategoriesTest()
-    success = tester.run_all_tests()
+        print("\n" + "=" * 50)
+        print("TESTING BACKUP CREATION ENDPOINTS")
+        print("=" * 50)
+        
+        # Test backup creation endpoints
+        self.test_backup_with_json_body()  # Test the requested format first
+        self.test_create_database_backup_old_endpoint()
+        self.test_create_storage_backup_old_endpoint()
+        self.test_create_database_backup_new_endpoint()
+        self.test_create_storage_backup_new_endpoint()
+        
+        # Print summary
+        self.print_summary()
     
-    # Print detailed results
-    print("\n📋 Detailed Test Results:")
-    for result in tester.test_results:
-        status = "✅" if result["success"] else "❌"
-        print(f"{status} {result['test']}")
-        if result["details"]:
-            print(f"   {result['details']}")
-    
-    return 0 if success else 1
+    def print_summary(self):
+        """Print test summary"""
+        print("\n" + "=" * 80)
+        print("TEST SUMMARY")
+        print("=" * 80)
+        
+        total_tests = len(self.test_results)
+        passed_tests = sum(1 for result in self.test_results if result["success"])
+        failed_tests = total_tests - passed_tests
+        
+        print(f"Total Tests: {total_tests}")
+        print(f"Passed: {passed_tests}")
+        print(f"Failed: {failed_tests}")
+        print(f"Success Rate: {(passed_tests/total_tests)*100:.1f}%")
+        
+        if failed_tests > 0:
+            print("\n❌ FAILED TESTS:")
+            for result in self.test_results:
+                if not result["success"]:
+                    print(f"  - {result['test']}: {result['details']}")
+        
+        print("\n✅ PASSED TESTS:")
+        for result in self.test_results:
+            if result["success"]:
+                print(f"  - {result['test']}: {result['details']}")
 
 if __name__ == "__main__":
-    sys.exit(main())
+    tester = BackupSystemTester()
+    tester.run_all_tests()
