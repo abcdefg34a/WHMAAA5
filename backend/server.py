@@ -1379,10 +1379,11 @@ async def login(data: UserLogin, request: Request):
         # Check if authority or towing service is approved (employees don't need approval)
         if user["role"] in [UserRole.TOWING_SERVICE, UserRole.AUTHORITY]:
             # Skip approval check for employee accounts (they inherit from parent)
-            if user.get("is_main_authority") == False and user.get("parent_authority_id"):
+            is_authority_employee = user.get("parent_authority_id") is not None
+            is_service_employee = user.get("parent_service_id") is not None
+            
+            if is_authority_employee or is_service_employee:
                 pass  # Employee accounts don't need separate approval
-            elif user["role"] == UserRole.AUTHORITY and not user.get("is_main_authority"):
-                pass  # Non-main authority employees
             else:
                 # Main accounts need approval
                 approval_status = user.get("approval_status")
