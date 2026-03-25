@@ -169,8 +169,7 @@ export const AuthorityDashboard = () => {
     owner_last_name: '',
     owner_address: '',
     payment_method: 'bar',
-    payment_amount: '',
-    service_invoice_amount: ''
+    payment_amount: ''
   });
   const [releasingJob, setReleasingJob] = useState(false);
 
@@ -304,8 +303,7 @@ export const AuthorityDashboard = () => {
         owner_last_name: releaseData.owner_last_name,
         owner_address: releaseData.owner_address,
         payment_method: releaseData.payment_method,
-        payment_amount: parseFloat(releaseData.payment_amount),
-        service_invoice_amount: releaseData.service_invoice_amount ? parseFloat(releaseData.service_invoice_amount) : null
+        payment_amount: parseFloat(releaseData.payment_amount)
       });
 
       toast.success('Fahrzeug erfolgreich freigegeben');
@@ -316,8 +314,7 @@ export const AuthorityDashboard = () => {
         owner_last_name: '',
         owner_address: '',
         payment_method: 'bar',
-        payment_amount: '',
-        service_invoice_amount: ''
+        payment_amount: ''
       });
       fetchJobs();
     } catch (error) {
@@ -2558,21 +2555,6 @@ export const AuthorityDashboard = () => {
                   </div>
                 </div>
               )}
-
-              {/* Service Invoice */}
-              <div className="p-3 bg-blue-50 border border-blue-200 rounded-lg">
-                <Label className="text-blue-800">Rechnung an Abschleppdienst (€)</Label>
-                <p className="text-xs text-blue-600 mb-2">
-                  Dieser Betrag wird dem Abschleppdienst ({selectedYardJob.assigned_service_name}) als Rechnung gestellt
-                </p>
-                <Input
-                  type="number"
-                  step="0.01"
-                  value={releaseData.service_invoice_amount}
-                  onChange={(e) => setReleaseData({...releaseData, service_invoice_amount: e.target.value})}
-                  placeholder="z.B. 150.00"
-                />
-              </div>
 
               <Button
                 onClick={handleAuthorityRelease}

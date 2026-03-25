@@ -943,9 +943,6 @@ class JobResponse(BaseModel):
     calculated_costs: Optional[dict] = None
     # NEW: Track if created by towing service
     created_by_service: Optional[bool] = False
-    # NEW: Service invoice (when authority releases from their yard)
-    service_invoice_amount: Optional[float] = None
-    service_invoice_created_at: Optional[str] = None
     # DSGVO anonymization flags
     anonymized: Optional[bool] = None
     personal_data_anonymized: Optional[bool] = None
@@ -3097,7 +3094,6 @@ class AuthorityReleaseData(BaseModel):
     owner_address: Optional[str] = None
     payment_method: str
     payment_amount: float
-    service_invoice_amount: Optional[float] = None  # Amount to pay towing service
 
 @api_router.post("/jobs/{job_id}/authority-release", response_model=JobResponse)
 async def authority_release_vehicle(job_id: str, data: AuthorityReleaseData, user: dict = Depends(get_current_user)):
@@ -3132,98 +3128,20 @@ async def authority_release_vehicle(job_id: str, data: AuthorityReleaseData, use
         "owner_last_name": data.owner_last_name,
         "owner_address": data.owner_address,
         "payment_method": data.payment_method,
-        "payment_amount": data.payment_amount,
-        # Store service invoice info
-        "service_invoice_amount": data.service_invoice_amount,
-        "service_invoice_created_at": now if data.service_invoice_amount else None
+        "payment_amount": data.payment_amount
     }
     
     await db.jobs.update_one({"id": job_id}, {"$set": update_data})
-    
-    # Create invoice record for towing service (if service_invoice_amount is set)
-    if data.service_invoice_amount and job.get("assigned_service_id"):
-        invoice_doc = {
-            "id": str(uuid.uuid4()),
-            "job_id": job_id,
-            "job_number": job.get("job_number"),
-            "license_plate": job.get("license_plate"),
-            "authority_id": authority_id,
-            "authority_name": user.get("authority_name", user.get("name")),
-            "service_id": job.get("assigned_service_id"),
-            "service_name": job.get("assigned_service_name"),
-            "amount": data.service_invoice_amount,
-            "status": "pending",  # pending, paid
-            "created_at": now,
-            "paid_at": None
-        }
-        await db.service_invoices.insert_one(invoice_doc)
     
     # Audit log
     await log_audit("AUTHORITY_RELEASE", user["id"], user["name"], {
         "job_id": job_id,
         "job_number": job.get("job_number"),
-        "payment_amount": data.payment_amount,
-        "service_invoice_amount": data.service_invoice_amount
+        "payment_amount": data.payment_amount
     })
     
     updated_job = await db.jobs.find_one({"id": job_id}, {"_id": 0})
     return JobResponse(**updated_job)
-
-# NEW: Get invoices for towing service
-@api_router.get("/services/invoices")
-async def get_service_invoices(user: dict = Depends(get_current_user)):
-    """Get pending and paid invoices for a towing service"""
-    if user["role"] != UserRole.TOWING_SERVICE:
-        raise HTTPException(status_code=403, detail="Nur für Abschleppdienste")
-    
-    invoices = await db.service_invoices.find(
-        {"service_id": user["id"]},
-        {"_id": 0}
-    ).sort("created_at", -1).to_list(100)
-    
-    return {"invoices": invoices}
-
-# NEW: Mark invoice as paid (for towing services)
-@api_router.patch("/services/invoices/{invoice_id}/mark-paid")
-async def mark_invoice_paid(invoice_id: str, user: dict = Depends(get_current_user)):
-    """Mark an invoice as paid by the authority"""
-    if user["role"] != UserRole.TOWING_SERVICE:
-        raise HTTPException(status_code=403, detail="Nur für Abschleppdienste")
-    
-    # Find the invoice
-    invoice = await db.service_invoices.find_one({"id": invoice_id})
-    if not invoice:
-        raise HTTPException(status_code=404, detail="Rechnung nicht gefunden")
-    
-    # Verify ownership
-    if invoice.get("service_id") != user["id"]:
-        raise HTTPException(status_code=403, detail="Keine Berechtigung für diese Rechnung")
-    
-    # Check if already paid
-    if invoice.get("status") == "paid":
-        raise HTTPException(status_code=400, detail="Rechnung ist bereits als bezahlt markiert")
-    
-    # Update the invoice
-    now = datetime.now(timezone.utc).isoformat()
-    await db.service_invoices.update_one(
-        {"id": invoice_id},
-        {"$set": {
-            "status": "paid",
-            "paid_at": now,
-            "marked_paid_by": user["id"],
-            "marked_paid_by_name": user.get("company_name", user.get("name"))
-        }}
-    )
-    
-    # Audit log
-    await log_audit("INVOICE_MARKED_PAID", user["id"], user.get("company_name", user.get("name")), {
-        "invoice_id": invoice_id,
-        "job_id": invoice.get("job_id"),
-        "job_number": invoice.get("job_number"),
-        "amount": invoice.get("amount")
-    })
-    
-    return {"success": True, "message": "Rechnung als bezahlt markiert"}
 
 # ==================== JOB DATA EDITING (Kennzeichen, FIN, etc.) ====================
 
