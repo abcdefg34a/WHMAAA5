@@ -7,7 +7,7 @@ import {
   Car, MapPin, Camera, LogOut, FileText, Copy, CheckCircle,
   Clock, Truck, Phone, Building2, Download, X, Settings, Euro,
   Filter, CheckSquare, Square, ChevronDown, Calendar, Plus, Search,
-  Edit, Save, Undo2, User, Bell, BellOff, Volume2, VolumeX
+  Edit, Save, Undo2, User, Bell, BellOff, Volume2, VolumeX, Menu
 } from 'lucide-react';
 import { Button } from '../components/ui/button';
 import { Input } from '../components/ui/input';
@@ -19,6 +19,7 @@ import { VisuallyHidden } from '../components/ui/visually-hidden';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '../components/ui/tabs';
 import { RadioGroup, RadioGroupItem } from '../components/ui/radio-group';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../components/ui/select';
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger } from '../components/ui/dropdown-menu';
 import { MapContainer, TileLayer, Marker, Popup, useMapEvents } from 'react-leaflet';
 import { toast } from 'sonner';
 import { Pagination } from '../components/Pagination';
@@ -1167,110 +1168,98 @@ export const TowingDashboard = () => {
           </div>
         )}
 
-        {/* Notification Permission Banner */}
-        {notificationPermission === 'default' && (
-          <div className="mb-6 bg-blue-50 border border-blue-200 rounded-lg px-6 py-4 flex items-center justify-between">
-            <div className="flex items-center gap-3">
-              <Bell className="h-6 w-6 text-blue-600" />
-              <div>
-                <p className="font-semibold text-blue-900">Benachrichtigungen aktivieren</p>
-                <p className="text-sm text-blue-700">Erhalten Sie sofort einen Alarm wenn neue Aufträge eingehen.</p>
-              </div>
-            </div>
-            <Button 
-              onClick={async () => {
-                const granted = await requestNotificationPermission();
-                if (granted) {
-                  toast.success('🔔 Benachrichtigungen aktiviert!');
-                }
-              }}
-              className="bg-blue-600 hover:bg-blue-700"
-            >
-              Aktivieren
-            </Button>
-          </div>
-        )}
-
-        {/* Company Info Card */}
-        <Card className="mb-6 border-blue-200 bg-blue-50">
-          <CardContent className="py-4">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-4">
-                <Building2 className="h-6 w-6 text-blue-600" />
+        {/* Compact Header Bar with Burger Menu */}
+        <Card className="mb-6 border-slate-200">
+          <CardContent className="py-3">
+            <div className="flex items-center justify-between flex-wrap gap-3">
+              {/* Company Name - Always visible */}
+              <div className="flex items-center gap-3">
+                <Building2 className="h-5 w-5 text-blue-600" />
                 <div>
-                  <p className="text-sm text-blue-700">Ihre Firmendaten</p>
-                  <p className="font-bold text-blue-900">
-                    {user?.company_name || 'Nicht angegeben'} | {user?.phone || 'Keine Telefonnummer'}
-                  </p>
-                  <p className="text-xs text-blue-600">
-                    Hof: {user?.yard_address || 'Keine Adresse hinterlegt'}
-                  </p>
+                  <p className="font-bold text-slate-900">{user?.company_name || 'Mein Unternehmen'}</p>
+                  <p className="text-xs text-slate-500">{user?.yard_address || 'Keine Adresse'}</p>
                 </div>
               </div>
-              <Button variant="outline" size="sm" onClick={openCompanyInfoDialog} className="border-blue-300 text-blue-700 hover:bg-blue-100">
-                Bearbeiten
-              </Button>
-            </div>
-          </CardContent>
-        </Card>
 
-        {/* Service Code Card (Mobile) */}
-        <Card className="mb-6 md:hidden">
-          <CardContent className="py-4">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm text-slate-500">Ihr Verknüpfungscode</p>
-                <p className="font-mono font-bold text-2xl text-slate-900">{user?.service_code}</p>
-              </div>
-              <Button variant="outline" onClick={copyServiceCode}>
-                {codeCopied ? <CheckCircle className="h-5 w-5" /> : <Copy className="h-5 w-5" />}
-              </Button>
-            </div>
-            <p className="text-xs text-slate-500 mt-2">
-              Geben Sie diesen Code an Behörden weiter, um Aufträge zu erhalten
-            </p>
-          </CardContent>
-        </Card>
-
-        {/* Cost Info Card */}
-        <Card className="mb-6 border-orange-200 bg-orange-50">
-          <CardContent className="py-4">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-4">
-                <Euro className="h-6 w-6 text-orange-600" />
-                <div>
-                  <p className="text-sm text-orange-700">Ihre Preise</p>
-                  <p className="font-bold text-orange-900">
-                    Anfahrt: {(user?.tow_cost || 0).toFixed(2)} € | Standkosten: {(user?.daily_cost || 0).toFixed(2)} €/Tag
-                  </p>
+              {/* Quick Stats - Desktop */}
+              <div className="hidden md:flex items-center gap-4">
+                <div className="flex items-center gap-2 px-3 py-1 bg-orange-50 rounded-lg">
+                  <Euro className="h-4 w-4 text-orange-600" />
+                  <span className="text-sm font-medium text-orange-800">
+                    {(user?.tow_cost || 0).toFixed(0)}€ / {(user?.daily_cost || 0).toFixed(0)}€/Tag
+                  </span>
                 </div>
+                {notificationPermission === 'granted' && (
+                  <div className="flex items-center gap-1 px-2 py-1 bg-green-50 rounded-lg">
+                    <Bell className="h-4 w-4 text-green-600" />
+                    <span className="text-xs text-green-700">Aktiv</span>
+                  </div>
+                )}
               </div>
-              <Button variant="outline" size="sm" onClick={() => setSettingsDialogOpen(true)}>
-                Anpassen
-              </Button>
-            </div>
-          </CardContent>
-        </Card>
 
-        {/* NEW: Create Job Card */}
-        <Card className="mb-6 border-green-200 bg-green-50">
-          <CardContent className="py-4">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-4">
-                <Car className="h-6 w-6 text-green-600" />
-                <div>
-                  <p className="text-sm text-green-700">Eigenen Auftrag erstellen</p>
-                  <p className="font-bold text-green-900">
-                    Erstellen Sie selbst einen Auftrag für eine verknüpfte Behörde
-                  </p>
-                </div>
+              {/* Action Buttons */}
+              <div className="flex items-center gap-2">
+                <Button
+                  size="sm"
+                  className="bg-green-600 hover:bg-green-700 text-white"
+                  onClick={openCreateJobDialog}
+                >
+                  <Plus className="h-4 w-4 mr-1" />
+                  <span className="hidden sm:inline">Neuer Auftrag</span>
+                </Button>
+                
+                {/* Burger Menu */}
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <Button variant="outline" size="sm">
+                      <Menu className="h-4 w-4" />
+                    </Button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="end" className="w-64">
+                    <DropdownMenuLabel>Einstellungen</DropdownMenuLabel>
+                    <DropdownMenuSeparator />
+                    
+                    {/* Notifications */}
+                    {notificationPermission === 'default' && (
+                      <DropdownMenuItem 
+                        onClick={async () => {
+                          const granted = await requestNotificationPermission();
+                          if (granted) toast.success('🔔 Benachrichtigungen aktiviert!');
+                        }}
+                        className="cursor-pointer"
+                      >
+                        <Bell className="h-4 w-4 mr-2 text-blue-600" />
+                        <span>Benachrichtigungen aktivieren</span>
+                      </DropdownMenuItem>
+                    )}
+                    
+                    {/* Company Info */}
+                    <DropdownMenuItem onClick={openCompanyInfoDialog} className="cursor-pointer">
+                      <Building2 className="h-4 w-4 mr-2 text-blue-600" />
+                      <span>Firmendaten bearbeiten</span>
+                    </DropdownMenuItem>
+                    
+                    {/* Prices */}
+                    <DropdownMenuItem onClick={() => setSettingsDialogOpen(true)} className="cursor-pointer">
+                      <Euro className="h-4 w-4 mr-2 text-orange-600" />
+                      <span>Preise anpassen</span>
+                    </DropdownMenuItem>
+                    
+                    <DropdownMenuSeparator />
+                    
+                    {/* Service Code */}
+                    <div className="px-2 py-2">
+                      <p className="text-xs text-slate-500 mb-1">Verknüpfungscode</p>
+                      <div className="flex items-center justify-between">
+                        <span className="font-mono font-bold text-lg">{user?.service_code}</span>
+                        <Button variant="ghost" size="sm" onClick={copyServiceCode}>
+                          {codeCopied ? <CheckCircle className="h-4 w-4 text-green-600" /> : <Copy className="h-4 w-4" />}
+                        </Button>
+                      </div>
+                    </div>
+                  </DropdownMenuContent>
+                </DropdownMenu>
               </div>
-              <Button
-                className="bg-green-600 hover:bg-green-700 text-white"
-                onClick={openCreateJobDialog}
-              >
-                + Neuer Auftrag
-              </Button>
             </div>
           </CardContent>
         </Card>
