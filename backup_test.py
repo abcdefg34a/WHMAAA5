@@ -11,7 +11,7 @@ import sys
 from typing import Dict, Any, Optional, List
 
 # Configuration
-BACKEND_URL = "https://cost-automation.preview.emergentagent.com"
+BACKEND_URL = "https://dual-yard-system.preview.emergentagent.com"
 ADMIN_EMAIL = "admin@test.de"
 ADMIN_PASSWORD = "Admin123!"
 

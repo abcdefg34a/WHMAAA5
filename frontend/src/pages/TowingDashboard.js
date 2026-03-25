@@ -1313,6 +1313,7 @@ export const TowingDashboard = () => {
                       <SelectItem value="on_site">Vor Ort</SelectItem>
                       <SelectItem value="towed">Abgeschleppt</SelectItem>
                       <SelectItem value="in_yard">Im Hof</SelectItem>
+                      <SelectItem value="delivered_to_authority">An Behörde übergeben</SelectItem>
                       <SelectItem value="released">Abgeholt</SelectItem>
                     </SelectContent>
                   </Select>
@@ -1668,9 +1669,29 @@ export const TowingDashboard = () => {
                                   {invoice.created_at ? new Date(invoice.created_at).toLocaleString('de-DE') : '-'}
                                 </p>
                               </div>
-                              <div className="text-right">
+                              <div className="text-right flex flex-col items-end gap-2">
                                 <p className="text-2xl font-bold text-amber-600">{invoice.amount?.toFixed(2)} €</p>
                                 <span className="text-xs px-2 py-1 bg-amber-100 text-amber-800 rounded-full">Offen</span>
+                                <Button
+                                  size="sm"
+                                  variant="outline"
+                                  className="text-green-700 border-green-300 hover:bg-green-50"
+                                  onClick={async () => {
+                                    if (window.confirm(`Rechnung für ${invoice.license_plate} (${invoice.amount?.toFixed(2)} €) als bezahlt markieren?`)) {
+                                      try {
+                                        await axios.patch(`${API}/services/invoices/${invoice.id}/mark-paid`);
+                                        fetchInvoices();
+                                        alert('Rechnung als bezahlt markiert!');
+                                      } catch (error) {
+                                        console.error('Error marking invoice paid:', error);
+                                        alert(error.response?.data?.detail || 'Fehler beim Markieren der Rechnung');
+                                      }
+                                    }
+                                  }}
+                                >
+                                  <CheckCircle className="h-4 w-4 mr-1" />
+                                  Als bezahlt markieren
+                                </Button>
                               </div>
                             </div>
                           ))}

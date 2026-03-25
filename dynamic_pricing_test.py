@@ -24,7 +24,7 @@ import pymongo
 import os
 
 # Backend URL from frontend .env
-BACKEND_URL = "https://cost-automation.preview.emergentagent.com/api"
+BACKEND_URL = "https://dual-yard-system.preview.emergentagent.com/api"
 
 # Test Credentials
 AUTHORITY_EMAIL = "behoerde@test.de"

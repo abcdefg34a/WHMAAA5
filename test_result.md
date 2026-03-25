@@ -296,8 +296,34 @@ metadata:
   test_sequence: 1
   run_ui: false
 
+  - task: "Backend validation for authority_yard job creation"
+    implemented: true
+    working: true
+    file: "server.py"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+      - working: true
+        agent: "testing"
+        comment: "Authority yard job validation working correctly. POST /api/jobs properly validates authority_yard_id and authority_price_category_id when target_yard='authority_yard'. Returns 400 errors with appropriate German messages when required fields are missing."
+
+  - task: "Invoice mark as paid functionality"
+    implemented: true
+    working: true
+    file: "server.py"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+      - working: true
+        agent: "testing"
+        comment: "Invoice mark-as-paid functionality working correctly. PATCH /api/services/invoices/{invoice_id}/mark-paid successfully marks invoices as paid and prevents duplicate marking with proper 400 error response."
+
 test_plan:
-  current_focus: []
+  current_focus: 
+    - "PDF timestamp fix for authority_yard jobs"
+    - "Status filter extension with delivered_to_authority"
   stuck_tasks: []
   test_all: false
   test_priority: "high_first"
@@ -307,3 +333,7 @@ agent_communication:
     message: "Comprehensive backend testing completed. 80% success rate (16/20 tests passed). Authentication, Jobs API, most Admin endpoints, Services API, and File Upload are working correctly. Two critical issues identified: 1) Audit logs endpoint failing due to Pydantic validation error with missing user_name fields, 2) Job update endpoint not responding. Two endpoints not implemented but requested: /api/admin/backups/status and /api/towing-services."
   - agent: "testing"
     message: "Dynamic pricing system testing completed successfully. 100% success rate (6/6 tests passed). All vehicle category CRUD operations, job creation with vehicle categories, and cost calculation with dynamic pricing are working correctly. Fixed missing vehicle_category_id field in JobCreate model to enable proper functionality. MongoDB verification confirms proper data storage."
+  - agent: "main"
+    message: "Implemented 5 action items: 1) Fixed PDF timestamp bug for authority_yard jobs - now uses delivered_to_authority_at instead of in_yard_at. 2) Added backend validation for authority_yard job creation - requires yard selection and price category. 3) UX improvement for target yard already implemented - defaults to yard_model setting. 4) Extended status filter with 'delivered_to_authority' option in both dashboards. 5) Added mark-invoice-as-paid functionality with new backend endpoint and frontend button."
+  - agent: "testing"
+    message: "New features testing completed successfully. 100% success rate (11/11 tests passed). All authentication systems working correctly. Authority yard job validation properly implemented - correctly rejects jobs without authority_yard_id or authority_price_category_id when target_yard='authority_yard'. Invoice mark-as-paid functionality working perfectly - can mark invoices as paid and prevents duplicate marking. All regression tests (jobs list, cost calculation) also passing."

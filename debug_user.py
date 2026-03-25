@@ -4,7 +4,7 @@ import requests
 import json
 
 # Debug user object for employee
-base_url = "https://cost-automation.preview.emergentagent.com/api"
+base_url = "https://dual-yard-system.preview.emergentagent.com/api"
 
 # Use existing employee token from previous test
 employee_login = {"email": "test_employee_check@test.de", "password": "TestPass123!"}

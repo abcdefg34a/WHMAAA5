@@ -2697,6 +2697,21 @@ async def create_job(
         )
     # ========== END DUPLICATE CHECK ==========
     
+    # ========== AUTHORITY YARD VALIDATION ==========
+    # If target_yard is "authority_yard", require yard selection and pricing
+    if data.target_yard == "authority_yard":
+        if not data.authority_yard_id or not data.authority_yard_name:
+            raise HTTPException(
+                status_code=400,
+                detail="Bitte wählen Sie einen Behörden-Hof für die Verwahrung aus."
+            )
+        if not data.authority_price_category_id:
+            raise HTTPException(
+                status_code=400,
+                detail="Bitte wählen Sie eine Preiskategorie für den Behörden-Hof aus."
+            )
+    # ========== END AUTHORITY YARD VALIDATION ==========
+    
     job_id = str(uuid.uuid4())
     now = datetime.now(timezone.utc).isoformat()
     
@@ -3160,6 +3175,48 @@ async def get_service_invoices(user: dict = Depends(get_current_user)):
     ).sort("created_at", -1).to_list(100)
     
     return {"invoices": invoices}
+
+# NEW: Mark invoice as paid (for towing services)
+@api_router.patch("/services/invoices/{invoice_id}/mark-paid")
+async def mark_invoice_paid(invoice_id: str, user: dict = Depends(get_current_user)):
+    """Mark an invoice as paid by the authority"""
+    if user["role"] != UserRole.TOWING_SERVICE:
+        raise HTTPException(status_code=403, detail="Nur für Abschleppdienste")
+    
+    # Find the invoice
+    invoice = await db.service_invoices.find_one({"id": invoice_id})
+    if not invoice:
+        raise HTTPException(status_code=404, detail="Rechnung nicht gefunden")
+    
+    # Verify ownership
+    if invoice.get("service_id") != user["id"]:
+        raise HTTPException(status_code=403, detail="Keine Berechtigung für diese Rechnung")
+    
+    # Check if already paid
+    if invoice.get("status") == "paid":
+        raise HTTPException(status_code=400, detail="Rechnung ist bereits als bezahlt markiert")
+    
+    # Update the invoice
+    now = datetime.now(timezone.utc).isoformat()
+    await db.service_invoices.update_one(
+        {"id": invoice_id},
+        {"$set": {
+            "status": "paid",
+            "paid_at": now,
+            "marked_paid_by": user["id"],
+            "marked_paid_by_name": user.get("company_name", user.get("name"))
+        }}
+    )
+    
+    # Audit log
+    await log_audit("INVOICE_MARKED_PAID", user["id"], user.get("company_name", user.get("name")), {
+        "invoice_id": invoice_id,
+        "job_id": invoice.get("job_id"),
+        "job_number": invoice.get("job_number"),
+        "amount": invoice.get("amount")
+    })
+    
+    return {"success": True, "message": "Rechnung als bezahlt markiert"}
 
 # ==================== JOB DATA EDITING (Kennzeichen, FIN, etc.) ====================
 
@@ -4124,8 +4181,9 @@ async def generate_pdf(job_id: str, token: str):
             ],
             [
                 Paragraph("4. Im Hof eingetroffen", cell_style), 
-                Paragraph(format_datetime(job.get('in_yard_at')), cell_style),
-                Paragraph("✓" if job.get('in_yard_at') else "-", cell_style)
+                # Use delivered_to_authority_at for authority_yard jobs, otherwise in_yard_at
+                Paragraph(format_datetime(job.get('delivered_to_authority_at') if job.get('target_yard') == 'authority_yard' else job.get('in_yard_at')), cell_style),
+                Paragraph("✓" if (job.get('delivered_to_authority_at') if job.get('target_yard') == 'authority_yard' else job.get('in_yard_at')) else "-", cell_style)
             ],
             [
                 Paragraph("5. Fahrzeug abgeholt", cell_style), 
@@ -4367,7 +4425,8 @@ async def export_jobs_csv(
             'Erstellt am': job.get('created_at', '')[:19].replace('T', ' ') if job.get('created_at') else '',
             'Vor Ort': job.get('on_site_at', '')[:19].replace('T', ' ') if job.get('on_site_at') else '',
             'Abgeschleppt': job.get('towed_at', '')[:19].replace('T', ' ') if job.get('towed_at') else '',
-            'Im Hof': job.get('in_yard_at', '')[:19].replace('T', ' ') if job.get('in_yard_at') else '',
+            # Use delivered_to_authority_at for authority_yard jobs, otherwise in_yard_at
+            'Im Hof': (job.get('delivered_to_authority_at', '') if job.get('target_yard') == 'authority_yard' else job.get('in_yard_at', ''))[:19].replace('T', ' ') if (job.get('delivered_to_authority_at') if job.get('target_yard') == 'authority_yard' else job.get('in_yard_at')) else '',
             'Abgeholt': job.get('released_at', '')[:19].replace('T', ' ') if job.get('released_at') else '',
             'Halter Name': f"{job.get('owner_first_name', '')} {job.get('owner_last_name', '')}".strip(),
             'Halter Adresse': job.get('owner_address', ''),
@@ -4457,7 +4516,8 @@ async def export_jobs_excel(
             job.get('created_at', '')[:19].replace('T', ' ') if job.get('created_at') else '',
             job.get('on_site_at', '')[:19].replace('T', ' ') if job.get('on_site_at') else '',
             job.get('towed_at', '')[:19].replace('T', ' ') if job.get('towed_at') else '',
-            job.get('in_yard_at', '')[:19].replace('T', ' ') if job.get('in_yard_at') else '',
+            # Use delivered_to_authority_at for authority_yard jobs, otherwise in_yard_at
+            (job.get('delivered_to_authority_at', '') if job.get('target_yard') == 'authority_yard' else job.get('in_yard_at', ''))[:19].replace('T', ' ') if (job.get('delivered_to_authority_at') if job.get('target_yard') == 'authority_yard' else job.get('in_yard_at')) else '',
             job.get('released_at', '')[:19].replace('T', ' ') if job.get('released_at') else '',
             f"{job.get('owner_first_name', '')} {job.get('owner_last_name', '')}".strip(),
             job.get('owner_address', ''),

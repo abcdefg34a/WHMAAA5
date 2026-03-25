@@ -9,7 +9,7 @@ import random
 import string
 
 class ReviewRequestTester:
-    def __init__(self, base_url="https://cost-automation.preview.emergentagent.com/api"):
+    def __init__(self, base_url="https://dual-yard-system.preview.emergentagent.com/api"):
         self.base_url = base_url
         self.admin_token = None
         self.authority_token = None

@@ -1476,6 +1476,7 @@ export const AuthorityDashboard = () => {
                           <SelectItem value="on_site">Vor Ort</SelectItem>
                           <SelectItem value="towed">Abgeschleppt</SelectItem>
                           <SelectItem value="in_yard">Im Hof</SelectItem>
+                          <SelectItem value="delivered_to_authority">An Behörde übergeben</SelectItem>
                           <SelectItem value="released">Abgeholt</SelectItem>
                         </SelectContent>
                       </Select>
