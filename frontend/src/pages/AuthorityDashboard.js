@@ -883,10 +883,13 @@ export const AuthorityDashboard = () => {
                 Offene Leerfahrten ({jobs.filter(j => j.is_empty_trip && j.empty_trip_reason === 'driver_not_found' && (j.payment_amount === 0 || !j.payment_amount)).length})
               </TabsTrigger>
             )}
-            <TabsTrigger data-testid="tab-services" value="services" className="flex items-center gap-2">
-              <LinkIcon className="h-4 w-4" />
-              Abschleppdienste
-            </TabsTrigger>
+            {/* Abschleppdienste nur für Hauptaccount */}
+            {user?.is_main_authority && (
+              <TabsTrigger data-testid="tab-services" value="services" className="flex items-center gap-2">
+                <LinkIcon className="h-4 w-4" />
+                Abschleppdienste
+              </TabsTrigger>
+            )}
             {user?.is_main_authority && (
               <TabsTrigger data-testid="tab-employees" value="employees" className="flex items-center gap-2">
                 <Users className="h-4 w-4" />
@@ -897,10 +900,13 @@ export const AuthorityDashboard = () => {
               <User className="h-4 w-4" />
               Profil
             </TabsTrigger>
-            <TabsTrigger data-testid="tab-settings" value="settings" className="flex items-center gap-2">
-              <Settings className="h-4 w-4" />
-              Einstellungen
-            </TabsTrigger>
+            {/* Einstellungen nur für Hauptaccount */}
+            {user?.is_main_authority && (
+              <TabsTrigger data-testid="tab-settings" value="settings" className="flex items-center gap-2">
+                <Settings className="h-4 w-4" />
+                Einstellungen
+              </TabsTrigger>
+            )}
           </TabsList>
 
           {/* New Job Tab */}
