@@ -2044,7 +2044,7 @@ async def get_service_weight_categories(service_id: str, user: dict = Depends(ge
 # NEW: Calculate job costs based on service pricing OR vehicle category
 @api_router.get("/jobs/{job_id}/calculate-costs")
 async def calculate_job_costs(job_id: str, user: dict = Depends(get_current_user)):
-    """Calculate costs for a job based on vehicle category pricing or towing service's pricing settings"""
+    """Calculate costs for a job based on target yard (authority or service)"""
     job = await db.jobs.find_one({"id": job_id})
     if not job:
         raise HTTPException(status_code=404, detail="Auftrag nicht gefunden")
@@ -2052,7 +2052,46 @@ async def calculate_job_costs(job_id: str, user: dict = Depends(get_current_user
     breakdown = []
     total = 0.0
     
-    # NEW: Check if job has a vehicle category assigned (new dynamic pricing)
+    # NEW: Check if this is an authority yard job - use authority pricing
+    if job.get("target_yard") == "authority_yard":
+        base_price = job.get("authority_base_price", 0) or 0
+        daily_rate = job.get("authority_daily_rate", 0) or 0
+        category_name = job.get("authority_price_category_name", "Verwahrgebühr")
+        
+        # Calculate days in yard (from delivered_to_authority_at or in_yard_at)
+        days = 1
+        yard_date = job.get("delivered_to_authority_at") or job.get("in_yard_at")
+        if yard_date:
+            yard_datetime = datetime.fromisoformat(yard_date.replace("Z", "+00:00"))
+            now = datetime.now(timezone.utc)
+            days = max(1, (now - yard_datetime).days + 1)
+        elif job.get("towed_at"):
+            towed_date = datetime.fromisoformat(job["towed_at"].replace("Z", "+00:00"))
+            now = datetime.now(timezone.utc)
+            days = max(1, (now - towed_date).days + 1)
+        
+        # Add base price (first 24h)
+        if base_price > 0:
+            breakdown.append({"label": f"{category_name} - Grundpreis (erste 24h)", "amount": base_price})
+            total += base_price
+        
+        # Add daily rate for additional days
+        if days > 1 and daily_rate > 0:
+            additional_days_cost = (days - 1) * daily_rate
+            breakdown.append({"label": f"{days - 1} × weitere 24h à {daily_rate:.2f}€", "amount": additional_days_cost})
+            total += additional_days_cost
+        
+        return {
+            "total": round(total, 2), 
+            "breakdown": breakdown, 
+            "pricing_source": "authority_yard",
+            "category_name": category_name,
+            "days_in_yard": days,
+            "yard_name": job.get("authority_yard_name"),
+            "yard_address": job.get("authority_yard_address")
+        }
+    
+    # Check if job has a vehicle category assigned (old dynamic pricing - deprecated)
     vehicle_category_id = job.get("vehicle_category_id")
     if vehicle_category_id:
         category = await db.vehicle_categories.find_one({"id": vehicle_category_id})
@@ -4151,8 +4190,55 @@ async def generate_pdf(job_id: str, token: str):
         ]))
         story.append(payment_table)
     
-    # ===== ABSCHLEPPDIENST =====
-    if service:
+    # ===== ABSCHLEPPHOF (depends on target_yard) =====
+    is_authority_yard = job.get("target_yard") == "authority_yard"
+    
+    if is_authority_yard:
+        # Authority yard - show authority info
+        story.append(Paragraph("Verwahrort (Behörden-Hof)", heading_style))
+        yard_data = [
+            [Paragraph("<b>Hof</b>", cell_style), Paragraph(job.get('authority_yard_name') or 'Behörden-Hof', cell_style)],
+            [Paragraph("<b>Adresse</b>", cell_style), Paragraph(wrap_text(job.get('authority_yard_address') or '-', 55), cell_style)],
+            [Paragraph("<b>Telefon</b>", cell_style), Paragraph(job.get('authority_yard_phone') or '-', cell_style)],
+        ]
+        # Add authority name
+        if job.get('created_by_authority'):
+            yard_data.insert(0, [
+                Paragraph("<b>Behörde</b>", cell_style), 
+                Paragraph(job.get('created_by_authority'), cell_style)
+            ])
+        yard_table = Table(yard_data, colWidths=[4.5*cm, 12.5*cm])
+        yard_table.setStyle(TableStyle([
+            ('BACKGROUND', (0, 0), (0, -1), colors.HexColor('#dcfce7')),  # Green tint for authority
+            ('VALIGN', (0, 0), (-1, -1), 'TOP'),
+            ('TOPPADDING', (0, 0), (-1, -1), 6),
+            ('BOTTOMPADDING', (0, 0), (-1, -1), 6),
+            ('LEFTPADDING', (0, 0), (-1, -1), 8),
+            ('RIGHTPADDING', (0, 0), (-1, -1), 8),
+            ('GRID', (0, 0), (-1, -1), 0.5, colors.HexColor('#86efac')),
+        ]))
+        story.append(yard_table)
+        
+        # Also show towing service that transported the vehicle
+        if service:
+            story.append(Paragraph("Transport durchgeführt von", heading_style))
+            transport_data = [
+                [Paragraph("<b>Abschleppdienst</b>", cell_style), Paragraph(service.get('company_name') or '-', cell_style)],
+                [Paragraph("<b>Telefon</b>", cell_style), Paragraph(service.get('phone') or '-', cell_style)],
+            ]
+            transport_table = Table(transport_data, colWidths=[4.5*cm, 12.5*cm])
+            transport_table.setStyle(TableStyle([
+                ('BACKGROUND', (0, 0), (0, -1), colors.HexColor('#f8fafc')),
+                ('VALIGN', (0, 0), (-1, -1), 'TOP'),
+                ('TOPPADDING', (0, 0), (-1, -1), 6),
+                ('BOTTOMPADDING', (0, 0), (-1, -1), 6),
+                ('LEFTPADDING', (0, 0), (-1, -1), 8),
+                ('RIGHTPADDING', (0, 0), (-1, -1), 8),
+                ('GRID', (0, 0), (-1, -1), 0.5, colors.HexColor('#e2e8f0')),
+            ]))
+            story.append(transport_table)
+    elif service:
+        # Service yard - show towing service info (original logic)
         story.append(Paragraph("Abschleppdienst", heading_style))
         service_data = [
             [Paragraph("<b>Unternehmen</b>", cell_style), Paragraph(service.get('company_name') or '-', cell_style)],

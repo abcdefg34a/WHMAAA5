@@ -866,6 +866,13 @@ export const AuthorityDashboard = () => {
                 Im Hof ({jobs.filter(j => j.status === 'delivered_to_authority' && j.target_yard === 'authority_yard').length})
               </TabsTrigger>
             )}
+            {/* Offene Leerfahrten Tab */}
+            {jobs.filter(j => j.is_empty_trip && j.empty_trip_reason === 'driver_not_found' && (j.payment_amount === 0 || !j.payment_amount)).length > 0 && (
+              <TabsTrigger data-testid="tab-empty-trips" value="empty-trips" className="flex items-center gap-2 text-red-600">
+                <Car className="h-4 w-4" />
+                Offene Leerfahrten ({jobs.filter(j => j.is_empty_trip && j.empty_trip_reason === 'driver_not_found' && (j.payment_amount === 0 || !j.payment_amount)).length})
+              </TabsTrigger>
+            )}
             <TabsTrigger data-testid="tab-services" value="services" className="flex items-center gap-2">
               <LinkIcon className="h-4 w-4" />
               Abschleppdienste
@@ -1748,6 +1755,69 @@ export const AuthorityDashboard = () => {
               </Card>
             </TabsContent>
           )}
+
+          {/* Offene Leerfahrten Tab */}
+          <TabsContent value="empty-trips">
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2 text-red-700">
+                  <Car className="h-5 w-5" />
+                  Offene Leerfahrten - Halter kontaktieren
+                </CardTitle>
+                <CardDescription>
+                  Diese Leerfahrten wurden ohne Zahlung erfasst. Bitte kontaktieren Sie die Halter zur Kostenerstattung.
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                {jobs.filter(j => j.is_empty_trip && j.empty_trip_reason === 'driver_not_found' && (j.payment_amount === 0 || !j.payment_amount)).length === 0 ? (
+                  <div className="text-center py-8 text-slate-500">
+                    <CheckCircle className="h-12 w-12 mx-auto mb-4 opacity-30 text-green-500" />
+                    <p>Keine offenen Leerfahrten</p>
+                  </div>
+                ) : (
+                  <div className="space-y-3">
+                    {jobs.filter(j => j.is_empty_trip && j.empty_trip_reason === 'driver_not_found' && (j.payment_amount === 0 || !j.payment_amount)).map(job => (
+                      <div key={job.id} className="p-4 bg-red-50 border border-red-200 rounded-lg">
+                        <div className="flex items-start justify-between">
+                          <div>
+                            <div className="flex items-center gap-3 mb-2">
+                              <span className="font-bold text-xl">{job.license_plate}</span>
+                              <span className="px-2 py-1 rounded-full text-xs font-medium bg-red-100 text-red-800">
+                                Kosten offen
+                              </span>
+                            </div>
+                            <p className="text-sm text-slate-600">{job.job_number}</p>
+                            <p className="text-sm text-slate-600 mt-1">
+                              <strong>Abschleppdienst:</strong> {job.assigned_service_name}
+                            </p>
+                            <p className="text-sm text-slate-600">
+                              <strong>Datum:</strong> {job.created_at ? new Date(job.created_at).toLocaleString('de-DE') : '-'}
+                            </p>
+                            <p className="text-sm text-slate-600">
+                              <strong>Standort:</strong> {job.location_address}
+                            </p>
+                            {job.service_notes && (
+                              <p className="text-sm text-red-700 mt-2 p-2 bg-red-100 rounded">
+                                {job.service_notes}
+                              </p>
+                            )}
+                          </div>
+                          <div className="text-right">
+                            <p className="text-lg font-bold text-red-600">
+                              Leerfahrt-Kosten offen
+                            </p>
+                            <p className="text-xs text-slate-500 mt-1">
+                              Halter ermitteln und kontaktieren
+                            </p>
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+          </TabsContent>
 
           {/* Services Tab */}
           <TabsContent value="services">
