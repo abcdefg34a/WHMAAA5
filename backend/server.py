@@ -46,9 +46,19 @@ import asyncio
 ROOT_DIR = Path(__file__).parent
 load_dotenv(ROOT_DIR / '.env')
 
-# MongoDB connection
+# MongoDB connection with optimized settings
 mongo_url = os.environ['MONGO_URL']
-client = AsyncIOMotorClient(mongo_url)
+client = AsyncIOMotorClient(
+    mongo_url,
+    maxPoolSize=50,  # Maximum connections in pool
+    minPoolSize=10,  # Minimum connections to keep
+    maxIdleTimeMS=30000,  # Close idle connections after 30s
+    serverSelectionTimeoutMS=5000,  # Fail fast if can't connect
+    connectTimeoutMS=10000,  # Connection timeout
+    socketTimeoutMS=30000,  # Socket timeout for operations
+    retryWrites=True,  # Auto-retry failed writes
+    w='majority'  # Write concern for data safety
+)
 db = client[os.environ['DB_NAME']]
 
 # Resend Email Configuration
@@ -5691,40 +5701,62 @@ async def scheduled_weekly_backup_report():
 async def startup_event():
     """Create database indexes for improved query performance and start schedulers"""
     try:
-        # Indexes for jobs collection
+        # ========== JOBS COLLECTION INDEXES ==========
+        # Single field indexes
         await db.jobs.create_index("license_plate")
         await db.jobs.create_index("status")
         await db.jobs.create_index("created_at")
         await db.jobs.create_index("authority_id")
         await db.jobs.create_index("assigned_service_id")
-        await db.jobs.create_index("job_number")
-        await db.jobs.create_index([("license_plate", 1), ("status", 1)])  # Compound index
+        await db.jobs.create_index("job_number", unique=True)
+        await db.jobs.create_index("vin")  # NEW: For VIN searches
+        await db.jobs.create_index("target_yard")  # NEW: For dual-yard filtering
         
-        # Polling performance indices
-        await db.jobs.create_index([("authority_id", 1), ("updated_at", 1)])
-        await db.jobs.create_index([("created_by_id", 1), ("updated_at", 1)])
-        await db.jobs.create_index([("assigned_service_id", 1), ("updated_at", 1)])
+        # Compound indexes for common queries
+        await db.jobs.create_index([("license_plate", 1), ("status", 1)])
+        await db.jobs.create_index([("status", 1), ("created_at", -1)])  # NEW: Status + date sorting
+        await db.jobs.create_index([("authority_id", 1), ("status", 1), ("created_at", -1)])  # NEW: Authority dashboard
+        await db.jobs.create_index([("assigned_service_id", 1), ("status", 1), ("created_at", -1)])  # NEW: Towing dashboard
+        
+        # Polling performance indices (delta sync)
+        await db.jobs.create_index([("authority_id", 1), ("updated_at", -1)])
+        await db.jobs.create_index([("created_by_id", 1), ("updated_at", -1)])
+        await db.jobs.create_index([("assigned_service_id", 1), ("updated_at", -1)])
+        
+        # Public vehicle search index
+        await db.jobs.create_index([("license_plate", 1), ("status", 1), ("vin", 1)])  # NEW
         
         # DSGVO cleanup index
         await db.jobs.create_index([("status", 1), ("released_at", 1), ("anonymized", 1)])
         
-        # Indexes for users collection
+        # Text search index for full-text search (optional but powerful)
+        await db.jobs.create_index([
+            ("license_plate", "text"),
+            ("vin", "text"),
+            ("job_number", "text"),
+            ("location_address", "text")
+        ], name="jobs_text_search")
+        
+        # ========== USERS COLLECTION INDEXES ==========
         await db.users.create_index("email", unique=True)
         await db.users.create_index("role")
         await db.users.create_index("linked_authorities")
+        await db.users.create_index("service_code")  # NEW: For service linking
+        await db.users.create_index([("role", 1), ("approved", 1)])  # NEW: Admin user listing
         
-        # Indexes for audit_logs collection
-        await db.audit_logs.create_index("timestamp")
+        # ========== AUDIT LOGS INDEXES ==========
+        await db.audit_logs.create_index([("timestamp", -1)])  # Descending for recent first
         await db.audit_logs.create_index("action")
         await db.audit_logs.create_index("user_id")
+        await db.audit_logs.create_index([("user_id", 1), ("timestamp", -1)])  # NEW: User activity
         
-        # Indexes for backup_jobs collection
+        # ========== BACKUP JOBS INDEXES ==========
         await db.backup_jobs.create_index("backup_type")
         await db.backup_jobs.create_index("status")
-        await db.backup_jobs.create_index("created_at")
+        await db.backup_jobs.create_index([("created_at", -1)])
         await db.backup_jobs.create_index("retention_class")
         
-        logger.info("Database indexes created successfully")
+        logger.info("✅ Database indexes created successfully")
         
         # Start DSGVO scheduler - runs every day at 03:00 AM
         scheduler.add_job(
