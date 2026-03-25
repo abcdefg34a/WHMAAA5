@@ -2400,38 +2400,6 @@ export const TowingDashboard = () => {
                   />
                 </div>
 
-                {/* Add Photo */}
-                <div>
-                  <Label className="text-slate-500 mb-2 block">Foto hinzufügen</Label>
-                  <div className="flex gap-2">
-                    {servicePhotos.map((photo, idx) => (
-                      <div key={idx} className="relative w-16 h-16">
-                        <img src={photo} alt="" className="w-full h-full object-cover rounded" />
-                        <button
-                          onClick={() => setServicePhotos(prev => prev.filter((_, i) => i !== idx))}
-                          className="absolute -top-1 -right-1 bg-red-500 text-white rounded-full p-0.5"
-                        >
-                          <X className="h-3 w-3" />
-                        </button>
-                      </div>
-                    ))}
-                    <button
-                      onClick={() => fileInputRef.current?.click()}
-                      className="w-16 h-16 border-2 border-dashed border-slate-300 rounded flex items-center justify-center hover:border-slate-400"
-                    >
-                      <Camera className="h-5 w-5 text-slate-400" />
-                    </button>
-                  </div>
-                  <input
-                    ref={fileInputRef}
-                    type="file"
-                    accept="image/*"
-                    capture="environment"
-                    onChange={handlePhotoUpload}
-                    className="hidden"
-                  />
-                </div>
-
                 {/* Status Actions */}
                 <div className="border-t pt-4">
                   <Label className="text-slate-500 mb-3 block">Status aktualisieren</Label>
