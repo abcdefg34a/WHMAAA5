@@ -139,17 +139,25 @@ export const AuthorityDashboard = () => {
   const [authoritySettings, setAuthoritySettings] = useState({
     yard_model: 'service_yard',
     price_categories: [],
+    yards: [],  // Multiple yards
     yard_address: '',
     yard_lat: null,
     yard_lng: null
   });
   const [targetYard, setTargetYard] = useState('service_yard');
+  const [selectedYardId, setSelectedYardId] = useState('');  // Selected yard when creating job
+  const [selectedYard, setSelectedYard] = useState(null);
   const [selectedPriceCategoryId, setSelectedPriceCategoryId] = useState('');
   const [selectedPriceCategory, setSelectedPriceCategory] = useState(null);
   const [newPriceCategory, setNewPriceCategory] = useState({
     name: '',
     base_price: '',
     daily_rate: ''
+  });
+  const [newYard, setNewYard] = useState({
+    name: '',
+    address: '',
+    phone: ''
   });
   const [savingSettings, setSavingSettings] = useState(false);
 
@@ -210,6 +218,7 @@ export const AuthorityDashboard = () => {
       const response = await axios.patch(`${API}/authority/settings`, {
         yard_model: authoritySettings.yard_model,
         price_categories: authoritySettings.price_categories,
+        yards: authoritySettings.yards,
         yard_address: authoritySettings.yard_address,
         yard_lat: authoritySettings.yard_lat,
         yard_lng: authoritySettings.yard_lng
@@ -248,6 +257,36 @@ export const AuthorityDashboard = () => {
     setAuthoritySettings({
       ...authoritySettings,
       price_categories: (authoritySettings.price_categories || []).filter(cat => cat.id !== categoryId)
+    });
+  };
+
+  // Add yard
+  const handleAddYard = () => {
+    if (!newYard.name.trim() || !newYard.address.trim()) {
+      toast.error('Name und Adresse sind erforderlich');
+      return;
+    }
+    const yard = {
+      id: crypto.randomUUID(),
+      name: newYard.name.trim(),
+      address: newYard.address.trim(),
+      phone: newYard.phone.trim() || null,
+      lat: null,
+      lng: null,
+      is_active: true
+    };
+    setAuthoritySettings({
+      ...authoritySettings,
+      yards: [...(authoritySettings.yards || []), yard]
+    });
+    setNewYard({ name: '', address: '', phone: '' });
+  };
+
+  // Remove yard
+  const handleRemoveYard = (yardId) => {
+    setAuthoritySettings({
+      ...authoritySettings,
+      yards: (authoritySettings.yards || []).filter(y => y.id !== yardId)
     });
   };
 
@@ -582,6 +621,13 @@ export const AuthorityDashboard = () => {
         vehicle_category: vehicleCategory || null,
         // NEW: Target yard model
         target_yard: targetYard,
+        // Authority yard location (when target_yard = "authority_yard")
+        authority_yard_id: targetYard === 'authority_yard' ? selectedYardId : null,
+        authority_yard_name: targetYard === 'authority_yard' ? selectedYard?.name : null,
+        authority_yard_address: targetYard === 'authority_yard' ? selectedYard?.address : null,
+        authority_yard_lat: targetYard === 'authority_yard' ? selectedYard?.lat : null,
+        authority_yard_lng: targetYard === 'authority_yard' ? selectedYard?.lng : null,
+        authority_yard_phone: targetYard === 'authority_yard' ? selectedYard?.phone : null,
         // Authority pricing (when target_yard = "authority_yard")
         authority_price_category_id: targetYard === 'authority_yard' ? selectedPriceCategoryId : null,
         authority_price_category_name: targetYard === 'authority_yard' ? selectedPriceCategory?.name : null,
@@ -618,6 +664,8 @@ export const AuthorityDashboard = () => {
       setSicherstellungReason('');
       setVehicleCategory('');
       setTargetYard(authoritySettings.yard_model || 'service_yard');
+      setSelectedYardId('');
+      setSelectedYard(null);
       setSelectedPriceCategoryId('');
       setSelectedPriceCategory(null);
       setSelectedWeightCategoryId('');
@@ -929,6 +977,55 @@ export const AuthorityDashboard = () => {
                       </div>
                     )}
 
+                    {/* Hof-Auswahl bei Behörden-Hof */}
+                    {selectedServiceId && targetYard === 'authority_yard' && (authoritySettings.yards || []).length > 0 && (
+                      <div className="space-y-2 p-4 bg-green-50 border border-green-200 rounded-lg">
+                        <Label className="text-green-800">Ziel-Hof auswählen *</Label>
+                        <Select 
+                          value={selectedYardId} 
+                          onValueChange={(value) => {
+                            setSelectedYardId(value);
+                            const yard = authoritySettings.yards.find(y => y.id === value);
+                            setSelectedYard(yard || null);
+                          }}
+                        >
+                          <SelectTrigger>
+                            <SelectValue placeholder="Hof auswählen..." />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {authoritySettings.yards.filter(y => y.is_active !== false).map(yard => (
+                              <SelectItem key={yard.id} value={yard.id}>
+                                <div className="flex flex-col">
+                                  <span className="font-medium">{yard.name}</span>
+                                  <span className="text-xs text-slate-500">{yard.address}</span>
+                                </div>
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                        {selectedYard && (
+                          <div className="bg-green-100 border border-green-300 rounded-lg p-3 mt-2 text-sm">
+                            <p><strong>Adresse:</strong> {selectedYard.address}</p>
+                            {selectedYard.phone && <p><strong>Telefon:</strong> {selectedYard.phone}</p>}
+                          </div>
+                        )}
+                      </div>
+                    )}
+
+                    {/* Keine Höfe bei Behörden-Hof */}
+                    {selectedServiceId && targetYard === 'authority_yard' && (authoritySettings.yards || []).length === 0 && (
+                      <div className="text-sm text-amber-600 bg-amber-50 p-3 rounded-lg border border-amber-200">
+                        ⚠️ Keine Höfe angelegt. 
+                        <button 
+                          type="button"
+                          onClick={() => setActiveTab('settings')}
+                          className="ml-1 underline font-medium"
+                        >
+                          Jetzt in Einstellungen anlegen
+                        </button>
+                      </div>
+                    )}
+
                     {/* Preiskategorie bei Behörden-Hof */}
                     {selectedServiceId && targetYard === 'authority_yard' && (authoritySettings.price_categories || []).length > 0 && (
                       <div className="space-y-2 p-4 bg-green-50 border border-green-200 rounded-lg">
@@ -971,7 +1068,7 @@ export const AuthorityDashboard = () => {
                     )}
 
                     {/* Keine Preiskategorien bei Behörden-Hof */}
-                    {selectedServiceId && targetYard === 'authority_yard' && (authoritySettings.price_categories || []).length === 0 && (
+                    {selectedServiceId && targetYard === 'authority_yard' && (authoritySettings.yards || []).length > 0 && (authoritySettings.price_categories || []).length === 0 && (
                       <div className="text-sm text-amber-600 bg-amber-50 p-3 rounded-lg border border-amber-200">
                         ⚠️ Keine Preiskategorien angelegt. 
                         <button 
@@ -1990,6 +2087,76 @@ export const AuthorityDashboard = () => {
                       >
                         <Plus className="h-4 w-4 mr-2" />
                         Kategorie hinzufügen
+                      </Button>
+                    </div>
+                  </CardContent>
+                </Card>
+              )}
+
+              {/* Höfe verwalten (nur bei Behörden-Hof) */}
+              {authoritySettings.yard_model === 'authority_yard' && (
+                <Card>
+                  <CardHeader>
+                    <CardTitle className="flex items-center gap-2">
+                      <Building2 className="h-5 w-5" />
+                      Abschlepphöfe
+                    </CardTitle>
+                    <CardDescription>
+                      Verwalten Sie Ihre Abschlepphöfe mit Adresse und Telefonnummer
+                    </CardDescription>
+                  </CardHeader>
+                  <CardContent className="space-y-4">
+                    {/* Bestehende Höfe */}
+                    {(authoritySettings.yards || []).length > 0 && (
+                      <div className="space-y-2">
+                        {authoritySettings.yards.map((yard) => (
+                          <div key={yard.id} className="flex items-center justify-between p-3 bg-slate-50 rounded-lg border">
+                            <div>
+                              <span className="font-medium">{yard.name}</span>
+                              <p className="text-sm text-slate-500">{yard.address}</p>
+                              {yard.phone && <p className="text-sm text-slate-500">📞 {yard.phone}</p>}
+                            </div>
+                            <button
+                              type="button"
+                              onClick={() => handleRemoveYard(yard.id)}
+                              className="text-red-500 hover:text-red-700"
+                            >
+                              <X className="h-4 w-4" />
+                            </button>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+
+                    {/* Neuen Hof hinzufügen */}
+                    <div className="p-4 bg-green-50 rounded-lg border border-green-200 space-y-3">
+                      <p className="text-sm font-medium text-green-800">Neuen Hof hinzufügen</p>
+                      <div className="space-y-3">
+                        <Input
+                          placeholder="Name (z.B. 'Haupthof', 'Außenstelle Nord')"
+                          value={newYard.name}
+                          onChange={(e) => setNewYard({...newYard, name: e.target.value})}
+                        />
+                        <Input
+                          placeholder="Adresse (Straße, PLZ Ort)"
+                          value={newYard.address}
+                          onChange={(e) => setNewYard({...newYard, address: e.target.value})}
+                        />
+                        <Input
+                          placeholder="Telefonnummer (optional)"
+                          value={newYard.phone}
+                          onChange={(e) => setNewYard({...newYard, phone: e.target.value})}
+                        />
+                      </div>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        onClick={handleAddYard}
+                        className="w-full"
+                      >
+                        <Plus className="h-4 w-4 mr-2" />
+                        Hof hinzufügen
                       </Button>
                     </div>
                   </CardContent>

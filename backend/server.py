@@ -825,6 +825,13 @@ class JobCreate(BaseModel):
     vehicle_category_id: Optional[str] = None  # Reference to vehicle category for dynamic pricing
     # NEW: Target yard and pricing model
     target_yard: Optional[str] = None  # "authority_yard" or "service_yard"
+    # Authority yard location (when target_yard = "authority_yard")
+    authority_yard_id: Optional[str] = None
+    authority_yard_name: Optional[str] = None
+    authority_yard_address: Optional[str] = None
+    authority_yard_lat: Optional[float] = None
+    authority_yard_lng: Optional[float] = None
+    authority_yard_phone: Optional[str] = None
     # Authority price category (when target_yard = "authority_yard")
     authority_price_category_id: Optional[str] = None
     authority_price_category_name: Optional[str] = None
@@ -909,6 +916,13 @@ class JobResponse(BaseModel):
     vehicle_category_id: Optional[str] = None  # Referenz zur Preiskategorie
     # NEW: Target yard model (authority_yard or service_yard)
     target_yard: Optional[str] = None
+    # Authority yard location (when target_yard = "authority_yard")
+    authority_yard_id: Optional[str] = None
+    authority_yard_name: Optional[str] = None
+    authority_yard_address: Optional[str] = None
+    authority_yard_lat: Optional[float] = None
+    authority_yard_lng: Optional[float] = None
+    authority_yard_phone: Optional[str] = None
     # Authority pricing (when target_yard = "authority_yard")
     authority_price_category_id: Optional[str] = None
     authority_price_category_name: Optional[str] = None
@@ -2200,9 +2214,21 @@ class AuthorityPriceCategory(BaseModel):
     daily_rate: float  # Preis pro weitere 24h
     is_active: bool = True
 
+# NEW: Authority yard location
+class AuthorityYard(BaseModel):
+    id: Optional[str] = None
+    name: str  # z.B. "Haupthof", "Außenstelle Nord"
+    address: str
+    lat: Optional[float] = None
+    lng: Optional[float] = None
+    phone: Optional[str] = None
+    is_active: bool = True
+
 class AuthoritySettingsUpdate(BaseModel):
     yard_model: Optional[str] = None  # "authority_yard" or "service_yard"
     price_categories: Optional[List[AuthorityPriceCategory]] = None
+    yards: Optional[List[AuthorityYard]] = None  # Multiple yards
+    # Legacy single yard (deprecated, use yards instead)
     yard_address: Optional[str] = None
     yard_lat: Optional[float] = None
     yard_lng: Optional[float] = None
@@ -2233,6 +2259,17 @@ async def update_authority_settings(data: AuthoritySettingsUpdate, user: dict = 
             price_cats.append(cat_dict)
         update_data["price_categories"] = price_cats
     
+    # NEW: Handle multiple yards
+    if data.yards is not None:
+        yards_list = []
+        for yard in data.yards:
+            yard_dict = yard.model_dump() if hasattr(yard, 'model_dump') else yard.dict()
+            if not yard_dict.get("id"):
+                yard_dict["id"] = str(uuid.uuid4())
+            yards_list.append(yard_dict)
+        update_data["yards"] = yards_list
+    
+    # Legacy single yard support
     if data.yard_address is not None:
         update_data["yard_address"] = data.yard_address
     if data.yard_lat is not None:
@@ -2269,6 +2306,7 @@ async def get_authority_settings(user: dict = Depends(get_current_user)):
     return {
         "yard_model": authority.get("yard_model", "service_yard"),  # Default: Abschleppdienst-Hof
         "price_categories": authority.get("price_categories", []),
+        "yards": authority.get("yards", []),  # Multiple yards
         "yard_address": authority.get("yard_address"),
         "yard_lat": authority.get("yard_lat"),
         "yard_lng": authority.get("yard_lng")
@@ -2717,6 +2755,13 @@ async def create_job(
         "vehicle_category_id": data.vehicle_category_id,
         # NEW: Target yard model
         "target_yard": data.target_yard or "service_yard",
+        # Authority yard location (when target_yard = "authority_yard")
+        "authority_yard_id": data.authority_yard_id,
+        "authority_yard_name": data.authority_yard_name,
+        "authority_yard_address": data.authority_yard_address,
+        "authority_yard_lat": data.authority_yard_lat,
+        "authority_yard_lng": data.authority_yard_lng,
+        "authority_yard_phone": data.authority_yard_phone,
         # Authority pricing (when target_yard = "authority_yard")
         "authority_price_category_id": data.authority_price_category_id,
         "authority_price_category_name": data.authority_price_category_name,
@@ -3312,14 +3357,18 @@ async def search_vehicle(q: str):
             {"license_plate": search_term},
             {"vin": search_term}
         ],
-        "status": {"$in": [JobStatus.TOWED, JobStatus.IN_YARD]}
+        "status": {"$in": [JobStatus.TOWED, JobStatus.IN_YARD, JobStatus.DELIVERED_TO_AUTHORITY]}
     }, {"_id": 0})
     
     if not job:
         return VehicleSearchResult(found=False)
     
-    # Get towing service info
+    # Check if this is an authority yard job
+    is_authority_yard = job.get("target_yard") == "authority_yard"
+    
+    # Initialize variables
     service = None
+    authority = None
     tow_cost = None
     daily_cost = None
     processing_fee = None
@@ -3327,58 +3376,113 @@ async def search_vehicle(q: str):
     days_in_yard = 0
     total_cost = None
     
-    if job.get("assigned_service_id"):
-        service = await db.users.find_one({"id": job["assigned_service_id"]}, {"_id": 0, "password": 0})
-        if service:
-            tow_cost = service.get("tow_cost", 0) or 0
-            daily_cost = service.get("daily_cost", 0) or 0
-            processing_fee = service.get("processing_fee", 0) or 0
-            empty_trip_fee = 0
-            heavy_vehicle_surcharge = 0
-            night_surcharge = 0
-            weekend_surcharge = 0
+    yard_address = None
+    yard_lat = None
+    yard_lng = None
+    company_name = None
+    phone = None
+    email = None
+    opening_hours = None
+    
+    if is_authority_yard:
+        # AUTHORITY YARD: Get authority info and pricing
+        if job.get("authority_id"):
+            authority = await db.users.find_one({"id": job["authority_id"]}, {"_id": 0, "password": 0})
+        
+        if authority:
+            # Use authority yard location from job
+            yard_address = job.get("authority_yard_address") or authority.get("yard_address")
+            yard_lat = job.get("authority_yard_lat") or authority.get("yard_lat")
+            yard_lng = job.get("authority_yard_lng") or authority.get("yard_lng")
+            phone = job.get("authority_yard_phone") or authority.get("phone")
+            company_name = job.get("authority_yard_name") or authority.get("authority_name") or "Behörden-Hof"
+            email = authority.get("email")
             
-            # Empty trip fee
-            if job.get("is_empty_trip"):
-                empty_trip_fee = service.get("empty_trip_fee", 0) or 0
-                
-            # Heavy vehicle surcharge
-            if job.get("vehicle_category") == "over_3_5t":
-                heavy_vehicle_surcharge = service.get("heavy_vehicle_surcharge", 0) or 0
-                
-            # Night and Weekend surcharges
-            if job.get("towed_at"):
-                towed_time = datetime.fromisoformat(job["towed_at"].replace("Z", "+00:00"))
-                hour = towed_time.hour
-                if hour >= 22 or hour < 6:
-                    night_surcharge = service.get("night_surcharge", 0) or 0
-                if towed_time.weekday() >= 5:
-                    weekend_surcharge = service.get("weekend_surcharge", 0) or 0
+            # Use authority pricing
+            tow_cost = job.get("authority_base_price") or 0
+            daily_cost = job.get("authority_daily_rate") or 0
+            processing_fee = 0  # Authority may not have processing fee
             
             # Calculate days in yard
-            if job.get("in_yard_at"):
+            if job.get("delivered_to_authority_at"):
+                days_in_yard = calculate_days_in_yard(job["delivered_to_authority_at"])
+            elif job.get("in_yard_at"):
                 days_in_yard = calculate_days_in_yard(job["in_yard_at"])
             elif job.get("towed_at"):
                 days_in_yard = calculate_days_in_yard(job["towed_at"])
             
-            # Calculate total cost including all fees
-            standkosten = daily_cost * days_in_yard
-            total_cost = tow_cost + standkosten + processing_fee + empty_trip_fee + heavy_vehicle_surcharge + night_surcharge + weekend_surcharge
+            # Calculate total cost (authority pricing)
+            standkosten = daily_cost * max(0, days_in_yard - 1)  # First day included in base
+            total_cost = tow_cost + standkosten
+    else:
+        # SERVICE YARD: Get towing service info (original logic)
+        if job.get("assigned_service_id"):
+            service = await db.users.find_one({"id": job["assigned_service_id"]}, {"_id": 0, "password": 0})
+            if service:
+                tow_cost = service.get("tow_cost", 0) or 0
+                daily_cost = service.get("daily_cost", 0) or 0
+                processing_fee = service.get("processing_fee", 0) or 0
+                empty_trip_fee = 0
+                heavy_vehicle_surcharge = 0
+                night_surcharge = 0
+                weekend_surcharge = 0
+                
+                yard_address = service.get("yard_address")
+                yard_lat = service.get("yard_lat")
+                yard_lng = service.get("yard_lng")
+                company_name = service.get("company_name")
+                phone = service.get("phone")
+                email = service.get("email")
+                opening_hours = service.get("opening_hours")
+                
+                # Empty trip fee
+                if job.get("is_empty_trip"):
+                    empty_trip_fee = service.get("empty_trip_fee", 0) or 0
+                    
+                # Heavy vehicle surcharge (or weight category surcharge)
+                if job.get("weight_category_surcharge"):
+                    heavy_vehicle_surcharge = job.get("weight_category_surcharge", 0) or 0
+                elif job.get("vehicle_category") == "over_3_5t":
+                    heavy_vehicle_surcharge = service.get("heavy_vehicle_surcharge", 0) or 0
+                    
+                # Night and Weekend surcharges
+                if job.get("towed_at"):
+                    towed_time = datetime.fromisoformat(job["towed_at"].replace("Z", "+00:00"))
+                    hour = towed_time.hour
+                    if hour >= 22 or hour < 6:
+                        night_surcharge = service.get("night_surcharge", 0) or 0
+                    if towed_time.weekday() >= 5:
+                        weekend_surcharge = service.get("weekend_surcharge", 0) or 0
+                
+                # Calculate days in yard
+                if job.get("in_yard_at"):
+                    days_in_yard = calculate_days_in_yard(job["in_yard_at"])
+                elif job.get("towed_at"):
+                    days_in_yard = calculate_days_in_yard(job["towed_at"])
+                
+                # Calculate total cost including all fees
+                standkosten = daily_cost * days_in_yard
+                total_cost = tow_cost + standkosten + processing_fee + empty_trip_fee + heavy_vehicle_surcharge + night_surcharge + weekend_surcharge
+    
+    # Map status for display
+    display_status = job["status"]
+    if display_status == "delivered_to_authority":
+        display_status = "in_yard"  # Show as "Im Hof" for public search
     
     return VehicleSearchResult(
         found=True,
         job_number=job["job_number"],
         license_plate=job["license_plate"],
-        status=job["status"],
+        status=display_status,
         towed_at=job.get("towed_at"),
-        in_yard_at=job.get("in_yard_at"),
-        yard_address=service.get("yard_address") if service else None,
-        yard_lat=service.get("yard_lat") if service else None,
-        yard_lng=service.get("yard_lng") if service else None,
-        company_name=service.get("company_name") if service else None,
-        phone=service.get("phone") if service else None,
-        email=service.get("email") if service else None,
-        opening_hours=service.get("opening_hours") if service else None,
+        in_yard_at=job.get("delivered_to_authority_at") or job.get("in_yard_at"),
+        yard_address=yard_address,
+        yard_lat=yard_lat,
+        yard_lng=yard_lng,
+        company_name=company_name,
+        phone=phone,
+        email=email,
+        opening_hours=opening_hours,
         tow_cost=tow_cost,
         daily_cost=daily_cost,
         days_in_yard=days_in_yard,
