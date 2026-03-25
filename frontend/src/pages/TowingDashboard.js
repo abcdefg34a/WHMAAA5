@@ -125,10 +125,6 @@ export const TowingDashboard = () => {
   // NEW: Search in "Im Hof" tab
   const [inYardSearch, setInYardSearch] = useState('');
 
-  // NEW: Invoices state
-  const [invoices, setInvoices] = useState([]);
-  const [loadingInvoices, setLoadingInvoices] = useState(false);
-
   // Pagination state
   const [currentPage, setCurrentPage] = useState(1);
   const [totalJobs, setTotalJobs] = useState(0);
@@ -265,23 +261,6 @@ export const TowingDashboard = () => {
   useEffect(() => {
     setSelectedJobIds([]);
   }, [activeTab]);
-
-  // NEW: Fetch invoices
-  const fetchInvoices = async () => {
-    setLoadingInvoices(true);
-    try {
-      const response = await axios.get(`${API}/services/invoices`);
-      setInvoices(response.data.invoices || []);
-    } catch (error) {
-      console.error('Error fetching invoices:', error);
-    } finally {
-      setLoadingInvoices(false);
-    }
-  };
-
-  useEffect(() => {
-    fetchInvoices();
-  }, []);
 
   const fetchJobs = async () => {
     try {
@@ -1428,10 +1407,6 @@ export const TowingDashboard = () => {
               <CheckCircle className="h-4 w-4" />
               Abgeholt ({filterJobs('released').length})
             </TabsTrigger>
-            <TabsTrigger data-testid="tab-invoices" value="invoices" className="flex items-center gap-2">
-              <FileText className="h-4 w-4" />
-              Rechnungen ({invoices.filter(i => i.status === 'pending').length})
-            </TabsTrigger>
           </TabsList>
 
           {/* Incoming Jobs */}
@@ -1676,112 +1651,6 @@ export const TowingDashboard = () => {
                 ))}
               </div>
             )}
-          </TabsContent>
-
-          {/* Invoices Tab */}
-          <TabsContent value="invoices">
-            <Card>
-              <CardHeader>
-                <CardTitle className="flex items-center gap-2">
-                  <FileText className="h-5 w-5" />
-                  Rechnungen von Behörden
-                </CardTitle>
-                <CardDescription>
-                  Rechnungen für Aufträge, die auf Behörden-Höfe geliefert wurden
-                </CardDescription>
-              </CardHeader>
-              <CardContent>
-                {loadingInvoices ? (
-                  <div className="flex justify-center py-8">
-                    <div className="loading-spinner"></div>
-                  </div>
-                ) : invoices.length === 0 ? (
-                  <div className="text-center py-8 text-slate-500">
-                    <FileText className="h-12 w-12 mx-auto mb-4 opacity-30" />
-                    <p>Keine Rechnungen vorhanden</p>
-                  </div>
-                ) : (
-                  <div className="space-y-4">
-                    {/* Pending Invoices */}
-                    {invoices.filter(i => i.status === 'pending').length > 0 && (
-                      <div>
-                        <h4 className="font-semibold text-amber-700 mb-3">⏳ Offene Rechnungen</h4>
-                        <div className="space-y-2">
-                          {invoices.filter(i => i.status === 'pending').map(invoice => (
-                            <div key={invoice.id} className="flex items-center justify-between p-4 bg-amber-50 border border-amber-200 rounded-lg">
-                              <div>
-                                <p className="font-medium">{invoice.license_plate}</p>
-                                <p className="text-sm text-slate-500">{invoice.job_number}</p>
-                                <p className="text-sm text-slate-500">Von: {invoice.authority_name}</p>
-                                <p className="text-xs text-slate-400">
-                                  {invoice.created_at ? new Date(invoice.created_at).toLocaleString('de-DE') : '-'}
-                                </p>
-                              </div>
-                              <div className="text-right flex flex-col items-end gap-2">
-                                <p className="text-2xl font-bold text-amber-600">{invoice.amount?.toFixed(2)} €</p>
-                                <span className="text-xs px-2 py-1 bg-amber-100 text-amber-800 rounded-full">Offen</span>
-                                <Button
-                                  size="sm"
-                                  variant="outline"
-                                  className="text-green-700 border-green-300 hover:bg-green-50"
-                                  onClick={async () => {
-                                    if (window.confirm(`Rechnung für ${invoice.license_plate} (${invoice.amount?.toFixed(2)} €) als bezahlt markieren?`)) {
-                                      try {
-                                        await axios.patch(`${API}/services/invoices/${invoice.id}/mark-paid`);
-                                        fetchInvoices();
-                                        alert('Rechnung als bezahlt markiert!');
-                                      } catch (error) {
-                                        console.error('Error marking invoice paid:', error);
-                                        alert(error.response?.data?.detail || 'Fehler beim Markieren der Rechnung');
-                                      }
-                                    }
-                                  }}
-                                >
-                                  <CheckCircle className="h-4 w-4 mr-1" />
-                                  Als bezahlt markieren
-                                </Button>
-                              </div>
-                            </div>
-                          ))}
-                        </div>
-                      </div>
-                    )}
-
-                    {/* Paid Invoices */}
-                    {invoices.filter(i => i.status === 'paid').length > 0 && (
-                      <div>
-                        <h4 className="font-semibold text-green-700 mb-3">✅ Bezahlte Rechnungen</h4>
-                        <div className="space-y-2">
-                          {invoices.filter(i => i.status === 'paid').map(invoice => (
-                            <div key={invoice.id} className="flex items-center justify-between p-4 bg-green-50 border border-green-200 rounded-lg">
-                              <div>
-                                <p className="font-medium">{invoice.license_plate}</p>
-                                <p className="text-sm text-slate-500">{invoice.job_number}</p>
-                                <p className="text-sm text-slate-500">Von: {invoice.authority_name}</p>
-                              </div>
-                              <div className="text-right">
-                                <p className="text-xl font-bold text-green-600">{invoice.amount?.toFixed(2)} €</p>
-                                <span className="text-xs px-2 py-1 bg-green-100 text-green-800 rounded-full">Bezahlt</span>
-                              </div>
-                            </div>
-                          ))}
-                        </div>
-                      </div>
-                    )}
-
-                    {/* Summary */}
-                    <div className="mt-6 p-4 bg-slate-100 rounded-lg">
-                      <div className="flex justify-between items-center">
-                        <span className="font-medium">Offene Summe:</span>
-                        <span className="text-xl font-bold text-amber-600">
-                          {invoices.filter(i => i.status === 'pending').reduce((sum, i) => sum + (i.amount || 0), 0).toFixed(2)} €
-                        </span>
-                      </div>
-                    </div>
-                  </div>
-                )}
-              </CardContent>
-            </Card>
           </TabsContent>
 
           {/* Profile Tab */}
