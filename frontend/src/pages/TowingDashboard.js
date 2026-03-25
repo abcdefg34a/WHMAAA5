@@ -747,13 +747,32 @@ export const TowingDashboard = () => {
     }
   };
 
-  // Optimized status update with optimistic UI
+  // Optimized status update with optimistic UI and timestamp
   const handleStatusUpdate = useCallback(async (jobId, newStatus) => {
-    // Optimistic update - update UI immediately
+    const now = new Date().toISOString();
+    
+    // Build timestamp field based on new status
+    const timestampField = {
+      'on_site': 'on_site_at',
+      'towed': 'towed_at',
+      'in_yard': 'in_yard_at',
+      'delivered_to_authority': 'delivered_to_authority_at',
+      'released': 'released_at'
+    }[newStatus];
+    
+    // Optimistic update - update UI immediately with timestamp
     const previousJobs = [...jobs];
+    const optimisticUpdate = { status: newStatus };
+    if (timestampField) optimisticUpdate[timestampField] = now;
+    
     setJobs(prevJobs => prevJobs.map(j => 
-      j.id === jobId ? { ...j, status: newStatus } : j
+      j.id === jobId ? { ...j, ...optimisticUpdate } : j
     ));
+    
+    // Also update selectedJob immediately
+    if (selectedJob?.id === jobId) {
+      setSelectedJob(prev => prev ? { ...prev, ...optimisticUpdate } : null);
+    }
     
     try {
       const updateData = { status: newStatus };
@@ -762,15 +781,24 @@ export const TowingDashboard = () => {
         updateData.service_photos = servicePhotos;
       }
 
-      await axios.patch(`${API}/jobs/${jobId}`, updateData);
+      const response = await axios.patch(`${API}/jobs/${jobId}`, updateData);
       toast.success('Status aktualisiert');
-
+      
+      // Update with real server data
+      const updatedJob = response.data;
+      setJobs(prevJobs => prevJobs.map(j => 
+        j.id === jobId ? updatedJob : j
+      ));
+      
       if (selectedJob?.id === jobId) {
-        setSelectedJob(prev => prev ? { ...prev, status: newStatus } : null);
+        setSelectedJob(updatedJob);
       }
     } catch (error) {
       // Rollback on error
       setJobs(previousJobs);
+      if (selectedJob?.id === jobId) {
+        setSelectedJob(previousJobs.find(j => j.id === jobId) || null);
+      }
       toast.error('Fehler beim Aktualisieren');
     }
   }, [jobs, serviceNotes, servicePhotos, selectedJob]);
