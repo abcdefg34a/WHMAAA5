@@ -3458,11 +3458,16 @@ async def add_service_photo(job_id: str, photo: str = Form(...), user: dict = De
 @api_router.get("/search/vehicle", response_model=VehicleSearchResult)
 async def search_vehicle(q: str):
     search_term = q.upper().strip()
+    # Also create normalized version without spaces and dashes
+    search_normalized = search_term.replace(" ", "").replace("-", "")
     
     job = await db.jobs.find_one({
         "$or": [
             {"license_plate": search_term},
-            {"vin": search_term}
+            {"license_plate": search_normalized},
+            {"license_plate": {"$regex": f"^{re.escape(search_normalized)}$", "$options": "i"}},
+            {"vin": search_term},
+            {"vin": search_normalized}
         ],
         "status": {"$in": [JobStatus.TOWED, JobStatus.IN_YARD, JobStatus.DELIVERED_TO_AUTHORITY]}
     }, {"_id": 0})
