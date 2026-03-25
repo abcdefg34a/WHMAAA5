@@ -3462,14 +3462,16 @@ async def search_vehicle(q: str):
     search_normalized = search_term.replace(" ", "").replace("-", "")
     
     # Create a flexible regex that allows optional spaces/dashes between each character
-    # E.g., "AA123" becomes "A[\s-]*A[\s-]*1[\s-]*2[\s-]*3"
+    # AND allows leading/trailing whitespace
+    # E.g., "AA123" becomes "^\s*A[\s-]*A[\s-]*1[\s-]*2[\s-]*3\s*$"
     flexible_pattern = r"[\s-]*".join(re.escape(c) for c in search_normalized)
+    full_pattern = f"^\\s*{flexible_pattern}\\s*$"
     
     job = await db.jobs.find_one({
         "$or": [
             {"license_plate": search_term},
             {"license_plate": search_normalized},
-            {"license_plate": {"$regex": f"^{flexible_pattern}$", "$options": "i"}},
+            {"license_plate": {"$regex": full_pattern, "$options": "i"}},
             {"vin": search_term},
             {"vin": search_normalized}
         ],
