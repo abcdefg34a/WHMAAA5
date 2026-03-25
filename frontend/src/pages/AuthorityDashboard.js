@@ -135,6 +135,24 @@ export const AuthorityDashboard = () => {
   const [selectedWeightCategoryId, setSelectedWeightCategoryId] = useState('');
   const [selectedWeightCategory, setSelectedWeightCategory] = useState(null);
 
+  // NEW: Authority settings (yard model & pricing)
+  const [authoritySettings, setAuthoritySettings] = useState({
+    yard_model: 'service_yard',
+    price_categories: [],
+    yard_address: '',
+    yard_lat: null,
+    yard_lng: null
+  });
+  const [targetYard, setTargetYard] = useState('service_yard');
+  const [selectedPriceCategoryId, setSelectedPriceCategoryId] = useState('');
+  const [selectedPriceCategory, setSelectedPriceCategory] = useState(null);
+  const [newPriceCategory, setNewPriceCategory] = useState({
+    name: '',
+    base_price: '',
+    daily_rate: ''
+  });
+  const [savingSettings, setSavingSettings] = useState(false);
+
   // NEW: Edit/Delete Job state
   const [editJobDialogOpen, setEditJobDialogOpen] = useState(false);
   const [editingJobData, setEditingJobData] = useState(false);
@@ -155,10 +173,70 @@ export const AuthorityDashboard = () => {
   useEffect(() => {
     fetchJobs();
     fetchLinkedServices();
+    fetchAuthoritySettings();
     if (user?.is_main_authority) {
       fetchEmployees();
     }
   }, [user, currentPage, filterStatus, filterDateFrom, filterDateTo, filterService]);
+
+  // Fetch authority settings
+  const fetchAuthoritySettings = async () => {
+    try {
+      const response = await axios.get(`${API}/authority/settings`);
+      setAuthoritySettings(response.data);
+      setTargetYard(response.data.yard_model || 'service_yard');
+    } catch (error) {
+      console.error('Error fetching authority settings:', error);
+    }
+  };
+
+  // Save authority settings
+  const handleSaveAuthoritySettings = async () => {
+    setSavingSettings(true);
+    try {
+      const response = await axios.patch(`${API}/authority/settings`, {
+        yard_model: authoritySettings.yard_model,
+        price_categories: authoritySettings.price_categories,
+        yard_address: authoritySettings.yard_address,
+        yard_lat: authoritySettings.yard_lat,
+        yard_lng: authoritySettings.yard_lng
+      });
+      toast.success('Einstellungen gespeichert!');
+      fetchAuthoritySettings();
+    } catch (error) {
+      toast.error('Fehler beim Speichern');
+    } finally {
+      setSavingSettings(false);
+    }
+  };
+
+  // Add price category
+  const handleAddPriceCategory = () => {
+    if (!newPriceCategory.name.trim() || !newPriceCategory.base_price) {
+      toast.error('Name und Grundpreis sind erforderlich');
+      return;
+    }
+    const newCat = {
+      id: crypto.randomUUID(),
+      name: newPriceCategory.name.trim(),
+      base_price: parseFloat(newPriceCategory.base_price) || 0,
+      daily_rate: parseFloat(newPriceCategory.daily_rate) || 0,
+      is_active: true
+    };
+    setAuthoritySettings({
+      ...authoritySettings,
+      price_categories: [...(authoritySettings.price_categories || []), newCat]
+    });
+    setNewPriceCategory({ name: '', base_price: '', daily_rate: '' });
+  };
+
+  // Remove price category
+  const handleRemovePriceCategory = (categoryId) => {
+    setAuthoritySettings({
+      ...authoritySettings,
+      price_categories: (authoritySettings.price_categories || []).filter(cat => cat.id !== categoryId)
+    });
+  };
 
   const fetchJobs = async () => {
     try {
@@ -420,10 +498,17 @@ export const AuthorityDashboard = () => {
         job_type: jobType,
         sicherstellung_reason: jobType === 'sicherstellung' ? sicherstellungReason : null,
         vehicle_category: vehicleCategory || null,
-        // NEW: Weight category from towing service
-        weight_category_id: selectedWeightCategoryId || null,
-        weight_category_name: selectedWeightCategory?.name || null,
-        weight_category_surcharge: selectedWeightCategory?.surcharge || null,
+        // NEW: Target yard model
+        target_yard: targetYard,
+        // Authority pricing (when target_yard = "authority_yard")
+        authority_price_category_id: targetYard === 'authority_yard' ? selectedPriceCategoryId : null,
+        authority_price_category_name: targetYard === 'authority_yard' ? selectedPriceCategory?.name : null,
+        authority_base_price: targetYard === 'authority_yard' ? selectedPriceCategory?.base_price : null,
+        authority_daily_rate: targetYard === 'authority_yard' ? selectedPriceCategory?.daily_rate : null,
+        // Weight category from towing service (when target_yard = "service_yard")
+        weight_category_id: targetYard === 'service_yard' ? selectedWeightCategoryId : null,
+        weight_category_name: targetYard === 'service_yard' ? selectedWeightCategory?.name : null,
+        weight_category_surcharge: targetYard === 'service_yard' ? selectedWeightCategory?.surcharge : null,
         ordering_authority: jobType === 'sicherstellung' ? orderingAuthority : null,
         contact_attempts: jobType === 'sicherstellung' ? contactAttempts : null,
         contact_attempts_notes: jobType === 'sicherstellung' && contactAttempts ? contactAttemptsNotes : null,
@@ -450,6 +535,9 @@ export const AuthorityDashboard = () => {
       setJobType('towing');
       setSicherstellungReason('');
       setVehicleCategory('');
+      setTargetYard(authoritySettings.yard_model || 'service_yard');
+      setSelectedPriceCategoryId('');
+      setSelectedPriceCategory(null);
       setSelectedWeightCategoryId('');
       setSelectedWeightCategory(null);
       setServiceWeightCategories([]);
@@ -656,6 +744,10 @@ export const AuthorityDashboard = () => {
               <User className="h-4 w-4" />
               Profil
             </TabsTrigger>
+            <TabsTrigger data-testid="tab-settings" value="settings" className="flex items-center gap-2">
+              <Settings className="h-4 w-4" />
+              Einstellungen
+            </TabsTrigger>
           </TabsList>
 
           {/* New Job Tab */}
@@ -702,10 +794,112 @@ export const AuthorityDashboard = () => {
                       </div>
                     </div>
 
-                    {/* NEW: Gewichtskategorie vom Abschleppdienst */}
-                    {selectedServiceId && serviceWeightCategories.length > 0 && (
-                      <div className="space-y-2 p-4 bg-purple-50 border border-purple-200 rounded-lg">
-                        <Label className="text-purple-800">Fahrzeuggewicht (Zuschlag)</Label>
+                    {/* NEW: Zielort-Auswahl */}
+                    {selectedServiceId && (
+                      <div className="space-y-3 p-4 bg-slate-50 border border-slate-200 rounded-lg">
+                        <Label className="font-semibold">Zielort des Fahrzeugs</Label>
+                        <div className="grid grid-cols-2 gap-3">
+                          <div
+                            onClick={() => {
+                              setTargetYard('service_yard');
+                              setSelectedPriceCategoryId('');
+                              setSelectedPriceCategory(null);
+                            }}
+                            className={`p-3 border-2 rounded-lg cursor-pointer transition-all ${
+                              targetYard === 'service_yard' 
+                                ? 'border-blue-500 bg-blue-50' 
+                                : 'border-slate-200 hover:border-slate-300'
+                            }`}
+                          >
+                            <div className="flex items-center gap-2">
+                              <div className={`w-3 h-3 rounded-full ${
+                                targetYard === 'service_yard' ? 'bg-blue-500' : 'bg-slate-300'
+                              }`} />
+                              <span className="font-medium text-sm">Abschleppdienst-Hof</span>
+                            </div>
+                          </div>
+                          <div
+                            onClick={() => {
+                              setTargetYard('authority_yard');
+                              setSelectedWeightCategoryId('');
+                              setSelectedWeightCategory(null);
+                            }}
+                            className={`p-3 border-2 rounded-lg cursor-pointer transition-all ${
+                              targetYard === 'authority_yard' 
+                                ? 'border-green-500 bg-green-50' 
+                                : 'border-slate-200 hover:border-slate-300'
+                            }`}
+                          >
+                            <div className="flex items-center gap-2">
+                              <div className={`w-3 h-3 rounded-full ${
+                                targetYard === 'authority_yard' ? 'bg-green-500' : 'bg-slate-300'
+                              }`} />
+                              <span className="font-medium text-sm">Behörden-Hof</span>
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Preiskategorie bei Behörden-Hof */}
+                    {selectedServiceId && targetYard === 'authority_yard' && (authoritySettings.price_categories || []).length > 0 && (
+                      <div className="space-y-2 p-4 bg-green-50 border border-green-200 rounded-lg">
+                        <Label className="text-green-800">Fahrzeugkategorie & Verwahrgebühren</Label>
+                        <Select 
+                          value={selectedPriceCategoryId} 
+                          onValueChange={(value) => {
+                            setSelectedPriceCategoryId(value);
+                            const cat = authoritySettings.price_categories.find(c => c.id === value);
+                            setSelectedPriceCategory(cat || null);
+                          }}
+                        >
+                          <SelectTrigger>
+                            <SelectValue placeholder="Kategorie wählen..." />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {authoritySettings.price_categories.map(cat => (
+                              <SelectItem key={cat.id} value={cat.id}>
+                                <div className="flex items-center justify-between w-full gap-4">
+                                  <span>{cat.name}</span>
+                                  <span className="text-green-600 font-medium">{cat.base_price?.toFixed(2)} €</span>
+                                </div>
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                        {selectedPriceCategory && (
+                          <div className="bg-green-100 border border-green-300 rounded-lg p-3 mt-2">
+                            <div className="flex justify-between text-sm">
+                              <span className="text-green-700">Grundpreis (erste 24h):</span>
+                              <span className="font-bold text-green-800">{selectedPriceCategory.base_price?.toFixed(2)} €</span>
+                            </div>
+                            <div className="flex justify-between text-sm mt-1">
+                              <span className="text-green-700">Je weitere 24h:</span>
+                              <span className="font-medium text-green-800">+ {selectedPriceCategory.daily_rate?.toFixed(2)} €</span>
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    )}
+
+                    {/* Keine Preiskategorien bei Behörden-Hof */}
+                    {selectedServiceId && targetYard === 'authority_yard' && (authoritySettings.price_categories || []).length === 0 && (
+                      <div className="text-sm text-amber-600 bg-amber-50 p-3 rounded-lg border border-amber-200">
+                        ⚠️ Keine Preiskategorien angelegt. 
+                        <button 
+                          type="button"
+                          onClick={() => setActiveTab('settings')}
+                          className="ml-1 underline font-medium"
+                        >
+                          Jetzt in Einstellungen anlegen
+                        </button>
+                      </div>
+                    )}
+
+                    {/* Gewichtskategorie bei Abschleppdienst-Hof */}
+                    {selectedServiceId && targetYard === 'service_yard' && serviceWeightCategories.length > 0 && (
+                      <div className="space-y-2 p-4 bg-blue-50 border border-blue-200 rounded-lg">
+                        <Label className="text-blue-800">Fahrzeuggewicht (Zuschlag vom Abschleppdienst)</Label>
                         <Select 
                           value={selectedWeightCategoryId} 
                           onValueChange={(value) => {
@@ -735,13 +929,6 @@ export const AuthorityDashboard = () => {
                             <div className="flex justify-between text-sm">
                               <span className={selectedWeightCategory.surcharge > 0 ? 'text-orange-700' : 'text-green-700'}>
                                 {selectedWeightCategory.name}
-                                {selectedWeightCategory.min_weight != null && selectedWeightCategory.max_weight != null ? (
-                                  ` (${selectedWeightCategory.min_weight}t - ${selectedWeightCategory.max_weight}t)`
-                                ) : selectedWeightCategory.min_weight != null ? (
-                                  ` (ab ${selectedWeightCategory.min_weight}t)`
-                                ) : selectedWeightCategory.max_weight != null ? (
-                                  ` (bis ${selectedWeightCategory.max_weight}t)`
-                                ) : ''}
                               </span>
                               <span className={`font-bold ${selectedWeightCategory.surcharge > 0 ? 'text-orange-800' : 'text-green-800'}`}>
                                 {selectedWeightCategory.surcharge > 0 ? `+${selectedWeightCategory.surcharge.toFixed(2)} €` : 'Kein Zuschlag'}
@@ -1499,6 +1686,166 @@ export const AuthorityDashboard = () => {
           {/* Profile Tab */}
           <TabsContent value="profile">
             <TwoFactorSetup />
+          </TabsContent>
+
+          {/* Settings Tab */}
+          <TabsContent value="settings">
+            <div className="space-y-6">
+              {/* Hof-Modell */}
+              <Card>
+                <CardHeader>
+                  <CardTitle className="flex items-center gap-2">
+                    <Settings className="h-5 w-5" />
+                    Hof-Modell
+                  </CardTitle>
+                  <CardDescription>
+                    Wählen Sie, wohin abgeschleppte Fahrzeuge gebracht werden
+                  </CardDescription>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div
+                      onClick={() => setAuthoritySettings({...authoritySettings, yard_model: 'service_yard'})}
+                      className={`p-4 border-2 rounded-lg cursor-pointer transition-all ${
+                        authoritySettings.yard_model === 'service_yard' 
+                          ? 'border-blue-500 bg-blue-50' 
+                          : 'border-slate-200 hover:border-slate-300'
+                      }`}
+                    >
+                      <div className="flex items-center gap-2 mb-2">
+                        <div className={`w-4 h-4 rounded-full border-2 ${
+                          authoritySettings.yard_model === 'service_yard' 
+                            ? 'border-blue-500 bg-blue-500' 
+                            : 'border-slate-300'
+                        }`}>
+                          {authoritySettings.yard_model === 'service_yard' && (
+                            <CheckCircle className="w-3 h-3 text-white" />
+                          )}
+                        </div>
+                        <span className="font-semibold">Abschleppdienst-Hof</span>
+                      </div>
+                      <p className="text-sm text-slate-600">
+                        Fahrzeuge werden auf den Hof des Abschleppdienstes gebracht.
+                        Der Abschleppdienst kassiert vom Halter.
+                      </p>
+                    </div>
+
+                    <div
+                      onClick={() => setAuthoritySettings({...authoritySettings, yard_model: 'authority_yard'})}
+                      className={`p-4 border-2 rounded-lg cursor-pointer transition-all ${
+                        authoritySettings.yard_model === 'authority_yard' 
+                          ? 'border-green-500 bg-green-50' 
+                          : 'border-slate-200 hover:border-slate-300'
+                      }`}
+                    >
+                      <div className="flex items-center gap-2 mb-2">
+                        <div className={`w-4 h-4 rounded-full border-2 ${
+                          authoritySettings.yard_model === 'authority_yard' 
+                            ? 'border-green-500 bg-green-500' 
+                            : 'border-slate-300'
+                        }`}>
+                          {authoritySettings.yard_model === 'authority_yard' && (
+                            <CheckCircle className="w-3 h-3 text-white" />
+                          )}
+                        </div>
+                        <span className="font-semibold">Behörden-Hof</span>
+                      </div>
+                      <p className="text-sm text-slate-600">
+                        Fahrzeuge werden auf den Hof der Behörde gebracht.
+                        Die Behörde kassiert vom Halter, Abschleppdienst bekommt Rechnung.
+                      </p>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+
+              {/* Preiskategorien (nur bei Behörden-Hof) */}
+              {authoritySettings.yard_model === 'authority_yard' && (
+                <Card>
+                  <CardHeader>
+                    <CardTitle className="flex items-center gap-2">
+                      <Euro className="h-5 w-5" />
+                      Preiskategorien
+                    </CardTitle>
+                    <CardDescription>
+                      Definieren Sie Ihre Verwahrgebühren nach Fahrzeugtyp
+                    </CardDescription>
+                  </CardHeader>
+                  <CardContent className="space-y-4">
+                    {/* Bestehende Kategorien */}
+                    {(authoritySettings.price_categories || []).length > 0 && (
+                      <div className="space-y-2">
+                        {authoritySettings.price_categories.map((cat) => (
+                          <div key={cat.id} className="flex items-center justify-between p-3 bg-slate-50 rounded-lg border">
+                            <div>
+                              <span className="font-medium">{cat.name}</span>
+                            </div>
+                            <div className="flex items-center gap-4">
+                              <div className="text-sm">
+                                <span className="text-green-600 font-bold">{cat.base_price?.toFixed(2)} €</span>
+                                <span className="text-slate-500 ml-2">+ {cat.daily_rate?.toFixed(2)} €/Tag</span>
+                              </div>
+                              <button
+                                type="button"
+                                onClick={() => handleRemovePriceCategory(cat.id)}
+                                className="text-red-500 hover:text-red-700"
+                              >
+                                <X className="h-4 w-4" />
+                              </button>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+
+                    {/* Neue Kategorie hinzufügen */}
+                    <div className="p-4 bg-blue-50 rounded-lg border border-blue-200 space-y-3">
+                      <p className="text-sm font-medium text-blue-800">Neue Kategorie hinzufügen</p>
+                      <div className="grid grid-cols-3 gap-3">
+                        <Input
+                          placeholder="Name (z.B. PKW bis 4t)"
+                          value={newPriceCategory.name}
+                          onChange={(e) => setNewPriceCategory({...newPriceCategory, name: e.target.value})}
+                        />
+                        <Input
+                          type="number"
+                          step="0.01"
+                          placeholder="Grundpreis (€)"
+                          value={newPriceCategory.base_price}
+                          onChange={(e) => setNewPriceCategory({...newPriceCategory, base_price: e.target.value})}
+                        />
+                        <Input
+                          type="number"
+                          step="0.01"
+                          placeholder="Pro Tag (€)"
+                          value={newPriceCategory.daily_rate}
+                          onChange={(e) => setNewPriceCategory({...newPriceCategory, daily_rate: e.target.value})}
+                        />
+                      </div>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        onClick={handleAddPriceCategory}
+                        className="w-full"
+                      >
+                        <Plus className="h-4 w-4 mr-2" />
+                        Kategorie hinzufügen
+                      </Button>
+                    </div>
+                  </CardContent>
+                </Card>
+              )}
+
+              {/* Speichern-Button */}
+              <Button
+                onClick={handleSaveAuthoritySettings}
+                disabled={savingSettings}
+                className="w-full md:w-auto bg-slate-900 hover:bg-slate-800"
+              >
+                {savingSettings ? 'Speichern...' : 'Einstellungen speichern'}
+              </Button>
+            </div>
           </TabsContent>
 
         </Tabs>

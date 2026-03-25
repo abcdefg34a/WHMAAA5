@@ -713,7 +713,7 @@ class UserResponse(BaseModel):
     is_main_authority: Optional[bool] = None
     # 2FA
     totp_enabled: Optional[bool] = False
-    # NEW: Extended pricing settings
+    # NEW: Extended pricing settings (for towing services)
     time_based_enabled: Optional[bool] = None
     first_half_hour: Optional[float] = None
     additional_half_hour: Optional[float] = None
@@ -722,8 +722,11 @@ class UserResponse(BaseModel):
     night_surcharge: Optional[float] = None
     weekend_surcharge: Optional[float] = None
     heavy_vehicle_surcharge: Optional[float] = None
-    # NEW: Flexible weight categories
+    # NEW: Flexible weight categories (for towing services)
     weight_categories: Optional[List[dict]] = None
+    # NEW: Authority yard model and pricing (for authorities)
+    yard_model: Optional[str] = None  # "authority_yard" or "service_yard"
+    price_categories: Optional[List[dict]] = None  # Authority's own price categories
 
 class TokenResponse(BaseModel):
     access_token: str
@@ -817,7 +820,14 @@ class JobCreate(BaseModel):
     sicherstellung_reason: Optional[str] = None
     vehicle_category: Optional[str] = None  # "under_3_5t" or "over_3_5t"
     vehicle_category_id: Optional[str] = None  # Reference to vehicle category for dynamic pricing
-    # NEW: Weight category for flexible pricing (from towing service)
+    # NEW: Target yard and pricing model
+    target_yard: Optional[str] = None  # "authority_yard" or "service_yard"
+    # Authority price category (when target_yard = "authority_yard")
+    authority_price_category_id: Optional[str] = None
+    authority_price_category_name: Optional[str] = None
+    authority_base_price: Optional[float] = None
+    authority_daily_rate: Optional[float] = None
+    # NEW: Weight category for flexible pricing (from towing service, when target_yard = "service_yard")
     weight_category_id: Optional[str] = None
     weight_category_name: Optional[str] = None
     weight_category_surcharge: Optional[float] = None
@@ -892,10 +902,17 @@ class JobResponse(BaseModel):
     sicherstellung_reason: Optional[str] = None
     vehicle_category: Optional[str] = None
     vehicle_category_id: Optional[str] = None  # Referenz zur Preiskategorie
-    # NEW: Weight category for flexible pricing
-    weight_category_id: Optional[str] = None  # Referenz zur Gewichtskategorie des Abschleppdienstes
-    weight_category_name: Optional[str] = None  # Name der Gewichtskategorie (für Anzeige/PDF)
-    weight_category_surcharge: Optional[float] = None  # Zuschlag der Gewichtskategorie
+    # NEW: Target yard model (authority_yard or service_yard)
+    target_yard: Optional[str] = None
+    # Authority pricing (when target_yard = "authority_yard")
+    authority_price_category_id: Optional[str] = None
+    authority_price_category_name: Optional[str] = None
+    authority_base_price: Optional[float] = None
+    authority_daily_rate: Optional[float] = None
+    # NEW: Weight category for flexible pricing (service_yard)
+    weight_category_id: Optional[str] = None
+    weight_category_name: Optional[str] = None
+    weight_category_surcharge: Optional[float] = None
     ordering_authority: Optional[str] = None
     contact_attempts: Optional[bool] = None
     contact_attempts_notes: Optional[str] = None
@@ -905,6 +922,9 @@ class JobResponse(BaseModel):
     calculated_costs: Optional[dict] = None
     # NEW: Track if created by towing service
     created_by_service: Optional[bool] = False
+    # NEW: Service invoice (when authority releases from their yard)
+    service_invoice_amount: Optional[float] = None
+    service_invoice_created_at: Optional[str] = None
     # DSGVO anonymization flags
     anonymized: Optional[bool] = None
     personal_data_anonymized: Optional[bool] = None
@@ -2166,6 +2186,89 @@ async def calculate_job_costs(job_id: str, user: dict = Depends(get_current_user
     
     return {"total": round(total, 2), "breakdown": breakdown, "pricing_source": "service"}
 
+# ==================== AUTHORITY SETTINGS & PRICING ====================
+
+class AuthorityPriceCategory(BaseModel):
+    id: Optional[str] = None
+    name: str  # z.B. "PKW bis 4t", "LKW 4-7,5t"
+    base_price: float  # Grundpreis (erste 24h)
+    daily_rate: float  # Preis pro weitere 24h
+    is_active: bool = True
+
+class AuthoritySettingsUpdate(BaseModel):
+    yard_model: Optional[str] = None  # "authority_yard" or "service_yard"
+    price_categories: Optional[List[AuthorityPriceCategory]] = None
+    yard_address: Optional[str] = None
+    yard_lat: Optional[float] = None
+    yard_lng: Optional[float] = None
+
+@api_router.patch("/authority/settings")
+async def update_authority_settings(data: AuthoritySettingsUpdate, user: dict = Depends(get_current_user)):
+    """Update authority settings (yard model, pricing, etc.)"""
+    if user["role"] != UserRole.AUTHORITY:
+        raise HTTPException(status_code=403, detail="Nur Behörden können Einstellungen ändern")
+    
+    # Get the main authority (either self or parent)
+    authority_id = get_authority_id(user)
+    
+    update_data = {}
+    
+    if data.yard_model is not None:
+        if data.yard_model not in ["authority_yard", "service_yard"]:
+            raise HTTPException(status_code=400, detail="Ungültiges Hof-Modell")
+        update_data["yard_model"] = data.yard_model
+    
+    if data.price_categories is not None:
+        # Convert to dict list and generate IDs if missing
+        price_cats = []
+        for cat in data.price_categories:
+            cat_dict = cat.model_dump() if hasattr(cat, 'model_dump') else cat.dict()
+            if not cat_dict.get("id"):
+                cat_dict["id"] = str(uuid.uuid4())
+            price_cats.append(cat_dict)
+        update_data["price_categories"] = price_cats
+    
+    if data.yard_address is not None:
+        update_data["yard_address"] = data.yard_address
+    if data.yard_lat is not None:
+        update_data["yard_lat"] = data.yard_lat
+    if data.yard_lng is not None:
+        update_data["yard_lng"] = data.yard_lng
+    
+    if update_data:
+        await db.users.update_one({"id": authority_id}, {"$set": update_data})
+        # Also update employees to inherit settings
+        if data.yard_model is not None:
+            await db.users.update_many(
+                {"parent_authority_id": authority_id},
+                {"$set": {"yard_model": data.yard_model}}
+            )
+    
+    updated_user = await db.users.find_one({"id": user["id"]}, {"_id": 0, "password": 0})
+    
+    await log_audit("AUTHORITY_SETTINGS_UPDATED", user["id"], user["name"], {
+        "settings": list(update_data.keys())
+    })
+    
+    return UserResponse(**updated_user)
+
+@api_router.get("/authority/settings")
+async def get_authority_settings(user: dict = Depends(get_current_user)):
+    """Get authority settings including pricing categories"""
+    if user["role"] != UserRole.AUTHORITY:
+        raise HTTPException(status_code=403, detail="Nur Behörden haben Zugriff")
+    
+    authority_id = get_authority_id(user)
+    authority = await db.users.find_one({"id": authority_id}, {"_id": 0, "password": 0})
+    
+    return {
+        "yard_model": authority.get("yard_model", "service_yard"),  # Default: Abschleppdienst-Hof
+        "price_categories": authority.get("price_categories", []),
+        "yard_address": authority.get("yard_address"),
+        "yard_lat": authority.get("yard_lat"),
+        "yard_lng": authority.get("yard_lng")
+    }
+
 # ==================== AUTHORITY EMPLOYEE MANAGEMENT ====================
 
 def get_authority_id(user: dict) -> str:
@@ -2607,7 +2710,14 @@ async def create_job(
         "calculated_costs": None,
         # NEW: Vehicle category for dynamic pricing
         "vehicle_category_id": data.vehicle_category_id,
-        # NEW: Weight category for flexible surcharges
+        # NEW: Target yard model
+        "target_yard": data.target_yard or "service_yard",
+        # Authority pricing (when target_yard = "authority_yard")
+        "authority_price_category_id": data.authority_price_category_id,
+        "authority_price_category_name": data.authority_price_category_name,
+        "authority_base_price": data.authority_base_price,
+        "authority_daily_rate": data.authority_daily_rate,
+        # NEW: Weight category for flexible surcharges (when target_yard = "service_yard")
         "weight_category_id": data.weight_category_id,
         "weight_category_name": data.weight_category_name,
         "weight_category_surcharge": data.weight_category_surcharge,
