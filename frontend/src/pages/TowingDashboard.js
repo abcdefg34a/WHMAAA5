@@ -966,6 +966,19 @@ export const TowingDashboard = () => {
     );
   };
 
+  // NEW: Helper to render yard type badge
+  const getYardBadge = (job) => {
+    if (job.target_yard === 'authority_yard') {
+      return (
+        <span className="px-2 py-0.5 text-xs font-medium bg-green-100 text-green-800 rounded-full flex items-center gap-1">
+          <Building2 className="h-3 w-3" />
+          Behörden-Hof
+        </span>
+      );
+    }
+    return null;
+  };
+
   const filterJobs = (status) => {
     if (status === 'incoming') {
       return jobs.filter(j => ['assigned', 'on_site', 'towed'].includes(j.status));
@@ -1449,7 +1462,10 @@ export const TowingDashboard = () => {
                       <CardContent className="p-4 pr-10">
                         <div className="flex justify-between items-start mb-3">
                           <div>
-                            <p className="job-license-plate">{job.license_plate}</p>
+                            <div className="flex items-center gap-2 flex-wrap">
+                              <p className="job-license-plate">{job.license_plate}</p>
+                              {getYardBadge(job)}
+                            </div>
                             <p className="text-xs text-slate-500">{job.job_number}</p>
                           </div>
                           {getStatusBadge(job.status, job.is_empty_trip)}
@@ -1463,6 +1479,13 @@ export const TowingDashboard = () => {
                             <Clock className="h-4 w-4" />
                             <span>{new Date(job.created_at).toLocaleString('de-DE')}</span>
                           </div>
+                          {/* Show authority yard destination */}
+                          {job.target_yard === 'authority_yard' && job.authority_yard_address && (
+                            <div className="flex items-center gap-2 text-green-700 bg-green-50 p-1 rounded">
+                              <Building2 className="h-4 w-4 flex-shrink-0" />
+                              <span className="truncate text-xs">Ziel: {job.authority_yard_address}</span>
+                            </div>
+                          )}
                         </div>
                         <p className="mt-2 text-sm font-medium text-orange-600">
                           {job.tow_reason}
@@ -1541,14 +1564,20 @@ export const TowingDashboard = () => {
                       <CardContent className="p-4 pr-10">
                         <div className="flex justify-between items-start mb-3">
                           <div>
-                            <p className="job-license-plate">{job.license_plate}</p>
+                            <div className="flex items-center gap-2 flex-wrap">
+                              <p className="job-license-plate">{job.license_plate}</p>
+                              {getYardBadge(job)}
+                            </div>
                             <p className="text-xs text-slate-500">{job.job_number}</p>
                           </div>
                           {getStatusBadge(job.status, job.is_empty_trip)}
                         </div>
                         <div className="space-y-2 text-sm text-slate-600">
-                          <p>Im Hof seit: {job.in_yard_at ? new Date(job.in_yard_at).toLocaleString('de-DE') : '-'}</p>
+                          <p>Im Hof seit: {job.in_yard_at || job.delivered_to_authority_at ? new Date(job.delivered_to_authority_at || job.in_yard_at).toLocaleString('de-DE') : '-'}</p>
                           {job.vin && <p>FIN: {job.vin}</p>}
+                          {job.target_yard === 'authority_yard' && (
+                            <p className="text-green-700 text-xs">✓ An Behörde übergeben</p>
+                          )}
                         </div>
                       </CardContent>
                     </Card>
@@ -1572,13 +1601,16 @@ export const TowingDashboard = () => {
                     <CardContent className="p-4">
                       <div className="flex flex-wrap justify-between items-start gap-4">
                         <div>
-                          <p className="job-license-plate">{job.license_plate}</p>
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <p className="job-license-plate">{job.license_plate}</p>
+                            {getYardBadge(job)}
+                          </div>
                           <p className="text-xs text-slate-500">{job.job_number}</p>
                           <p className="text-sm text-slate-600 mt-1">
                             Abgeholt von: {job.owner_first_name} {job.owner_last_name}
                           </p>
                           <p className="text-sm text-slate-600">
-                            Zahlung: {job.payment_amount?.toFixed(2)} € ({job.payment_method === 'cash' ? 'Bar' : 'Karte'})
+                            Zahlung: {job.payment_amount?.toFixed(2)} € ({job.payment_method === 'cash' ? 'Bar' : job.payment_method === 'offen' ? 'Offen' : 'Karte'})
                           </p>
                         </div>
                         <Button
