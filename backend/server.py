@@ -742,6 +742,9 @@ class UserResponse(BaseModel):
     price_categories: Optional[List[dict]] = None  # Authority's own price categories
     # NEW: Authority sub-role (admin, field, yard)
     sub_role: Optional[str] = None
+    # NEW: Towing service employee fields
+    is_main_service: Optional[bool] = None
+    parent_service_id: Optional[str] = None
 
 class TokenResponse(BaseModel):
     access_token: str
@@ -2561,6 +2564,154 @@ async def update_employee_password(employee_id: str, data: AdminUpdatePasswordRe
         "employee_name": employee["name"]
     })
     
+    return {"message": f"Passwort für {employee['name']} wurde aktualisiert"}
+
+# ==================== TOWING SERVICE EMPLOYEE MANAGEMENT ====================
+
+class ServiceEmployeeRequest(BaseModel):
+    email: EmailStr
+    password: str
+    name: str
+
+class ServiceEmployeeResponse(BaseModel):
+    id: str
+    email: str
+    name: str
+    is_blocked: Optional[bool] = None
+    created_at: str
+
+@api_router.post("/service/employees", response_model=ServiceEmployeeResponse)
+async def create_service_employee(data: ServiceEmployeeRequest, user: dict = Depends(get_current_user)):
+    """Create a new employee for the towing service"""
+    if user["role"] != UserRole.TOWING_SERVICE:
+        raise HTTPException(status_code=403, detail="Nur Abschleppdienste können Mitarbeiter erstellen")
+    
+    # Only main service account can create employees
+    if not user.get("is_main_service", True) and user.get("parent_service_id"):
+        raise HTTPException(status_code=403, detail="Nur der Haupt-Account kann Mitarbeiter erstellen")
+    
+    # Check if email exists
+    existing = await db.users.find_one({"email": data.email})
+    if existing:
+        raise HTTPException(status_code=400, detail="E-Mail bereits registriert")
+    
+    employee_id = str(uuid.uuid4())
+    now = datetime.now(timezone.utc).isoformat()
+    
+    # Get parent service ID (in case this is also an employee creating - shouldn't happen but safety)
+    parent_id = user.get("parent_service_id", user["id"])
+    
+    employee_doc = {
+        "id": employee_id,
+        "email": data.email,
+        "password": hash_password(data.password),
+        "role": UserRole.TOWING_SERVICE,
+        "name": data.name,
+        "company_name": user.get("company_name"),
+        "created_at": now,
+        "is_main_service": False,
+        "parent_service_id": parent_id,
+        "approved": True,  # Auto-approved since parent is approved
+        # Inherit settings from parent
+        "linked_authorities": user.get("linked_authorities", []),
+        "tow_cost": user.get("tow_cost"),
+        "daily_cost": user.get("daily_cost"),
+        "yard_address": user.get("yard_address"),
+        "yard_lat": user.get("yard_lat"),
+        "yard_lng": user.get("yard_lng"),
+        "phone": user.get("phone"),
+        "service_code": user.get("service_code"),  # Same service code
+    }
+    
+    await db.users.insert_one(employee_doc)
+    
+    await log_audit("SERVICE_EMPLOYEE_CREATED", user["id"], user.get("company_name", user.get("name")), {
+        "employee_id": employee_id,
+        "employee_email": data.email,
+        "employee_name": data.name
+    })
+    
+    return ServiceEmployeeResponse(
+        id=employee_id,
+        email=data.email,
+        name=data.name,
+        is_blocked=False,
+        created_at=now
+    )
+
+@api_router.get("/service/employees", response_model=List[ServiceEmployeeResponse])
+async def get_service_employees(user: dict = Depends(get_current_user)):
+    """Get all employees for a towing service"""
+    if user["role"] != UserRole.TOWING_SERVICE:
+        raise HTTPException(status_code=403, detail="Nur für Abschleppdienste")
+    
+    parent_id = user.get("parent_service_id", user["id"])
+    
+    employees = await db.users.find(
+        {"parent_service_id": parent_id},
+        {"_id": 0, "password": 0}
+    ).to_list(100)
+    
+    return [ServiceEmployeeResponse(
+        id=e["id"],
+        email=e["email"],
+        name=e["name"],
+        is_blocked=e.get("is_blocked", False),
+        created_at=e["created_at"]
+    ) for e in employees]
+
+@api_router.patch("/service/employees/{employee_id}/block")
+async def block_service_employee(employee_id: str, blocked: bool, user: dict = Depends(get_current_user)):
+    """Block or unblock a service employee"""
+    if user["role"] != UserRole.TOWING_SERVICE:
+        raise HTTPException(status_code=403, detail="Nur für Abschleppdienste")
+    
+    if user.get("parent_service_id"):
+        raise HTTPException(status_code=403, detail="Nur der Haupt-Account kann Mitarbeiter verwalten")
+    
+    employee = await db.users.find_one({"id": employee_id, "parent_service_id": user["id"]})
+    if not employee:
+        raise HTTPException(status_code=404, detail="Mitarbeiter nicht gefunden")
+    
+    await db.users.update_one({"id": employee_id}, {"$set": {"is_blocked": blocked}})
+    return {"message": f"Mitarbeiter {'gesperrt' if blocked else 'entsperrt'}"}
+
+@api_router.delete("/service/employees/{employee_id}")
+async def delete_service_employee(employee_id: str, user: dict = Depends(get_current_user)):
+    """Delete a service employee"""
+    if user["role"] != UserRole.TOWING_SERVICE:
+        raise HTTPException(status_code=403, detail="Nur für Abschleppdienste")
+    
+    if user.get("parent_service_id"):
+        raise HTTPException(status_code=403, detail="Nur der Haupt-Account kann Mitarbeiter verwalten")
+    
+    employee = await db.users.find_one({"id": employee_id, "parent_service_id": user["id"]})
+    if not employee:
+        raise HTTPException(status_code=404, detail="Mitarbeiter nicht gefunden")
+    
+    await db.users.delete_one({"id": employee_id})
+    
+    await log_audit("SERVICE_EMPLOYEE_DELETED", user["id"], user.get("company_name"), {
+        "employee_id": employee_id,
+        "employee_name": employee["name"]
+    })
+    
+    return {"message": "Mitarbeiter gelöscht"}
+
+@api_router.patch("/service/employees/{employee_id}/password")
+async def change_service_employee_password(employee_id: str, new_password: str, user: dict = Depends(get_current_user)):
+    """Change password for a service employee"""
+    if user["role"] != UserRole.TOWING_SERVICE:
+        raise HTTPException(status_code=403, detail="Nur für Abschleppdienste")
+    
+    if user.get("parent_service_id"):
+        raise HTTPException(status_code=403, detail="Nur der Haupt-Account kann Passwörter ändern")
+    
+    employee = await db.users.find_one({"id": employee_id, "parent_service_id": user["id"]})
+    if not employee:
+        raise HTTPException(status_code=404, detail="Mitarbeiter nicht gefunden")
+    
+    await db.users.update_one({"id": employee_id}, {"$set": {"password": hash_password(new_password)}})
     return {"message": f"Passwort für {employee['name']} wurde aktualisiert"}
 
 # ==================== ADMIN APPROVAL ROUTES ====================

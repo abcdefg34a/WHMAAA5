@@ -7,7 +7,7 @@ import {
   Car, MapPin, Camera, LogOut, FileText, Copy, CheckCircle,
   Clock, Truck, Phone, Building2, Download, X, Settings, Euro,
   Filter, CheckSquare, Square, ChevronDown, Calendar, Plus, Search,
-  Edit, Save, Undo2, User, Bell, BellOff, Volume2, VolumeX, Menu
+  Edit, Save, Undo2, User, Bell, BellOff, Volume2, VolumeX, Menu, Users, Lock, Unlock, Trash2, Key
 } from 'lucide-react';
 import { Button } from '../components/ui/button';
 import { Input } from '../components/ui/input';
@@ -125,6 +125,17 @@ export const TowingDashboard = () => {
   
   // NEW: Search in "Im Hof" tab
   const [inYardSearch, setInYardSearch] = useState('');
+
+  // NEW: Employee management state
+  const [employees, setEmployees] = useState([]);
+  const [employeeDialogOpen, setEmployeeDialogOpen] = useState(false);
+  const [newEmployeeName, setNewEmployeeName] = useState('');
+  const [newEmployeeEmail, setNewEmployeeEmail] = useState('');
+  const [newEmployeePassword, setNewEmployeePassword] = useState('');
+  const [creatingEmployee, setCreatingEmployee] = useState(false);
+
+  // Check if main account
+  const isMainAccount = !user?.parent_service_id;
 
   // Pagination state
   const [currentPage, setCurrentPage] = useState(1);
@@ -262,6 +273,69 @@ export const TowingDashboard = () => {
   useEffect(() => {
     setSelectedJobIds([]);
   }, [activeTab]);
+
+  // Fetch employees
+  const fetchEmployees = useCallback(async () => {
+    if (!isMainAccount) return;
+    try {
+      const response = await axios.get(`${API}/service/employees`);
+      setEmployees(response.data);
+    } catch (error) {
+      console.error('Error fetching employees:', error);
+    }
+  }, [isMainAccount]);
+
+  useEffect(() => {
+    fetchEmployees();
+  }, [fetchEmployees]);
+
+  // Employee management handlers
+  const handleCreateEmployee = async (e) => {
+    e.preventDefault();
+    if (!newEmployeeName || !newEmployeeEmail || !newEmployeePassword) {
+      toast.error('Bitte füllen Sie alle Felder aus');
+      return;
+    }
+    setCreatingEmployee(true);
+    try {
+      await axios.post(`${API}/service/employees`, {
+        name: newEmployeeName,
+        email: newEmployeeEmail,
+        password: newEmployeePassword
+      });
+      toast.success('Mitarbeiter erfolgreich angelegt');
+      setEmployeeDialogOpen(false);
+      setNewEmployeeName('');
+      setNewEmployeeEmail('');
+      setNewEmployeePassword('');
+      fetchEmployees();
+    } catch (error) {
+      toast.error(error.response?.data?.detail || 'Fehler beim Anlegen');
+    } finally {
+      setCreatingEmployee(false);
+    }
+  };
+
+  const handleBlockEmployee = async (employeeId, blocked) => {
+    try {
+      await axios.patch(`${API}/service/employees/${employeeId}/block?blocked=${blocked}`);
+      toast.success(blocked ? 'Mitarbeiter gesperrt' : 'Mitarbeiter entsperrt');
+      fetchEmployees();
+    } catch (error) {
+      toast.error('Fehler beim Sperren/Entsperren');
+    }
+  };
+
+  const handleDeleteEmployee = async (employeeId) => {
+    if (!window.confirm('Mitarbeiter wirklich löschen?')) return;
+    try {
+      await axios.delete(`${API}/service/employees/${employeeId}`);
+      toast.success('Mitarbeiter gelöscht');
+      fetchEmployees();
+    } catch (error) {
+      toast.error('Fehler beim Löschen');
+    }
+  };
 
   const fetchJobs = useCallback(async () => {
     try {
@@ -1441,6 +1515,13 @@ export const TowingDashboard = () => {
               <CheckCircle className="h-4 w-4" />
               Abgeholt ({jobCounts.released})
             </TabsTrigger>
+            {/* Mitarbeiter Tab - nur für Hauptaccount */}
+            {isMainAccount && (
+              <TabsTrigger data-testid="tab-employees" value="employees" className="flex items-center gap-2">
+                <Users className="h-4 w-4" />
+                Mitarbeiter ({employees.length})
+              </TabsTrigger>
+            )}
           </TabsList>
 
           {/* Incoming Jobs */}
@@ -1687,6 +1768,80 @@ export const TowingDashboard = () => {
             )}
           </TabsContent>
 
+          {/* Employees Tab - nur für Hauptaccount */}
+          {isMainAccount && (
+            <TabsContent value="employees">
+              <Card>
+                <CardHeader>
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <CardTitle className="flex items-center gap-2">
+                        <Users className="h-5 w-5" />
+                        Mitarbeiter verwalten
+                      </CardTitle>
+                      <p className="text-sm text-slate-500 mt-1">
+                        Erstellen Sie Mitarbeiter-Accounts für Ihr Team
+                      </p>
+                    </div>
+                    <Button onClick={() => setEmployeeDialogOpen(true)}>
+                      <Plus className="h-4 w-4 mr-2" />
+                      Neuer Mitarbeiter
+                    </Button>
+                  </div>
+                </CardHeader>
+                <CardContent>
+                  {employees.length === 0 ? (
+                    <div className="text-center py-8 text-slate-500">
+                      <Users className="h-12 w-12 mx-auto mb-4 opacity-30" />
+                      <p>Noch keine Mitarbeiter angelegt</p>
+                    </div>
+                  ) : (
+                    <div className="space-y-3">
+                      {employees.map(emp => (
+                        <div
+                          key={emp.id}
+                          className={`flex items-center justify-between p-4 border rounded-lg ${emp.is_blocked ? 'bg-red-50 border-red-200' : 'bg-white'}`}
+                        >
+                          <div className="flex items-center gap-4">
+                            <div className={`w-10 h-10 rounded-full flex items-center justify-center ${emp.is_blocked ? 'bg-red-200' : 'bg-blue-100'}`}>
+                              <User className={`h-5 w-5 ${emp.is_blocked ? 'text-red-600' : 'text-blue-600'}`} />
+                            </div>
+                            <div>
+                              <p className="font-medium">{emp.name}</p>
+                              <p className="text-sm text-slate-500">{emp.email}</p>
+                            </div>
+                            {emp.is_blocked && (
+                              <span className="px-2 py-1 bg-red-100 text-red-700 text-xs rounded">Gesperrt</span>
+                            )}
+                          </div>
+                          <div className="flex items-center gap-2">
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={() => handleBlockEmployee(emp.id, !emp.is_blocked)}
+                              title={emp.is_blocked ? 'Entsperren' : 'Sperren'}
+                            >
+                              {emp.is_blocked ? <Unlock className="h-4 w-4" /> : <Lock className="h-4 w-4" />}
+                            </Button>
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={() => handleDeleteEmployee(emp.id)}
+                              className="text-red-600 hover:text-red-700"
+                              title="Löschen"
+                            >
+                              <Trash2 className="h-4 w-4" />
+                            </Button>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
+            </TabsContent>
+          )}
+
           {/* Profile Tab */}
           <TabsContent value="profile">
             <TwoFactorSetup />
@@ -1704,6 +1859,66 @@ export const TowingDashboard = () => {
           />
         )}
       </main>
+
+      {/* Employee Dialog */}
+      <Dialog open={employeeDialogOpen} onOpenChange={setEmployeeDialogOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Users className="h-5 w-5" />
+              Neuen Mitarbeiter anlegen
+            </DialogTitle>
+            <DialogDescription>
+              Mitarbeiter erben automatisch alle Verknüpfungen und Preise
+            </DialogDescription>
+          </DialogHeader>
+          <form onSubmit={handleCreateEmployee} className="space-y-4">
+            <div className="space-y-2">
+              <Label htmlFor="empName">Name *</Label>
+              <Input
+                id="empName"
+                value={newEmployeeName}
+                onChange={(e) => setNewEmployeeName(e.target.value)}
+                placeholder="Max Mustermann"
+                required
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="empEmail">E-Mail *</Label>
+              <Input
+                id="empEmail"
+                type="email"
+                value={newEmployeeEmail}
+                onChange={(e) => setNewEmployeeEmail(e.target.value)}
+                placeholder="mitarbeiter@firma.de"
+                required
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="empPassword">Passwort *</Label>
+              <Input
+                id="empPassword"
+                type="password"
+                value={newEmployeePassword}
+                onChange={(e) => setNewEmployeePassword(e.target.value)}
+                placeholder="Mindestens 6 Zeichen"
+                required
+              />
+            </div>
+            <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 text-sm text-blue-800">
+              <p className="font-medium mb-1">ℹ️ Mitarbeiter-Berechtigungen:</p>
+              <ul className="list-disc list-inside text-xs space-y-1">
+                <li>Kann alle Aufträge sehen und bearbeiten</li>
+                <li>Übernimmt Ihre Preise und Verknüpfungen</li>
+                <li>Kann keine Mitarbeiter oder Einstellungen verwalten</li>
+              </ul>
+            </div>
+            <Button type="submit" className="w-full" disabled={creatingEmployee}>
+              {creatingEmployee ? 'Wird angelegt...' : 'Mitarbeiter anlegen'}
+            </Button>
+          </form>
+        </DialogContent>
+      </Dialog>
 
       {/* Settings Dialog (Costs) */}
       <Dialog open={settingsDialogOpen} onOpenChange={setSettingsDialogOpen}>
