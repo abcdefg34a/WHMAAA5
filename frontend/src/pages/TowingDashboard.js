@@ -121,6 +121,9 @@ export const TowingDashboard = () => {
   const [filterStatus, setFilterStatus] = useState('all');
   const [filterDateFrom, setFilterDateFrom] = useState('');
   const [filterDateTo, setFilterDateTo] = useState('');
+  
+  // NEW: Search in "Im Hof" tab
+  const [inYardSearch, setInYardSearch] = useState('');
 
   // NEW: Invoices state
   const [invoices, setInvoices] = useState([]);
@@ -979,18 +982,36 @@ export const TowingDashboard = () => {
     return null;
   };
 
-  const filterJobs = (status) => {
+  const filterJobs = (status, searchTerm = '') => {
+    let filtered = [];
     if (status === 'incoming') {
-      return jobs.filter(j => ['assigned', 'on_site', 'towed'].includes(j.status));
-    }
-    if (status === 'in_yard') {
+      filtered = jobs.filter(j => ['assigned', 'on_site', 'towed'].includes(j.status));
+    } else if (status === 'in_yard') {
       // Include both in_yard and delivered_to_authority (completed authority yard jobs)
-      return jobs.filter(j => j.status === 'in_yard' || j.status === 'delivered_to_authority');
+      filtered = jobs.filter(j => j.status === 'in_yard' || j.status === 'delivered_to_authority');
+    } else if (status === 'released') {
+      filtered = jobs.filter(j => j.status === 'released');
+    } else {
+      filtered = jobs;
     }
-    if (status === 'released') {
-      return jobs.filter(j => j.status === 'released');
+    
+    // Apply search filter if provided
+    if (searchTerm && searchTerm.trim()) {
+      const search = searchTerm.toUpperCase().trim();
+      const searchNormalized = search.replace(/[\s-]/g, ''); // Remove spaces and dashes
+      filtered = filtered.filter(j => {
+        const plate = (j.license_plate || '').toUpperCase();
+        const plateNormalized = plate.replace(/[\s-]/g, '');
+        const vin = (j.vin || '').toUpperCase();
+        const jobNumber = (j.job_number || '').toUpperCase();
+        return plate.includes(search) || 
+               plateNormalized.includes(searchNormalized) ||
+               vin.includes(search) || 
+               jobNumber.includes(search);
+      });
     }
-    return jobs;
+    
+    return filtered;
   };
 
   const downloadPDF = async (jobId, jobNumber) => {
@@ -1521,10 +1542,37 @@ export const TowingDashboard = () => {
 
           {/* In Yard */}
           <TabsContent value="in_yard">
-            {filterJobs('in_yard').length === 0 ? (
+            {/* Search Bar for In Yard */}
+            <div className="mb-4">
+              <div className="relative max-w-md">
+                <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-slate-400" />
+                <Input
+                  type="text"
+                  placeholder="Kennzeichen, FIN oder Auftragsnummer suchen..."
+                  value={inYardSearch}
+                  onChange={(e) => setInYardSearch(e.target.value)}
+                  className="pl-10"
+                />
+                {inYardSearch && (
+                  <button
+                    onClick={() => setInYardSearch('')}
+                    className="absolute right-3 top-1/2 transform -translate-y-1/2 text-slate-400 hover:text-slate-600"
+                  >
+                    ✕
+                  </button>
+                )}
+              </div>
+              {inYardSearch && (
+                <p className="text-sm text-slate-500 mt-2">
+                  {filterJobs('in_yard', inYardSearch).length} von {filterJobs('in_yard').length} Fahrzeugen gefunden
+                </p>
+              )}
+            </div>
+            
+            {filterJobs('in_yard', inYardSearch).length === 0 ? (
               <div className="empty-state">
                 <Building2 className="empty-state-icon" />
-                <p>Keine Fahrzeuge im Hof</p>
+                <p>{inYardSearch ? 'Keine Fahrzeuge gefunden' : 'Keine Fahrzeuge im Hof'}</p>
               </div>
             ) : (
               <>
@@ -1533,10 +1581,10 @@ export const TowingDashboard = () => {
                   <Button
                     variant="ghost"
                     size="sm"
-                    onClick={() => selectAllInTab(filterJobs('in_yard'))}
+                    onClick={() => selectAllInTab(filterJobs('in_yard', inYardSearch))}
                     className="text-slate-600"
                   >
-                    {filterJobs('in_yard').every(j => selectedJobIds.includes(j.id)) ? (
+                    {filterJobs('in_yard', inYardSearch).every(j => selectedJobIds.includes(j.id)) ? (
                       <><CheckSquare className="h-4 w-4 mr-2" /> Alle abwählen</>
                     ) : (
                       <><Square className="h-4 w-4 mr-2" /> Alle auswählen</>
@@ -1544,7 +1592,7 @@ export const TowingDashboard = () => {
                   </Button>
                 </div>
                 <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-4">
-                  {filterJobs('in_yard').map(job => (
+                  {filterJobs('in_yard', inYardSearch).map(job => (
                     <Card
                       key={job.id}
                       className={`cursor-pointer hover:shadow-lg transition-shadow relative ${selectedJobIds.includes(job.id) ? 'ring-2 ring-blue-500 bg-blue-50' : ''
