@@ -470,10 +470,82 @@ metadata:
         agent: "testing"
         comment: "Invoice mark-as-paid functionality working correctly. PATCH /api/services/invoices/{invoice_id}/mark-paid successfully marks invoices as paid and prevents duplicate marking with proper 400 error response."
 
+  - task: "Authority Employee System - Create Employees"
+    implemented: true
+    working: true
+    file: "server.py"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+      - working: true
+        agent: "testing"
+        comment: "Authority employee system working perfectly. POST /api/authority/employees successfully creates employees with sub_role (field/yard). Created field and yard employees, both returned correct sub_role values. All employees properly inherit authority settings."
+
+  - task: "Authority Employee System - List Employees"
+    implemented: true
+    working: true
+    file: "server.py"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+      - working: true
+        agent: "testing"
+        comment: "GET /api/authority/employees working correctly. Retrieved 4 employees, all have sub_role field properly returned. Employee listing includes all required fields including dienstnummer and sub_role."
+
+  - task: "Towing Service Employee System - CRUD Operations"
+    implemented: true
+    working: true
+    file: "server.py"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+      - working: true
+        agent: "testing"
+        comment: "NEW Towing Service Employee System fully functional. POST /api/service/employees creates employees successfully. GET /api/service/employees lists employees. PATCH /api/service/employees/{id}/block?blocked=true/false works for blocking/unblocking. DELETE /api/service/employees/{id} successfully deletes employees. All CRUD operations tested and working."
+
+  - task: "Authority Settings - Yard Settings and Inheritance"
+    implemented: true
+    working: true
+    file: "server.py"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+      - working: true
+        agent: "testing"
+        comment: "PATCH /api/authority/settings working correctly. Successfully saves yard settings including yard_model, yards array, and price_categories. Settings are properly inherited to employees as confirmed by employee count verification."
+
+  - task: "Role-based Access Control - Authority Release"
+    implemented: true
+    working: true
+    file: "server.py"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+      - working: true
+        agent: "testing"
+        comment: "Role-based access control working perfectly. Authority with sub_role='field' correctly denied access to /api/jobs/{id}/authority-release with proper German error message 'Als Außendienst-Mitarbeiter können Sie keine Fahrzeuge freigeben. Diese Funktion ist nur für Hof-Mitarbeiter verfügbar.' Authority with sub_role='yard' successfully allowed to release vehicles. Access control properly implemented."
+
+  - task: "Employee Authentication System"
+    implemented: true
+    working: true
+    file: "server.py"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+      - working: true
+        agent: "testing"
+        comment: "Employee authentication working correctly. Both authority employees (field and yard) and towing service employees can successfully authenticate using their credentials. Login system properly handles employee accounts and returns appropriate tokens."
+
 test_plan:
   current_focus: 
-    - "PDF timestamp fix for authority_yard jobs"
-    - "Status filter extension with delivered_to_authority"
+    - "Employee System Implementation Testing"
+    - "Role-based Access Control Verification"
   stuck_tasks: []
   test_all: false
   test_priority: "high_first"
@@ -491,3 +563,5 @@ agent_communication:
     message: "CRITICAL FIXES VERIFIED: Both critical issues have been successfully resolved. 1) Audit Logs Fix: GET /api/admin/audit-logs now returns 100 audit logs without Pydantic validation errors, properly handling missing user_name fields with defaults. 2) Job Update Fix: Both PUT /api/jobs/{job_id} and PATCH /api/jobs/{job_id} now work without timeout issues - successfully tested status updates from 'assigned' to 'on_site' to 'towed'. All authentication working correctly with provided test credentials."
   - agent: "testing"
     message: "BACKUP SYSTEM COMPREHENSIVE TESTING COMPLETED: 87.5% success rate (14/16 tests passed). All critical backup endpoints working correctly: system-status, health, cloud backups, verify-all, delete-corrupted, schedule, storage-stats, list-backups, cleanup, and backup creation via multiple endpoints. Backup system health is excellent with 13 total backups, 9 verified valid, 0 invalid, no corrupted backups found. Database and storage backups successfully created and uploaded to Supabase cloud storage with encryption. Only minor issue: POST /api/admin/backups with JSON body not implemented (405 Method Not Allowed) - alternative endpoints available and working."
+  - agent: "testing"
+    message: "EMPLOYEE SYSTEM COMPREHENSIVE TESTING COMPLETED: 100% success rate (25/25 tests passed). NEW employee system implementation fully functional for both authorities and towing services. Authority Employee System: POST/GET /api/authority/employees working with proper sub_role handling (field/yard). Towing Service Employee System: All CRUD operations (POST/GET/PATCH/DELETE /api/service/employees) working perfectly including block/unblock functionality. Role-based access control verified: field employees correctly denied authority-release access (403 with German error message), yard employees successfully allowed. Authority settings inheritance working. All authentication systems functional. Vehicle search public endpoint operational. Jobs API (GET/POST/PATCH) fully functional. All test credentials working correctly."
