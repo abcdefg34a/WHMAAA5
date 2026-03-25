@@ -5334,6 +5334,38 @@ async def list_backups_route(
     backups = await backup_service.list_backups(backup_type, retention_class, status, limit)
     return backups
 
+class BackupCreateRequest(BaseModel):
+    backup_type: str  # "database", "storage", or "full"
+
+@api_router.post("/admin/backups")
+async def create_backup_route(
+    request: BackupCreateRequest,
+    current_user: dict = Depends(get_current_user)
+):
+    """Backup erstellen mit JSON body - nur Admin"""
+    if current_user.get("role") != "admin":
+        raise HTTPException(status_code=403, detail="Nur Admins können Backups erstellen")
+    
+    if request.backup_type == "database":
+        result = await backup_service.create_database_backup(
+            triggered_by_user_id=current_user.get("id"),
+            retention_class="daily"
+        )
+    elif request.backup_type == "storage":
+        result = await backup_service.create_storage_backup(
+            triggered_by_user_id=current_user.get("id"),
+            retention_class="daily"
+        )
+    elif request.backup_type == "full":
+        result = await backup_service.create_full_backup(
+            triggered_by_user_id=current_user.get("id"),
+            retention_class="daily"
+        )
+    else:
+        raise HTTPException(status_code=400, detail="Ungültiger backup_type. Erlaubt: database, storage, full")
+    
+    return result
+
 @api_router.post("/admin/backups/run-database-backup")
 async def run_database_backup_route(
     background_tasks: BackgroundTasks,
