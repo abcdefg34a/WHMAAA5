@@ -712,7 +712,7 @@ export const AuthorityDashboard = () => {
                             <SelectValue placeholder="Kategorie wählen..." />
                           </SelectTrigger>
                           <SelectContent>
-                            {vehicleCategories.filter(c => c.is_active).map(cat => (
+                            {vehicleCategories.filter(c => c.is_active !== false).map(cat => (
                               <SelectItem key={cat.id} value={cat.id}>
                                 <div className="flex items-center justify-between w-full gap-4">
                                   <span>{cat.name}</span>
