@@ -918,6 +918,7 @@ export const TowingDashboard = () => {
       on_site: { label: 'Vor Ort', class: 'status-on_site' },
       towed: { label: 'Abgeschleppt', class: 'status-towed' },
       in_yard: { label: 'Im Hof', class: 'status-in_yard' },
+      delivered_to_authority: { label: 'An Behörde übergeben', class: 'bg-purple-100 text-purple-800' },
       released: { label: 'Abgeholt', class: 'status-released' }
     };
     const config = statusConfig[status] || { label: status, class: 'bg-gray-500' };
@@ -933,7 +934,8 @@ export const TowingDashboard = () => {
       return jobs.filter(j => ['assigned', 'on_site', 'towed'].includes(j.status));
     }
     if (status === 'in_yard') {
-      return jobs.filter(j => j.status === 'in_yard');
+      // Include both in_yard and delivered_to_authority (completed authority yard jobs)
+      return jobs.filter(j => j.status === 'in_yard' || j.status === 'delivered_to_authority');
     }
     if (status === 'released') {
       return jobs.filter(j => j.status === 'released');
@@ -2066,11 +2068,17 @@ export const TowingDashboard = () => {
                           </div>
                         </div>
                         <div className="flex items-center gap-3">
-                          <div className={`w-3 h-3 rounded-full ${selectedJob.in_yard_at ? 'bg-green-500' : 'bg-slate-300'}`}></div>
+                          <div className={`w-3 h-3 rounded-full ${(selectedJob.in_yard_at || selectedJob.delivered_to_authority_at) ? 'bg-green-500' : 'bg-slate-300'}`}></div>
                           <div className="flex-1">
-                            <p className="text-sm font-medium">4. Im Hof eingetroffen</p>
+                            <p className="text-sm font-medium">
+                              {selectedJob.target_yard === 'authority_yard' ? '4. An Behörde übergeben' : '4. Im Hof eingetroffen'}
+                            </p>
                             <p className="text-sm text-slate-500">
-                              {selectedJob.in_yard_at ? new Date(selectedJob.in_yard_at).toLocaleString('de-DE') : '-'}
+                              {selectedJob.delivered_to_authority_at 
+                                ? new Date(selectedJob.delivered_to_authority_at).toLocaleString('de-DE')
+                                : selectedJob.in_yard_at 
+                                  ? new Date(selectedJob.in_yard_at).toLocaleString('de-DE') 
+                                  : '-'}
                             </p>
                           </div>
                         </div>
@@ -2217,14 +2225,15 @@ export const TowingDashboard = () => {
                         <Button
                           data-testid="status-in-yard-btn"
                           onClick={() => handleStatusUpdate(selectedJob.id, 'in_yard')}
-                          className="bg-yellow-500 hover:bg-yellow-600"
+                          className={selectedJob.target_yard === 'authority_yard' ? "bg-purple-500 hover:bg-purple-600" : "bg-yellow-500 hover:bg-yellow-600"}
                         >
                           <Building2 className="h-4 w-4 mr-2" />
-                          Im Hof angekommen
+                          {selectedJob.target_yard === 'authority_yard' ? 'An Behörde übergeben' : 'Im Hof angekommen'}
                         </Button>
                       </div>
                     )}
-                    {selectedJob.status === 'in_yard' && (
+                    {/* Standard: Fahrzeug im eigenen Hof */}
+                    {selectedJob.status === 'in_yard' && selectedJob.target_yard !== 'authority_yard' && (
                       <div className="flex gap-2">
                         <Button
                           data-testid="status-stepback-btn"
@@ -2246,6 +2255,19 @@ export const TowingDashboard = () => {
                           <CheckCircle className="h-4 w-4 mr-2" />
                           Fahrzeug freigeben
                         </Button>
+                      </div>
+                    )}
+                    {/* Behörden-Hof: Fahrzeug wurde übergeben - Auftrag abgeschlossen */}
+                    {(selectedJob.status === 'delivered_to_authority' || (selectedJob.status === 'in_yard' && selectedJob.target_yard === 'authority_yard')) && (
+                      <div className="p-4 bg-purple-50 border border-purple-200 rounded-lg">
+                        <div className="flex items-center gap-2 text-purple-800">
+                          <CheckCircle className="h-5 w-5" />
+                          <span className="font-semibold">Fahrzeug an Behörde übergeben</span>
+                        </div>
+                        <p className="text-sm text-purple-600 mt-1">
+                          Ihr Auftrag ist abgeschlossen. Die Behörde übernimmt die Freigabe.
+                          Sie erhalten eine Rechnung nach der Fahrzeugfreigabe.
+                        </p>
                       </div>
                     )}
                   </div>

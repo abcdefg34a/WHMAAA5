@@ -6,7 +6,7 @@ import {
   Car, MapPin, Camera, Plus, LogOut, FileText, Menu, X,
   Search, Clock, ChevronRight, Trash2, Link as LinkIcon, CheckCircle,
   Users, UserPlus, Lock, Unlock, Key, Badge, Download, Filter, Calendar, Settings,
-  User, Euro
+  User, Euro, Building2
 } from 'lucide-react';
 import { Button } from '../components/ui/button';
 import { Input } from '../components/ui/input';
@@ -153,6 +153,19 @@ export const AuthorityDashboard = () => {
   });
   const [savingSettings, setSavingSettings] = useState(false);
 
+  // NEW: Authority Yard Release state
+  const [releaseDialogOpen, setReleaseDialogOpen] = useState(false);
+  const [selectedYardJob, setSelectedYardJob] = useState(null);
+  const [releaseData, setReleaseData] = useState({
+    owner_first_name: '',
+    owner_last_name: '',
+    owner_address: '',
+    payment_method: 'bar',
+    payment_amount: '',
+    service_invoice_amount: ''
+  });
+  const [releasingJob, setReleasingJob] = useState(false);
+
   // NEW: Edit/Delete Job state
   const [editJobDialogOpen, setEditJobDialogOpen] = useState(false);
   const [editingJobData, setEditingJobData] = useState(false);
@@ -236,6 +249,75 @@ export const AuthorityDashboard = () => {
       ...authoritySettings,
       price_categories: (authoritySettings.price_categories || []).filter(cat => cat.id !== categoryId)
     });
+  };
+
+  // Handle authority release (when vehicles are on authority yard)
+  const handleAuthorityRelease = async () => {
+    if (!selectedYardJob || !releaseData.owner_first_name || !releaseData.owner_last_name || !releaseData.payment_amount) {
+      toast.error('Bitte füllen Sie alle Pflichtfelder aus');
+      return;
+    }
+
+    setReleasingJob(true);
+    try {
+      await axios.post(`${API}/jobs/${selectedYardJob.id}/authority-release`, {
+        owner_first_name: releaseData.owner_first_name,
+        owner_last_name: releaseData.owner_last_name,
+        owner_address: releaseData.owner_address,
+        payment_method: releaseData.payment_method,
+        payment_amount: parseFloat(releaseData.payment_amount),
+        service_invoice_amount: releaseData.service_invoice_amount ? parseFloat(releaseData.service_invoice_amount) : null
+      });
+
+      toast.success('Fahrzeug erfolgreich freigegeben');
+      setReleaseDialogOpen(false);
+      setSelectedYardJob(null);
+      setReleaseData({
+        owner_first_name: '',
+        owner_last_name: '',
+        owner_address: '',
+        payment_method: 'bar',
+        payment_amount: '',
+        service_invoice_amount: ''
+      });
+      fetchJobs();
+    } catch (error) {
+      toast.error(error.response?.data?.detail || 'Fehler bei der Freigabe');
+    } finally {
+      setReleasingJob(false);
+    }
+  };
+
+  // Calculate authority costs for a job
+  const calculateAuthorityCosts = (job) => {
+    if (!job) return { total: 0, breakdown: [] };
+    
+    const basePrice = job.authority_base_price || 0;
+    const dailyRate = job.authority_daily_rate || 0;
+    
+    // Calculate days
+    let days = 1;
+    if (job.delivered_to_authority_at) {
+      const deliveredDate = new Date(job.delivered_to_authority_at);
+      const now = new Date();
+      days = Math.max(1, Math.ceil((now - deliveredDate) / (1000 * 60 * 60 * 24)));
+    }
+    
+    const breakdown = [];
+    let total = 0;
+    
+    if (basePrice > 0) {
+      breakdown.push({ label: `${job.authority_price_category_name || 'Grundpreis'} (erste 24h)`, amount: basePrice });
+      total += basePrice;
+    }
+    
+    if (days > 1 && dailyRate > 0) {
+      const additionalCost = (days - 1) * dailyRate;
+      breakdown.push({ label: `${days - 1} × weitere 24h à ${dailyRate.toFixed(2)}€`, amount: additionalCost });
+      total += additionalCost;
+    }
+    
+    return { total, breakdown, days };
   };
 
   const fetchJobs = async () => {
@@ -730,6 +812,12 @@ export const AuthorityDashboard = () => {
               <FileText className="h-4 w-4" />
               {user?.is_main_authority ? 'Alle Aufträge' : 'Meine Aufträge'}
             </TabsTrigger>
+            {authoritySettings.yard_model === 'authority_yard' && (
+              <TabsTrigger data-testid="tab-yard" value="yard" className="flex items-center gap-2">
+                <Building2 className="h-4 w-4" />
+                Im Hof ({jobs.filter(j => j.status === 'delivered_to_authority' && j.target_yard === 'authority_yard').length})
+              </TabsTrigger>
+            )}
             <TabsTrigger data-testid="tab-services" value="services" className="flex items-center gap-2">
               <LinkIcon className="h-4 w-4" />
               Abschleppdienste
@@ -1493,6 +1581,77 @@ export const AuthorityDashboard = () => {
             </Card>
           </TabsContent>
 
+          {/* Yard Tab - Vehicles at authority yard awaiting release */}
+          {authoritySettings.yard_model === 'authority_yard' && (
+            <TabsContent value="yard">
+              <Card>
+                <CardHeader>
+                  <CardTitle className="flex items-center gap-2">
+                    <Building2 className="h-5 w-5" />
+                    Fahrzeuge im Behörden-Hof
+                  </CardTitle>
+                  <CardDescription>
+                    Diese Fahrzeuge wurden vom Abschleppdienst abgeliefert und warten auf Freigabe
+                  </CardDescription>
+                </CardHeader>
+                <CardContent>
+                  {jobs.filter(j => j.status === 'delivered_to_authority' && j.target_yard === 'authority_yard').length === 0 ? (
+                    <div className="text-center py-8 text-slate-500">
+                      <Building2 className="h-12 w-12 mx-auto mb-4 opacity-30" />
+                      <p>Keine Fahrzeuge im Hof</p>
+                    </div>
+                  ) : (
+                    <div className="space-y-3">
+                      {jobs.filter(j => j.status === 'delivered_to_authority' && j.target_yard === 'authority_yard').map(job => {
+                        const costs = calculateAuthorityCosts(job);
+                        return (
+                          <div key={job.id} className="border rounded-lg p-4 hover:bg-slate-50">
+                            <div className="flex items-center justify-between">
+                              <div className="flex-1">
+                                <div className="flex items-center gap-3">
+                                  <span className="font-bold text-lg">{job.license_plate}</span>
+                                  <span className="px-2 py-1 rounded-full text-xs font-medium bg-purple-100 text-purple-800">
+                                    Im Hof
+                                  </span>
+                                </div>
+                                <p className="text-sm text-slate-500 mt-1">{job.job_number}</p>
+                                <div className="mt-2 text-sm">
+                                  <p><strong>Grund:</strong> {job.tow_reason}</p>
+                                  <p><strong>Kategorie:</strong> {job.authority_price_category_name || 'Nicht zugewiesen'}</p>
+                                  <p><strong>Abgeliefert:</strong> {job.delivered_to_authority_at ? new Date(job.delivered_to_authority_at).toLocaleString('de-DE') : '-'}</p>
+                                  <p><strong>Tage im Hof:</strong> {costs.days}</p>
+                                </div>
+                              </div>
+                              <div className="text-right">
+                                <p className="text-2xl font-bold text-green-600">{costs.total.toFixed(2)} €</p>
+                                <p className="text-xs text-slate-500">Geschätzter Betrag</p>
+                                <Button
+                                  className="mt-3 bg-green-500 hover:bg-green-600"
+                                  onClick={() => {
+                                    setSelectedYardJob(job);
+                                    const c = calculateAuthorityCosts(job);
+                                    setReleaseData({
+                                      ...releaseData,
+                                      payment_amount: c.total.toFixed(2)
+                                    });
+                                    setReleaseDialogOpen(true);
+                                  }}
+                                >
+                                  <CheckCircle className="h-4 w-4 mr-2" />
+                                  Fahrzeug freigeben
+                                </Button>
+                              </div>
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
+            </TabsContent>
+          )}
+
           {/* Services Tab */}
           <TabsContent value="services">
             <Card>
@@ -2063,6 +2222,129 @@ export const AuthorityDashboard = () => {
               {editingJobData ? 'Speichert...' : 'Speichern'}
             </Button>
           </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Authority Release Dialog */}
+      <Dialog open={releaseDialogOpen} onOpenChange={setReleaseDialogOpen}>
+        <DialogContent className="max-w-lg">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <CheckCircle className="h-5 w-5 text-green-600" />
+              Fahrzeug freigeben
+            </DialogTitle>
+            <DialogDescription>
+              Geben Sie die Daten des Halters und die Zahlungsinformationen ein
+            </DialogDescription>
+          </DialogHeader>
+          
+          {selectedYardJob && (
+            <div className="space-y-4">
+              {/* Vehicle Info */}
+              <div className="p-3 bg-slate-100 rounded-lg">
+                <p className="font-bold">{selectedYardJob.license_plate}</p>
+                <p className="text-sm text-slate-500">{selectedYardJob.job_number}</p>
+              </div>
+
+              {/* Owner Info */}
+              <div className="grid grid-cols-2 gap-3">
+                <div className="space-y-1">
+                  <Label>Vorname *</Label>
+                  <Input
+                    value={releaseData.owner_first_name}
+                    onChange={(e) => setReleaseData({...releaseData, owner_first_name: e.target.value})}
+                    placeholder="Max"
+                  />
+                </div>
+                <div className="space-y-1">
+                  <Label>Nachname *</Label>
+                  <Input
+                    value={releaseData.owner_last_name}
+                    onChange={(e) => setReleaseData({...releaseData, owner_last_name: e.target.value})}
+                    placeholder="Mustermann"
+                  />
+                </div>
+              </div>
+              <div className="space-y-1">
+                <Label>Adresse</Label>
+                <Input
+                  value={releaseData.owner_address}
+                  onChange={(e) => setReleaseData({...releaseData, owner_address: e.target.value})}
+                  placeholder="Musterstraße 1, 12345 Berlin"
+                />
+              </div>
+
+              {/* Payment */}
+              <div className="grid grid-cols-2 gap-3">
+                <div className="space-y-1">
+                  <Label>Zahlungsart *</Label>
+                  <Select 
+                    value={releaseData.payment_method} 
+                    onValueChange={(value) => setReleaseData({...releaseData, payment_method: value})}
+                  >
+                    <SelectTrigger>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="bar">Bar</SelectItem>
+                      <SelectItem value="karte">Karte</SelectItem>
+                      <SelectItem value="rechnung">Rechnung</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-1">
+                  <Label>Betrag (€) *</Label>
+                  <Input
+                    type="number"
+                    step="0.01"
+                    value={releaseData.payment_amount}
+                    onChange={(e) => setReleaseData({...releaseData, payment_amount: e.target.value})}
+                    placeholder="0.00"
+                  />
+                </div>
+              </div>
+
+              {/* Cost breakdown */}
+              {selectedYardJob.authority_base_price && (
+                <div className="p-3 bg-green-50 border border-green-200 rounded-lg">
+                  <p className="font-medium text-green-800 mb-2">Kostenberechnung</p>
+                  {calculateAuthorityCosts(selectedYardJob).breakdown.map((item, idx) => (
+                    <div key={idx} className="flex justify-between text-sm">
+                      <span>{item.label}</span>
+                      <span>{item.amount.toFixed(2)} €</span>
+                    </div>
+                  ))}
+                  <div className="flex justify-between font-bold text-green-800 border-t border-green-300 mt-2 pt-2">
+                    <span>Gesamt:</span>
+                    <span>{calculateAuthorityCosts(selectedYardJob).total.toFixed(2)} €</span>
+                  </div>
+                </div>
+              )}
+
+              {/* Service Invoice */}
+              <div className="p-3 bg-blue-50 border border-blue-200 rounded-lg">
+                <Label className="text-blue-800">Rechnung an Abschleppdienst (€)</Label>
+                <p className="text-xs text-blue-600 mb-2">
+                  Dieser Betrag wird dem Abschleppdienst ({selectedYardJob.assigned_service_name}) als Rechnung gestellt
+                </p>
+                <Input
+                  type="number"
+                  step="0.01"
+                  value={releaseData.service_invoice_amount}
+                  onChange={(e) => setReleaseData({...releaseData, service_invoice_amount: e.target.value})}
+                  placeholder="z.B. 150.00"
+                />
+              </div>
+
+              <Button
+                onClick={handleAuthorityRelease}
+                disabled={releasingJob}
+                className="w-full bg-green-500 hover:bg-green-600"
+              >
+                {releasingJob ? 'Wird freigegeben...' : 'Freigabe bestätigen & PDF erstellen'}
+              </Button>
+            </div>
+          )}
         </DialogContent>
       </Dialog>
     </div>

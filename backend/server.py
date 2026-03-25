@@ -410,6 +410,7 @@ Ihr AbschleppPortal Team
             'on_site': 'Abschleppdienst vor Ort',
             'towed': 'Fahrzeug abgeschleppt',
             'in_yard': 'Fahrzeug im Hof',
+            'delivered_to_authority': 'An Behörde übergeben',
             'released': 'Fahrzeug abgeholt'
         }
         status_label = status_labels.get(status, status)
@@ -648,6 +649,8 @@ class JobStatus:
     ON_SITE = "on_site"
     TOWED = "towed"
     IN_YARD = "in_yard"
+    # NEW: Delivered to authority yard (towing service job complete)
+    DELIVERED_TO_AUTHORITY = "delivered_to_authority"
     RELEASED = "released"
 
 # Auth Models
@@ -895,6 +898,8 @@ class JobResponse(BaseModel):
     on_site_at: Optional[str] = None
     towed_at: Optional[str] = None
     in_yard_at: Optional[str] = None
+    # NEW: When vehicle was delivered to authority yard
+    delivered_to_authority_at: Optional[str] = None
     released_at: Optional[str] = None
     accepted_at: Optional[str] = None  # NEW: When job was accepted
     # NEW: Job type and Sicherstellung fields
@@ -2905,6 +2910,7 @@ async def update_job(job_id: str, data: JobUpdate, user: dict = Depends(get_curr
             # Clear future steps
             update_data["towed_at"] = None
             update_data["in_yard_at"] = None
+            update_data["delivered_to_authority_at"] = None
             update_data["released_at"] = None
             # Set accepted_at when service first accepts the job
             if not job.get("accepted_at"):
@@ -2913,9 +2919,19 @@ async def update_job(job_id: str, data: JobUpdate, user: dict = Depends(get_curr
             update_data["towed_at"] = now
             # Clear future steps
             update_data["in_yard_at"] = None
+            update_data["delivered_to_authority_at"] = None
             update_data["released_at"] = None
         elif data.status == JobStatus.IN_YARD:
-            update_data["in_yard_at"] = now
+            # Check if this is authority_yard - if so, use DELIVERED_TO_AUTHORITY status instead
+            if job.get("target_yard") == "authority_yard":
+                update_data["status"] = JobStatus.DELIVERED_TO_AUTHORITY
+                update_data["delivered_to_authority_at"] = now
+            else:
+                update_data["in_yard_at"] = now
+            # Clear future steps
+            update_data["released_at"] = None
+        elif data.status == JobStatus.DELIVERED_TO_AUTHORITY:
+            update_data["delivered_to_authority_at"] = now
             # Clear future steps
             update_data["released_at"] = None
         elif data.status == JobStatus.RELEASED:
@@ -2925,6 +2941,7 @@ async def update_job(job_id: str, data: JobUpdate, user: dict = Depends(get_curr
             update_data["on_site_at"] = None
             update_data["towed_at"] = None
             update_data["in_yard_at"] = None
+            update_data["delivered_to_authority_at"] = None
             update_data["released_at"] = None
     
     if data.is_empty_trip is not None:
@@ -2961,6 +2978,100 @@ async def update_job(job_id: str, data: JobUpdate, user: dict = Depends(get_curr
     
     updated_job = await db.jobs.find_one({"id": job_id}, {"_id": 0})
     return JobResponse(**updated_job)
+
+# ==================== AUTHORITY YARD RELEASE ====================
+
+class AuthorityReleaseData(BaseModel):
+    owner_first_name: str
+    owner_last_name: str
+    owner_address: Optional[str] = None
+    payment_method: str
+    payment_amount: float
+    service_invoice_amount: Optional[float] = None  # Amount to pay towing service
+
+@api_router.post("/jobs/{job_id}/authority-release", response_model=JobResponse)
+async def authority_release_vehicle(job_id: str, data: AuthorityReleaseData, user: dict = Depends(get_current_user)):
+    """Release vehicle from authority yard - only authorities can do this"""
+    if user["role"] != UserRole.AUTHORITY:
+        raise HTTPException(status_code=403, detail="Nur Behörden können Fahrzeuge aus dem Behörden-Hof freigeben")
+    
+    job = await db.jobs.find_one({"id": job_id}, {"_id": 0})
+    if not job:
+        raise HTTPException(status_code=404, detail="Auftrag nicht gefunden")
+    
+    # Verify this is an authority yard job
+    if job.get("target_yard") != "authority_yard":
+        raise HTTPException(status_code=400, detail="Dieser Auftrag ist nicht für den Behörden-Hof bestimmt")
+    
+    # Verify job is in correct status
+    if job.get("status") != JobStatus.DELIVERED_TO_AUTHORITY:
+        raise HTTPException(status_code=400, detail="Das Fahrzeug wurde noch nicht an die Behörde übergeben")
+    
+    # Check authority has access
+    authority_id = get_authority_id(user)
+    if job.get("authority_id") != authority_id:
+        raise HTTPException(status_code=403, detail="Kein Zugriff auf diesen Auftrag")
+    
+    now = datetime.now(timezone.utc).isoformat()
+    
+    update_data = {
+        "status": JobStatus.RELEASED,
+        "released_at": now,
+        "updated_at": now,
+        "owner_first_name": data.owner_first_name,
+        "owner_last_name": data.owner_last_name,
+        "owner_address": data.owner_address,
+        "payment_method": data.payment_method,
+        "payment_amount": data.payment_amount,
+        # Store service invoice info
+        "service_invoice_amount": data.service_invoice_amount,
+        "service_invoice_created_at": now if data.service_invoice_amount else None
+    }
+    
+    await db.jobs.update_one({"id": job_id}, {"$set": update_data})
+    
+    # Create invoice record for towing service (if service_invoice_amount is set)
+    if data.service_invoice_amount and job.get("assigned_service_id"):
+        invoice_doc = {
+            "id": str(uuid.uuid4()),
+            "job_id": job_id,
+            "job_number": job.get("job_number"),
+            "license_plate": job.get("license_plate"),
+            "authority_id": authority_id,
+            "authority_name": user.get("authority_name", user.get("name")),
+            "service_id": job.get("assigned_service_id"),
+            "service_name": job.get("assigned_service_name"),
+            "amount": data.service_invoice_amount,
+            "status": "pending",  # pending, paid
+            "created_at": now,
+            "paid_at": None
+        }
+        await db.service_invoices.insert_one(invoice_doc)
+    
+    # Audit log
+    await log_audit("AUTHORITY_RELEASE", user["id"], user["name"], {
+        "job_id": job_id,
+        "job_number": job.get("job_number"),
+        "payment_amount": data.payment_amount,
+        "service_invoice_amount": data.service_invoice_amount
+    })
+    
+    updated_job = await db.jobs.find_one({"id": job_id}, {"_id": 0})
+    return JobResponse(**updated_job)
+
+# NEW: Get invoices for towing service
+@api_router.get("/services/invoices")
+async def get_service_invoices(user: dict = Depends(get_current_user)):
+    """Get pending and paid invoices for a towing service"""
+    if user["role"] != UserRole.TOWING_SERVICE:
+        raise HTTPException(status_code=403, detail="Nur für Abschleppdienste")
+    
+    invoices = await db.service_invoices.find(
+        {"service_id": user["id"]},
+        {"_id": 0}
+    ).sort("created_at", -1).to_list(100)
+    
+    return {"invoices": invoices}
 
 # ==================== JOB DATA EDITING (Kennzeichen, FIN, etc.) ====================
 
