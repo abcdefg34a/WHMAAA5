@@ -413,6 +413,30 @@ class BackupService:
         settings = await self.get_encryption_settings()
         return settings.get("enabled", False) and ENCRYPTION_AVAILABLE
     
+    async def file_exists(self, storage_path: str) -> bool:
+        """Prüft ob eine Backup-Datei existiert (lokal oder in Supabase)"""
+        try:
+            # Check local file first
+            local_path = self.backup_dir / storage_path
+            if local_path.exists():
+                return True
+            
+            # Check in Supabase Storage
+            if self.supabase_storage and self.supabase_storage.bucket:
+                try:
+                    # Try to get file info from Supabase
+                    result = self.supabase_storage.bucket.list(path=str(Path(storage_path).parent))
+                    filename = Path(storage_path).name
+                    if result and any(f.get('name') == filename for f in result):
+                        return True
+                except Exception:
+                    pass
+            
+            return False
+        except Exception as e:
+            logger.error(f"Error checking file existence: {e}")
+            return False
+    
     # ========================================================================
     # DATABASE BACKUP
     # ========================================================================

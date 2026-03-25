@@ -5235,6 +5235,34 @@ async def emergency_cleanup_route(
     target_mb = data.get("target_mb", 500)
     return await backup_service.emergency_cleanup(target_mb)
 
+@api_router.delete("/admin/backups/corrupted")
+async def delete_corrupted_backups_route(current_user: dict = Depends(get_current_user)):
+    """Löscht alle beschädigten Backup-Einträge aus der Datenbank - nur Admin"""
+    if current_user.get("role") != "admin":
+        raise HTTPException(status_code=403, detail="Nur Admins können Backups verwalten")
+    
+    # Find and delete all backups marked as corrupted/invalid
+    result = await db.backup_jobs.delete_many({"verified": False})
+    deleted_count = result.deleted_count
+    
+    # Also check and remove orphaned entries (files that don't exist)
+    all_backups = await db.backup_jobs.find({}).to_list(1000)
+    orphaned_deleted = 0
+    
+    for backup in all_backups:
+        storage_path = backup.get("storage_path", "")
+        # Check if file exists in Supabase or locally
+        if storage_path and not await backup_service.file_exists(storage_path):
+            await db.backup_jobs.delete_one({"id": backup["id"]})
+            orphaned_deleted += 1
+    
+    return {
+        "success": True,
+        "deleted_corrupted": deleted_count,
+        "deleted_orphaned": orphaned_deleted,
+        "message": f"{deleted_count + orphaned_deleted} beschädigte Backup-Einträge wurden gelöscht"
+    }
+
 @api_router.get("/admin/backups/encryption")
 async def get_encryption_settings_route(current_user: dict = Depends(get_current_user)):
     """Verschlüsselungseinstellungen abrufen - nur Admin"""

@@ -1715,15 +1715,34 @@ export const AdminDashboard = () => {
                         </ul>
                       )}
                     </div>
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      className="border-red-300 text-red-600 hover:bg-red-100"
-                      onClick={handleVerifyAllBackups}
-                      disabled={verifyingBackups}
-                    >
-                      {verifyingBackups ? <Loader2 className="h-4 w-4 animate-spin" /> : 'Erneut prüfen'}
-                    </Button>
+                    <div className="flex gap-2">
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="border-red-300 text-red-600 hover:bg-red-100"
+                        onClick={handleVerifyAllBackups}
+                        disabled={verifyingBackups}
+                      >
+                        {verifyingBackups ? <Loader2 className="h-4 w-4 animate-spin" /> : 'Erneut prüfen'}
+                      </Button>
+                      <Button
+                        variant="destructive"
+                        size="sm"
+                        onClick={async () => {
+                          if (window.confirm('Möchten Sie alle beschädigten Backup-Einträge löschen? Dies kann nicht rückgängig gemacht werden.')) {
+                            try {
+                              const response = await axios.delete(`${API}/admin/backups/corrupted`);
+                              toast.success(response.data.message || 'Beschädigte Backups gelöscht');
+                              fetchBackupHealth();
+                            } catch (error) {
+                              toast.error(error.response?.data?.detail || 'Fehler beim Löschen');
+                            }
+                          }
+                        }}
+                      >
+                        Beschädigte löschen
+                      </Button>
+                    </div>
                   </div>
                 </div>
               )}
