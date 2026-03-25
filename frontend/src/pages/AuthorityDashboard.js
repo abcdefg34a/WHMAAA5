@@ -1595,9 +1595,9 @@ export const AuthorityDashboard = () => {
                                   <p className="font-medium text-slate-700">Abgeschleppt</p>
                                   <p className="text-slate-500">{job.towed_at ? new Date(job.towed_at).toLocaleString('de-DE') : '-'}</p>
                                 </div>
-                                <div className={`p-2 rounded ${job.in_yard_at ? 'bg-green-50 border border-green-200' : 'bg-slate-50'}`}>
-                                  <p className="font-medium text-slate-700">Im Hof</p>
-                                  <p className="text-slate-500">{job.in_yard_at ? new Date(job.in_yard_at).toLocaleString('de-DE') : '-'}</p>
+                                <div className={`p-2 rounded ${(job.target_yard === 'authority_yard' ? job.delivered_to_authority_at : job.in_yard_at) ? 'bg-green-50 border border-green-200' : 'bg-slate-50'}`}>
+                                  <p className="font-medium text-slate-700">{job.target_yard === 'authority_yard' ? 'Im Behörden-Hof' : 'Im Hof'}</p>
+                                  <p className="text-slate-500">{(job.target_yard === 'authority_yard' ? job.delivered_to_authority_at : job.in_yard_at) ? new Date(job.target_yard === 'authority_yard' ? job.delivered_to_authority_at : job.in_yard_at).toLocaleString('de-DE') : '-'}</p>
                                 </div>
                                 <div className={`p-2 rounded ${job.released_at ? 'bg-green-50 border border-green-200' : 'bg-slate-50'}`}>
                                   <p className="font-medium text-slate-700">Abgeholt</p>

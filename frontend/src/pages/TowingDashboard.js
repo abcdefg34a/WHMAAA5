@@ -1574,7 +1574,7 @@ export const TowingDashboard = () => {
                           {getStatusBadge(job.status, job.is_empty_trip)}
                         </div>
                         <div className="space-y-2 text-sm text-slate-600">
-                          <p>Im Hof seit: {job.in_yard_at || job.delivered_to_authority_at ? new Date(job.delivered_to_authority_at || job.in_yard_at).toLocaleString('de-DE') : '-'}</p>
+                          <p>{job.target_yard === 'authority_yard' ? 'Im Behörden-Hof seit' : 'Im Hof seit'}: {(job.target_yard === 'authority_yard' ? job.delivered_to_authority_at : job.in_yard_at) ? new Date(job.target_yard === 'authority_yard' ? job.delivered_to_authority_at : job.in_yard_at).toLocaleString('de-DE') : '-'}</p>
                           {job.vin && <p>FIN: {job.vin}</p>}
                           {job.target_yard === 'authority_yard' && (
                             <p className="text-green-700 text-xs">✓ An Behörde übergeben</p>
