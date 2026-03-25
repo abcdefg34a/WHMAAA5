@@ -2888,8 +2888,11 @@ async def get_jobs(
     # Search
     if search:
         search_upper = search.upper()
+        # Also create a normalized version without spaces and dashes for license plate search
+        search_normalized = search_upper.replace(" ", "").replace("-", "")
         query["$or"] = [
             {"license_plate": {"$regex": search_upper, "$options": "i"}},
+            {"license_plate": {"$regex": search_normalized, "$options": "i"}},
             {"vin": {"$regex": search_upper, "$options": "i"}},
             {"job_number": {"$regex": search_upper, "$options": "i"}}
         ]
@@ -2937,8 +2940,11 @@ async def get_jobs_count(
     
     if search:
         search_upper = search.upper()
+        # Also create a normalized version without spaces and dashes for license plate search
+        search_normalized = search_upper.replace(" ", "").replace("-", "")
         query["$or"] = [
             {"license_plate": {"$regex": search_upper, "$options": "i"}},
+            {"license_plate": {"$regex": search_normalized, "$options": "i"}},
             {"vin": {"$regex": search_upper, "$options": "i"}},
             {"job_number": {"$regex": search_upper, "$options": "i"}}
         ]
@@ -3641,8 +3647,10 @@ async def get_all_jobs(
         query["status"] = status
     if search:
         # Full-text search across multiple fields
+        search_normalized = search.upper().replace(" ", "").replace("-", "")
         query["$or"] = [
             {"license_plate": {"$regex": search, "$options": "i"}},
+            {"license_plate": {"$regex": search_normalized, "$options": "i"}},
             {"vin": {"$regex": search, "$options": "i"}},
             {"job_number": {"$regex": search, "$options": "i"}},
             {"tow_reason": {"$regex": search, "$options": "i"}},
@@ -3682,8 +3690,10 @@ async def get_all_jobs_count(
         query["status"] = status
     if search:
         # Full-text search across multiple fields
+        search_normalized = search.upper().replace(" ", "").replace("-", "")
         query["$or"] = [
             {"license_plate": {"$regex": search, "$options": "i"}},
+            {"license_plate": {"$regex": search_normalized, "$options": "i"}},
             {"vin": {"$regex": search, "$options": "i"}},
             {"job_number": {"$regex": search, "$options": "i"}},
             {"tow_reason": {"$regex": search, "$options": "i"}},
