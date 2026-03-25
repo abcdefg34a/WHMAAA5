@@ -740,6 +740,8 @@ class UserResponse(BaseModel):
     # NEW: Authority yard model and pricing (for authorities)
     yard_model: Optional[str] = None  # "authority_yard" or "service_yard"
     price_categories: Optional[List[dict]] = None  # Authority's own price categories
+    # NEW: Authority sub-role (admin, field, yard)
+    sub_role: Optional[str] = None
 
 class TokenResponse(BaseModel):
     access_token: str
@@ -794,16 +796,24 @@ class ApproveServiceRequest(BaseModel):
     rejection_reason: Optional[str] = None
 
 # Authority Employee Models
+# Authority Sub-Roles
+class AuthoritySubRole:
+    ADMIN = "admin"  # Hauptaccount - alle Rechte
+    FIELD = "field"  # Außendienst - Autos erfassen, Aufträge erstellen
+    YARD = "yard"    # Hof-Mitarbeiter - Autos freigeben
+
 class CreateEmployeeRequest(BaseModel):
     email: EmailStr
     password: str
     name: str
+    sub_role: str = AuthoritySubRole.FIELD  # Default: Außendienst
 
 class EmployeeResponse(BaseModel):
     id: str
     email: str
     name: str
     dienstnummer: str
+    sub_role: Optional[str] = AuthoritySubRole.FIELD
     is_blocked: Optional[bool] = None
     created_at: str
 
@@ -2368,6 +2378,26 @@ def get_authority_id(user: dict) -> str:
         return user["id"]
     return user.get("parent_authority_id", user["id"])
 
+def get_authority_sub_role(user: dict) -> str:
+    """Get the sub-role of an authority user"""
+    if user.get("is_main_authority"):
+        return AuthoritySubRole.ADMIN
+    return user.get("sub_role", AuthoritySubRole.FIELD)
+
+def can_create_jobs(user: dict) -> bool:
+    """Check if user can create jobs (admin or field role)"""
+    if user["role"] != UserRole.AUTHORITY:
+        return False
+    sub_role = get_authority_sub_role(user)
+    return sub_role in [AuthoritySubRole.ADMIN, AuthoritySubRole.FIELD]
+
+def can_release_vehicles(user: dict) -> bool:
+    """Check if user can release vehicles (admin or yard role)"""
+    if user["role"] != UserRole.AUTHORITY:
+        return False
+    sub_role = get_authority_sub_role(user)
+    return sub_role in [AuthoritySubRole.ADMIN, AuthoritySubRole.YARD]
+
 @api_router.post("/authority/employees", response_model=EmployeeResponse)
 async def create_employee(data: CreateEmployeeRequest, user: dict = Depends(get_current_user)):
     """Create a new employee for the authority"""
@@ -2377,6 +2407,10 @@ async def create_employee(data: CreateEmployeeRequest, user: dict = Depends(get_
     # Only main authority can create employees
     if not user.get("is_main_authority"):
         raise HTTPException(status_code=403, detail="Nur der Haupt-Account kann Mitarbeiter erstellen")
+    
+    # Validate sub_role
+    if data.sub_role not in [AuthoritySubRole.FIELD, AuthoritySubRole.YARD]:
+        raise HTTPException(status_code=400, detail="Ungültige Rolle. Erlaubt: field (Außendienst), yard (Hof-Mitarbeiter)")
     
     # Check if email exists
     existing = await db.users.find_one({"email": data.email})
@@ -2401,7 +2435,12 @@ async def create_employee(data: CreateEmployeeRequest, user: dict = Depends(get_
         "linked_services": user.get("linked_services", []),  # Inherit linked services
         "is_main_authority": False,
         "parent_authority_id": user["id"],
-        "dienstnummer": dienstnummer
+        "dienstnummer": dienstnummer,
+        "sub_role": data.sub_role,  # NEW: Außendienst oder Hof-Mitarbeiter
+        # Inherit authority settings
+        "yard_model": user.get("yard_model"),
+        "price_categories": user.get("price_categories"),
+        "authority_yards": user.get("authority_yards", [])
     }
     
     await db.users.insert_one(employee_doc)
@@ -2412,6 +2451,7 @@ async def create_employee(data: CreateEmployeeRequest, user: dict = Depends(get_
         "employee_email": data.email,
         "employee_name": data.name,
         "dienstnummer": dienstnummer,
+        "sub_role": data.sub_role,
         "authority_id": user["id"]
     })
     
@@ -2420,6 +2460,7 @@ async def create_employee(data: CreateEmployeeRequest, user: dict = Depends(get_
         email=data.email,
         name=data.name,
         dienstnummer=dienstnummer,
+        sub_role=data.sub_role,
         is_blocked=False,
         created_at=now
     )
@@ -2444,6 +2485,7 @@ async def get_employees(user: dict = Depends(get_current_user)):
         email=e["email"],
         name=e["name"],
         dienstnummer=e.get("dienstnummer", ""),
+        sub_role=e.get("sub_role", AuthoritySubRole.FIELD),
         is_blocked=e.get("is_blocked", False),
         created_at=e["created_at"]
     ) for e in employees]
@@ -2673,6 +2715,10 @@ async def create_job(
     # Allow authorities, admins, and towing services to create jobs
     if user["role"] not in [UserRole.AUTHORITY, UserRole.ADMIN, UserRole.TOWING_SERVICE]:
         raise HTTPException(status_code=403, detail="Keine Berechtigung zum Erstellen von Aufträgen")
+    
+    # Check sub-role for authority users (only admin and field can create jobs)
+    if user["role"] == UserRole.AUTHORITY and not can_create_jobs(user):
+        raise HTTPException(status_code=403, detail="Als Hof-Mitarbeiter können Sie keine Aufträge erstellen. Diese Funktion ist nur für Außendienst-Mitarbeiter verfügbar.")
     
     # ========== IDEMPOTENCY CHECK ==========
     if idempotency_key:
@@ -3107,9 +3153,13 @@ class AuthorityReleaseData(BaseModel):
 
 @api_router.post("/jobs/{job_id}/authority-release", response_model=JobResponse)
 async def authority_release_vehicle(job_id: str, data: AuthorityReleaseData, user: dict = Depends(get_current_user)):
-    """Release vehicle from authority yard - only authorities can do this"""
+    """Release vehicle from authority yard - only authorities with yard or admin role can do this"""
     if user["role"] != UserRole.AUTHORITY:
         raise HTTPException(status_code=403, detail="Nur Behörden können Fahrzeuge aus dem Behörden-Hof freigeben")
+    
+    # Check sub-role (only admin and yard can release)
+    if not can_release_vehicles(user):
+        raise HTTPException(status_code=403, detail="Als Außendienst-Mitarbeiter können Sie keine Fahrzeuge freigeben. Diese Funktion ist nur für Hof-Mitarbeiter verfügbar.")
     
     job = await db.jobs.find_one({"id": job_id}, {"_id": 0})
     if not job:

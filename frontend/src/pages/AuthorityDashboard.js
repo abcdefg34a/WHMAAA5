@@ -86,6 +86,11 @@ export const AuthorityDashboard = () => {
   const [serviceCodeInput, setServiceCodeInput] = useState('');
   const [linkDialogOpen, setLinkDialogOpen] = useState(false);
 
+  // Role-based permissions
+  const isAdmin = user?.is_main_authority || user?.sub_role === 'admin';
+  const canCreateJobs = isAdmin || user?.sub_role === 'field';
+  const canReleaseVehicles = isAdmin || user?.sub_role === 'yard';
+
   // Pagination state
   const [currentPage, setCurrentPage] = useState(1);
   const [totalJobs, setTotalJobs] = useState(0);
@@ -104,6 +109,7 @@ export const AuthorityDashboard = () => {
   const [newEmployeeName, setNewEmployeeName] = useState('');
   const [newEmployeeEmail, setNewEmployeeEmail] = useState('');
   const [newEmployeePassword, setNewEmployeePassword] = useState('');
+  const [newEmployeeRole, setNewEmployeeRole] = useState('field'); // NEW: field or yard
   const [creatingEmployee, setCreatingEmployee] = useState(false);
   const [passwordDialogOpen, setPasswordDialogOpen] = useState(false);
   const [selectedEmployee, setSelectedEmployee] = useState(null);
@@ -466,13 +472,15 @@ export const AuthorityDashboard = () => {
       await axios.post(`${API}/authority/employees`, {
         name: newEmployeeName,
         email: newEmployeeEmail,
-        password: newEmployeePassword
+        password: newEmployeePassword,
+        sub_role: newEmployeeRole
       });
       toast.success('Mitarbeiter erfolgreich angelegt');
       setEmployeeDialogOpen(false);
       setNewEmployeeName('');
       setNewEmployeeEmail('');
       setNewEmployeePassword('');
+      setNewEmployeeRole('field');
       fetchEmployees();
     } catch (error) {
       toast.error(error.response?.data?.detail || 'Fehler beim Anlegen');
@@ -849,14 +857,18 @@ export const AuthorityDashboard = () => {
 
         <Tabs value={activeTab} onValueChange={setActiveTab}>
           <TabsList className="mb-6">
-            <TabsTrigger data-testid="tab-new-job" value="new" className="flex items-center gap-2">
-              <Plus className="h-4 w-4" />
-              Neuer Auftrag
-            </TabsTrigger>
+            {/* Neuer Auftrag - nur für Admin und Außendienst */}
+            {canCreateJobs && (
+              <TabsTrigger data-testid="tab-new-job" value="new" className="flex items-center gap-2">
+                <Plus className="h-4 w-4" />
+                Neuer Auftrag
+              </TabsTrigger>
+            )}
             <TabsTrigger data-testid="tab-my-jobs" value="jobs" className="flex items-center gap-2">
               <FileText className="h-4 w-4" />
               {user?.is_main_authority ? 'Alle Aufträge' : 'Meine Aufträge'}
             </TabsTrigger>
+            {/* Im Hof Tab - für alle sichtbar, aber Freigabe nur für Admin und Hof-Mitarbeiter */}
             {authoritySettings.yard_model === 'authority_yard' && (
               <TabsTrigger data-testid="tab-yard" value="yard" className="flex items-center gap-2">
                 <Building2 className="h-4 w-4" />
@@ -1727,21 +1739,27 @@ export const AuthorityDashboard = () => {
                               <div className="text-right">
                                 <p className="text-2xl font-bold text-green-600">{costs.total.toFixed(2)} €</p>
                                 <p className="text-xs text-slate-500">Geschätzter Betrag</p>
-                                <Button
-                                  className="mt-3 bg-green-500 hover:bg-green-600"
-                                  onClick={() => {
-                                    setSelectedYardJob(job);
-                                    const c = calculateAuthorityCosts(job);
-                                    setReleaseData({
-                                      ...releaseData,
-                                      payment_amount: c.total.toFixed(2)
-                                    });
-                                    setReleaseDialogOpen(true);
-                                  }}
-                                >
-                                  <CheckCircle className="h-4 w-4 mr-2" />
-                                  Fahrzeug freigeben
-                                </Button>
+                                {canReleaseVehicles ? (
+                                  <Button
+                                    className="mt-3 bg-green-500 hover:bg-green-600"
+                                    onClick={() => {
+                                      setSelectedYardJob(job);
+                                      const c = calculateAuthorityCosts(job);
+                                      setReleaseData({
+                                        ...releaseData,
+                                        payment_amount: c.total.toFixed(2)
+                                      });
+                                      setReleaseDialogOpen(true);
+                                    }}
+                                  >
+                                    <CheckCircle className="h-4 w-4 mr-2" />
+                                    Fahrzeug freigeben
+                                  </Button>
+                                ) : (
+                                  <p className="mt-3 text-xs text-amber-600 bg-amber-50 px-2 py-1 rounded">
+                                    Nur Hof-Mitarbeiter können Fahrzeuge freigeben
+                                  </p>
+                                )}
                               </div>
                             </div>
                           </div>
@@ -1952,18 +1970,26 @@ export const AuthorityDashboard = () => {
                             }`}
                         >
                           <div className="flex items-center gap-4">
-                            <div className={`w-10 h-10 rounded-full flex items-center justify-center ${emp.is_blocked ? 'bg-red-200' : 'bg-blue-100'
+                            <div className={`w-10 h-10 rounded-full flex items-center justify-center ${emp.is_blocked ? 'bg-red-200' : emp.sub_role === 'yard' ? 'bg-green-100' : 'bg-blue-100'
                               }`}>
-                              <Users className={`h-5 w-5 ${emp.is_blocked ? 'text-red-600' : 'text-blue-600'}`} />
+                              <Users className={`h-5 w-5 ${emp.is_blocked ? 'text-red-600' : emp.sub_role === 'yard' ? 'text-green-600' : 'text-blue-600'}`} />
                             </div>
                             <div>
                               <p className="font-medium">{emp.name}</p>
                               <p className="text-sm text-slate-500">{emp.email}</p>
                             </div>
-                            <div className="ml-4 px-3 py-1 bg-slate-100 rounded">
+                            <div className="ml-2 px-3 py-1 bg-slate-100 rounded">
                               <span className="text-xs text-slate-500">Dienstnummer:</span>
                               <span className="ml-1 font-mono font-bold text-slate-700">{emp.dienstnummer}</span>
                             </div>
+                            {/* Role Badge */}
+                            <span className={`px-2 py-1 text-xs rounded-full font-medium ${
+                              emp.sub_role === 'yard' 
+                                ? 'bg-green-100 text-green-700' 
+                                : 'bg-blue-100 text-blue-700'
+                            }`}>
+                              {emp.sub_role === 'yard' ? '🏢 Hof' : '🚗 Außendienst'}
+                            </span>
                             {emp.is_blocked && (
                               <span className="px-2 py-1 bg-red-100 text-red-700 text-xs rounded">Gesperrt</span>
                             )}
@@ -2286,6 +2312,25 @@ export const AuthorityDashboard = () => {
                 placeholder="Mindestens 6 Zeichen"
                 required
               />
+            </div>
+            <div className="space-y-2">
+              <Label>Rolle *</Label>
+              <RadioGroup value={newEmployeeRole} onValueChange={setNewEmployeeRole}>
+                <div className="flex items-center space-x-2 p-3 border rounded-lg hover:bg-blue-50 cursor-pointer">
+                  <RadioGroupItem value="field" id="role-field" />
+                  <Label htmlFor="role-field" className="flex-1 cursor-pointer">
+                    <span className="font-medium">🚗 Außendienst</span>
+                    <p className="text-xs text-slate-500">Kann Autos erfassen und Aufträge an Abschleppdienste senden</p>
+                  </Label>
+                </div>
+                <div className="flex items-center space-x-2 p-3 border rounded-lg hover:bg-green-50 cursor-pointer">
+                  <RadioGroupItem value="yard" id="role-yard" />
+                  <Label htmlFor="role-yard" className="flex-1 cursor-pointer">
+                    <span className="font-medium">🏢 Hof-Mitarbeiter</span>
+                    <p className="text-xs text-slate-500">Kann Fahrzeuge am Hof freigeben und Zahlungen entgegennehmen</p>
+                  </Label>
+                </div>
+              </RadioGroup>
             </div>
             <Button type="submit" className="w-full" disabled={creatingEmployee}>
               {creatingEmployee ? 'Wird angelegt...' : 'Mitarbeiter anlegen'}
