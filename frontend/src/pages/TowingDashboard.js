@@ -158,6 +158,16 @@ export const TowingDashboard = () => {
   const [nightSurcharge, setNightSurcharge] = useState(user?.night_surcharge || '');
   const [weekendSurcharge, setWeekendSurcharge] = useState(user?.weekend_surcharge || '');
   const [heavyVehicleSurcharge, setHeavyVehicleSurcharge] = useState(user?.heavy_vehicle_surcharge || '');
+  
+  // NEW: Weight Categories state
+  const [weightCategories, setWeightCategories] = useState(user?.weight_categories || []);
+  const [newWeightCategory, setNewWeightCategory] = useState({
+    name: '',
+    min_weight: '',
+    max_weight: '',
+    surcharge: '',
+    is_default: false
+  });
 
   // NEW: Company Info Dialog state
   const [companyInfoDialogOpen, setCompanyInfoDialogOpen] = useState(false);
@@ -241,6 +251,7 @@ export const TowingDashboard = () => {
     setNightSurcharge(user?.night_surcharge || '');
     setWeekendSurcharge(user?.weekend_surcharge || '');
     setHeavyVehicleSurcharge(user?.heavy_vehicle_surcharge || '');
+    setWeightCategories(user?.weight_categories || []);
   }, [user]);
 
   // Clear selection when tab changes
@@ -589,7 +600,8 @@ export const TowingDashboard = () => {
         empty_trip_fee: parseFloat(emptyTripFee) || null,
         night_surcharge: parseFloat(nightSurcharge) || null,
         weekend_surcharge: parseFloat(weekendSurcharge) || null,
-        heavy_vehicle_surcharge: parseFloat(heavyVehicleSurcharge) || null
+        heavy_vehicle_surcharge: parseFloat(heavyVehicleSurcharge) || null,
+        weight_categories: weightCategories
       });
       updateUser(response.data);
       toast.success('Preiseinstellungen gespeichert!');
@@ -599,6 +611,37 @@ export const TowingDashboard = () => {
     } finally {
       setSavingCosts(false);
     }
+  };
+
+  // NEW: Add weight category
+  const handleAddWeightCategory = () => {
+    if (!newWeightCategory.name.trim()) {
+      toast.error('Bitte einen Namen eingeben');
+      return;
+    }
+    
+    const newCat = {
+      id: crypto.randomUUID(),
+      name: newWeightCategory.name.trim(),
+      min_weight: newWeightCategory.min_weight ? parseFloat(newWeightCategory.min_weight) : null,
+      max_weight: newWeightCategory.max_weight ? parseFloat(newWeightCategory.max_weight) : null,
+      surcharge: parseFloat(newWeightCategory.surcharge) || 0,
+      is_default: newWeightCategory.is_default
+    };
+    
+    setWeightCategories([...weightCategories, newCat]);
+    setNewWeightCategory({
+      name: '',
+      min_weight: '',
+      max_weight: '',
+      surcharge: '',
+      is_default: false
+    });
+  };
+
+  // NEW: Remove weight category
+  const handleRemoveWeightCategory = (categoryId) => {
+    setWeightCategories(weightCategories.filter(cat => cat.id !== categoryId));
   };
 
   // NEW: Open company info dialog
@@ -1691,8 +1734,112 @@ export const TowingDashboard = () => {
                   />
                   <p className="text-xs text-slate-500">Samstag & Sonntag</p>
                 </div>
-                <div className="space-y-2 col-span-2">
-                  <Label>Schwerlastzuschlag ab 3,5t (€)</Label>
+              </div>
+            </div>
+
+            {/* NEW: Gewichtskategorien */}
+            <div className="space-y-4">
+              <div className="flex items-center justify-between">
+                <div>
+                  <h4 className="font-semibold">Gewichtskategorien</h4>
+                  <p className="text-xs text-slate-500">Definieren Sie flexible Zuschläge nach Fahrzeuggewicht</p>
+                </div>
+              </div>
+              
+              {/* Liste der vorhandenen Kategorien */}
+              {weightCategories.length > 0 && (
+                <div className="space-y-2">
+                  {weightCategories.map((cat) => (
+                    <div key={cat.id} className="flex items-center justify-between p-3 bg-slate-50 rounded-lg border">
+                      <div>
+                        <span className="font-medium">{cat.name}</span>
+                        <span className="text-sm text-slate-500 ml-2">
+                          {cat.min_weight != null && cat.max_weight != null ? (
+                            `(${cat.min_weight}t - ${cat.max_weight}t)`
+                          ) : cat.min_weight != null ? (
+                            `(ab ${cat.min_weight}t)`
+                          ) : cat.max_weight != null ? (
+                            `(bis ${cat.max_weight}t)`
+                          ) : (
+                            '(alle Gewichte)'
+                          )}
+                        </span>
+                      </div>
+                      <div className="flex items-center gap-3">
+                        <span className="font-bold text-green-600">
+                          {cat.surcharge > 0 ? `+${cat.surcharge.toFixed(2)} €` : 'Kein Zuschlag'}
+                        </span>
+                        <button
+                          type="button"
+                          onClick={() => handleRemoveWeightCategory(cat.id)}
+                          className="text-red-500 hover:text-red-700"
+                        >
+                          <X className="h-4 w-4" />
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              {/* Neue Kategorie hinzufügen */}
+              <div className="p-4 bg-blue-50 rounded-lg border border-blue-200 space-y-3">
+                <p className="text-sm font-medium text-blue-800">Neue Kategorie hinzufügen</p>
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="col-span-2">
+                    <Input
+                      placeholder="Name (z.B. 'LKW 3,5-7,5t')"
+                      value={newWeightCategory.name}
+                      onChange={(e) => setNewWeightCategory({...newWeightCategory, name: e.target.value})}
+                    />
+                  </div>
+                  <div>
+                    <Input
+                      type="number"
+                      step="0.1"
+                      min="0"
+                      placeholder="Von (t) - leer = kein Minimum"
+                      value={newWeightCategory.min_weight}
+                      onChange={(e) => setNewWeightCategory({...newWeightCategory, min_weight: e.target.value})}
+                    />
+                  </div>
+                  <div>
+                    <Input
+                      type="number"
+                      step="0.1"
+                      min="0"
+                      placeholder="Bis (t) - leer = kein Maximum"
+                      value={newWeightCategory.max_weight}
+                      onChange={(e) => setNewWeightCategory({...newWeightCategory, max_weight: e.target.value})}
+                    />
+                  </div>
+                  <div className="col-span-2">
+                    <Input
+                      type="number"
+                      step="0.01"
+                      min="0"
+                      placeholder="Zuschlag in € (0 = kein Zuschlag)"
+                      value={newWeightCategory.surcharge}
+                      onChange={(e) => setNewWeightCategory({...newWeightCategory, surcharge: e.target.value})}
+                    />
+                  </div>
+                </div>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={handleAddWeightCategory}
+                  className="w-full"
+                >
+                  <Plus className="h-4 w-4 mr-2" />
+                  Kategorie hinzufügen
+                </Button>
+              </div>
+
+              {/* Alt: Fester Schwerlastzuschlag (wird ausgeblendet wenn Kategorien existieren) */}
+              {weightCategories.length === 0 && (
+                <div className="space-y-2 p-3 bg-amber-50 rounded-lg border border-amber-200">
+                  <p className="text-xs text-amber-700">Alternativ: Fester Schwerlastzuschlag (ab 3,5t)</p>
                   <Input
                     type="number"
                     step="0.01"
@@ -1702,7 +1849,7 @@ export const TowingDashboard = () => {
                     placeholder="0.00"
                   />
                 </div>
-              </div>
+              )}
             </div>
 
             {/* Beispielrechnung */}

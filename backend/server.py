@@ -722,6 +722,8 @@ class UserResponse(BaseModel):
     night_surcharge: Optional[float] = None
     weekend_surcharge: Optional[float] = None
     heavy_vehicle_surcharge: Optional[float] = None
+    # NEW: Flexible weight categories
+    weight_categories: Optional[List[dict]] = None
 
 class TokenResponse(BaseModel):
     access_token: str
@@ -744,6 +746,15 @@ class VehicleCategoryPrice(BaseModel):
 class VehicleCategoryPriceList(BaseModel):
     categories: List[VehicleCategoryPrice]
 
+# NEW: Weight category model for flexible pricing
+class WeightCategory(BaseModel):
+    id: Optional[str] = None
+    name: str  # z.B. "PKW bis 3,5t", "LKW 3,5-7,5t"
+    min_weight: Optional[float] = None  # Mindestgewicht in Tonnen (None = kein Minimum)
+    max_weight: Optional[float] = None  # Maximalgewicht in Tonnen (None = kein Maximum)
+    surcharge: float = 0  # Zuschlag in Euro
+    is_default: bool = False  # Standard-Kategorie (kein Zuschlag)
+
 # NEW: Extended pricing settings for towing services
 class PricingSettingsRequest(BaseModel):
     # Zeitbasiert
@@ -758,7 +769,9 @@ class PricingSettingsRequest(BaseModel):
     empty_trip_fee: Optional[float] = None  # Leerfahrt
     night_surcharge: Optional[float] = None  # Nachtzuschlag
     weekend_surcharge: Optional[float] = None  # Wochenendzuschlag
-    heavy_vehicle_surcharge: Optional[float] = None  # Schwerlast ab 3,5t
+    heavy_vehicle_surcharge: Optional[float] = None  # DEPRECATED: Use weight_categories instead
+    # NEW: Flexible Gewichtskategorien
+    weight_categories: Optional[List[WeightCategory]] = None
 
 class ApproveServiceRequest(BaseModel):
     approved: bool
@@ -804,6 +817,10 @@ class JobCreate(BaseModel):
     sicherstellung_reason: Optional[str] = None
     vehicle_category: Optional[str] = None  # "under_3_5t" or "over_3_5t"
     vehicle_category_id: Optional[str] = None  # Reference to vehicle category for dynamic pricing
+    # NEW: Weight category for flexible pricing (from towing service)
+    weight_category_id: Optional[str] = None
+    weight_category_name: Optional[str] = None
+    weight_category_surcharge: Optional[float] = None
     ordering_authority: Optional[str] = None
     contact_attempts: Optional[bool] = None
     contact_attempts_notes: Optional[str] = None
@@ -875,6 +892,10 @@ class JobResponse(BaseModel):
     sicherstellung_reason: Optional[str] = None
     vehicle_category: Optional[str] = None
     vehicle_category_id: Optional[str] = None  # Referenz zur Preiskategorie
+    # NEW: Weight category for flexible pricing
+    weight_category_id: Optional[str] = None  # Referenz zur Gewichtskategorie des Abschleppdienstes
+    weight_category_name: Optional[str] = None  # Name der Gewichtskategorie (für Anzeige/PDF)
+    weight_category_surcharge: Optional[float] = None  # Zuschlag der Gewichtskategorie
     ordering_authority: Optional[str] = None
     contact_attempts: Optional[bool] = None
     contact_attempts_notes: Optional[str] = None
@@ -1768,6 +1789,17 @@ async def update_pricing_settings(data: PricingSettingsRequest, user: dict = Dep
     if data.heavy_vehicle_surcharge is not None:
         update_data["heavy_vehicle_surcharge"] = data.heavy_vehicle_surcharge
     
+    # NEW: Handle weight categories
+    if data.weight_categories is not None:
+        # Convert to dict list and generate IDs if missing
+        weight_cats = []
+        for cat in data.weight_categories:
+            cat_dict = cat.model_dump() if hasattr(cat, 'model_dump') else cat.dict()
+            if not cat_dict.get("id"):
+                cat_dict["id"] = str(uuid.uuid4())
+            weight_cats.append(cat_dict)
+        update_data["weight_categories"] = weight_cats
+    
     if update_data:
         await db.users.update_one({"id": user["id"]}, {"$set": update_data})
     
@@ -1954,6 +1986,20 @@ async def calculate_category_price(
         ]
     }
 
+# NEW: Get weight categories for a specific towing service (for authorities to use in job creation)
+@api_router.get("/services/{service_id}/weight-categories")
+async def get_service_weight_categories(service_id: str, user: dict = Depends(get_current_user)):
+    """Get weight categories defined by a towing service for use in job creation dropdown"""
+    if user["role"] not in [UserRole.AUTHORITY, UserRole.ADMIN]:
+        raise HTTPException(status_code=403, detail="Nicht berechtigt")
+    
+    service = await db.users.find_one({"id": service_id, "role": UserRole.TOWING_SERVICE})
+    if not service:
+        raise HTTPException(status_code=404, detail="Abschleppdienst nicht gefunden")
+    
+    weight_categories = service.get("weight_categories", [])
+    return {"weight_categories": weight_categories, "service_name": service.get("company_name")}
+
 # NEW: Calculate job costs based on service pricing OR vehicle category
 @api_router.get("/jobs/{job_id}/calculate-costs")
 async def calculate_job_costs(job_id: str, user: dict = Depends(get_current_user)):
@@ -2083,8 +2129,17 @@ async def calculate_job_costs(job_id: str, user: dict = Depends(get_current_user
             breakdown.append({"label": "Leerfahrt", "amount": empty_fee})
             total += empty_fee
     
-    # Heavy vehicle surcharge
-    if job.get("vehicle_category") == "over_3_5t":
+    # Heavy vehicle surcharge - NEW: Use weight_category if available, otherwise fall back to old logic
+    weight_category_surcharge_applied = False
+    if job.get("weight_category_surcharge") and job.get("weight_category_surcharge") > 0:
+        weight_cat_name = job.get("weight_category_name", "Gewichtskategorie")
+        weight_surcharge = job.get("weight_category_surcharge", 0)
+        breakdown.append({"label": f"Zuschlag {weight_cat_name}", "amount": weight_surcharge})
+        total += weight_surcharge
+        weight_category_surcharge_applied = True
+    
+    # Fallback to old heavy_vehicle_surcharge if no weight category was used
+    if not weight_category_surcharge_applied and job.get("vehicle_category") == "over_3_5t":
         heavy_surcharge = service.get("heavy_vehicle_surcharge", 0) or 0
         if heavy_surcharge > 0:
             breakdown.append({"label": "Schwerlastzuschlag (ab 3,5t)", "amount": heavy_surcharge})
@@ -2552,6 +2607,10 @@ async def create_job(
         "calculated_costs": None,
         # NEW: Vehicle category for dynamic pricing
         "vehicle_category_id": data.vehicle_category_id,
+        # NEW: Weight category for flexible surcharges
+        "weight_category_id": data.weight_category_id,
+        "weight_category_name": data.weight_category_name,
+        "weight_category_surcharge": data.weight_category_surcharge,
         # NEW: Track if job was created by towing service
         "created_by_service": user["role"] == UserRole.TOWING_SERVICE,
         "idempotency_key": idempotency_key

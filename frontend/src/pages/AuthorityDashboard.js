@@ -133,6 +133,11 @@ export const AuthorityDashboard = () => {
   const [contactAttemptsNotes, setContactAttemptsNotes] = useState('');
   const [estimatedVehicleValue, setEstimatedVehicleValue] = useState('');
 
+  // NEW: Weight categories from towing service
+  const [serviceWeightCategories, setServiceWeightCategories] = useState([]);
+  const [selectedWeightCategoryId, setSelectedWeightCategoryId] = useState('');
+  const [selectedWeightCategory, setSelectedWeightCategory] = useState(null);
+
   // NEW: Edit/Delete Job state
   const [editJobDialogOpen, setEditJobDialogOpen] = useState(false);
   const [editingJobData, setEditingJobData] = useState(false);
@@ -247,6 +252,21 @@ export const AuthorityDashboard = () => {
       setVehicleCategories(response.data);
     } catch (error) {
       console.error('Error fetching vehicle categories:', error);
+    }
+  };
+
+  // NEW: Fetch weight categories when a service is selected
+  const fetchServiceWeightCategories = async (serviceId) => {
+    if (!serviceId) {
+      setServiceWeightCategories([]);
+      return;
+    }
+    try {
+      const response = await axios.get(`${API}/services/${serviceId}/weight-categories`);
+      setServiceWeightCategories(response.data.weight_categories || []);
+    } catch (error) {
+      console.error('Error fetching weight categories:', error);
+      setServiceWeightCategories([]);
     }
   };
 
@@ -414,6 +434,10 @@ export const AuthorityDashboard = () => {
         sicherstellung_reason: jobType === 'sicherstellung' ? sicherstellungReason : null,
         vehicle_category: vehicleCategory || null,
         vehicle_category_id: selectedVehicleCategoryId || null,
+        // NEW: Weight category from towing service
+        weight_category_id: selectedWeightCategoryId || null,
+        weight_category_name: selectedWeightCategory?.name || null,
+        weight_category_surcharge: selectedWeightCategory?.surcharge || null,
         ordering_authority: jobType === 'sicherstellung' ? orderingAuthority : null,
         contact_attempts: jobType === 'sicherstellung' ? contactAttempts : null,
         contact_attempts_notes: jobType === 'sicherstellung' && contactAttempts ? contactAttemptsNotes : null,
@@ -441,6 +465,9 @@ export const AuthorityDashboard = () => {
       setSicherstellungReason('');
       setVehicleCategory('');
       setSelectedVehicleCategoryId('');
+      setSelectedWeightCategoryId('');
+      setSelectedWeightCategory(null);
+      setServiceWeightCategories([]);
       setOrderingAuthority('');
       setContactAttempts(false);
       setContactAttemptsNotes('');
@@ -752,6 +779,56 @@ export const AuthorityDashboard = () => {
                       )}
                     </div>
 
+                    {/* NEW: Gewichtskategorie vom Abschleppdienst */}
+                    {selectedServiceId && serviceWeightCategories.length > 0 && (
+                      <div className="space-y-2 p-4 bg-purple-50 border border-purple-200 rounded-lg">
+                        <Label className="text-purple-800">Fahrzeuggewicht (Zuschlag)</Label>
+                        <Select 
+                          value={selectedWeightCategoryId} 
+                          onValueChange={(value) => {
+                            setSelectedWeightCategoryId(value);
+                            const cat = serviceWeightCategories.find(c => c.id === value);
+                            setSelectedWeightCategory(cat || null);
+                          }}
+                        >
+                          <SelectTrigger>
+                            <SelectValue placeholder="Gewichtskategorie wählen..." />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {serviceWeightCategories.map(cat => (
+                              <SelectItem key={cat.id} value={cat.id}>
+                                <div className="flex items-center justify-between w-full gap-4">
+                                  <span>{cat.name}</span>
+                                  <span className={cat.surcharge > 0 ? "text-orange-600 font-medium" : "text-green-600 font-medium"}>
+                                    {cat.surcharge > 0 ? `+${cat.surcharge.toFixed(2)} €` : 'Kein Zuschlag'}
+                                  </span>
+                                </div>
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                        {selectedWeightCategory && (
+                          <div className={`${selectedWeightCategory.surcharge > 0 ? 'bg-orange-50 border-orange-200' : 'bg-green-50 border-green-200'} border rounded-lg p-3 mt-2`}>
+                            <div className="flex justify-between text-sm">
+                              <span className={selectedWeightCategory.surcharge > 0 ? 'text-orange-700' : 'text-green-700'}>
+                                {selectedWeightCategory.name}
+                                {selectedWeightCategory.min_weight != null && selectedWeightCategory.max_weight != null ? (
+                                  ` (${selectedWeightCategory.min_weight}t - ${selectedWeightCategory.max_weight}t)`
+                                ) : selectedWeightCategory.min_weight != null ? (
+                                  ` (ab ${selectedWeightCategory.min_weight}t)`
+                                ) : selectedWeightCategory.max_weight != null ? (
+                                  ` (bis ${selectedWeightCategory.max_weight}t)`
+                                ) : ''}
+                              </span>
+                              <span className={`font-bold ${selectedWeightCategory.surcharge > 0 ? 'text-orange-800' : 'text-green-800'}`}>
+                                {selectedWeightCategory.surcharge > 0 ? `+${selectedWeightCategory.surcharge.toFixed(2)} €` : 'Kein Zuschlag'}
+                              </span>
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    )}
+
                     {/* Sicherstellung-specific fields */}
                     {jobType === 'sicherstellung' && (
                       <div className="space-y-4 p-4 bg-amber-50 border border-amber-200 rounded-lg">
@@ -998,7 +1075,15 @@ export const AuthorityDashboard = () => {
                   </CardHeader>
                   <CardContent className="space-y-4">
                     {linkedServices.length > 0 ? (
-                      <Select value={selectedServiceId} onValueChange={setSelectedServiceId}>
+                      <Select 
+                        value={selectedServiceId} 
+                        onValueChange={(value) => {
+                          setSelectedServiceId(value);
+                          fetchServiceWeightCategories(value);
+                          setSelectedWeightCategoryId('');
+                          setSelectedWeightCategory(null);
+                        }}
+                      >
                         <SelectTrigger data-testid="job-service-select">
                           <SelectValue placeholder="Abschleppdienst auswählen" />
                         </SelectTrigger>
