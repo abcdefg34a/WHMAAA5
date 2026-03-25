@@ -2338,10 +2338,18 @@ async def update_authority_settings(data: AuthoritySettingsUpdate, user: dict = 
     if update_data:
         await db.users.update_one({"id": authority_id}, {"$set": update_data})
         # Also update employees to inherit settings
+        employee_update = {}
         if data.yard_model is not None:
+            employee_update["yard_model"] = data.yard_model
+        if data.yards is not None:
+            employee_update["yards"] = update_data.get("yards", [])
+        if data.price_categories is not None:
+            employee_update["price_categories"] = update_data.get("price_categories", [])
+        
+        if employee_update:
             await db.users.update_many(
                 {"parent_authority_id": authority_id},
-                {"$set": {"yard_model": data.yard_model}}
+                {"$set": employee_update}
             )
     
     updated_user = await db.users.find_one({"id": user["id"]}, {"_id": 0, "password": 0})
@@ -2912,10 +2920,18 @@ async def get_jobs(
     
     # Filter by role
     if user["role"] == UserRole.AUTHORITY:
-        # Main authority sees all jobs from their authority, employees see only their own
+        # Get the main authority ID (for employees, use parent_authority_id)
+        authority_id = get_authority_id(user)
+        sub_role = get_authority_sub_role(user)
+        
         if user.get("is_main_authority"):
+            # Main authority sees all jobs from their authority
             query["authority_id"] = user["id"]
+        elif sub_role == AuthoritySubRole.YARD:
+            # Yard employees see ALL jobs from the authority (they need to release any vehicle)
+            query["authority_id"] = authority_id
         else:
+            # Field employees see only their own created jobs
             query["created_by_id"] = user["id"]
     elif user["role"] == UserRole.TOWING_SERVICE:
         query["assigned_service_id"] = user["id"]
@@ -2969,8 +2985,14 @@ async def get_jobs_count(
     
     # Filter by role
     if user["role"] == UserRole.AUTHORITY:
+        authority_id = get_authority_id(user)
+        sub_role = get_authority_sub_role(user)
+        
         if user.get("is_main_authority"):
             query["authority_id"] = user["id"]
+        elif sub_role == AuthoritySubRole.YARD:
+            # Yard employees see ALL jobs from the authority
+            query["authority_id"] = authority_id
         else:
             query["created_by_id"] = user["id"]
     elif user["role"] == UserRole.TOWING_SERVICE:
