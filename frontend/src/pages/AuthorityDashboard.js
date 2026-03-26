@@ -158,7 +158,7 @@ export const AuthorityDashboard = () => {
   const [selectedPriceCategory, setSelectedPriceCategory] = useState(null);
   const [newPriceCategory, setNewPriceCategory] = useState({
     name: '',
-    base_price: '',
+    base_fee: '',
     daily_rate: ''
   });
   const [newYard, setNewYard] = useState({
@@ -240,14 +240,14 @@ export const AuthorityDashboard = () => {
 
   // Add price category
   const handleAddPriceCategory = () => {
-    if (!newPriceCategory.name.trim() || !newPriceCategory.base_price) {
+    if (!newPriceCategory.name.trim() || !newPriceCategory.base_fee) {
       toast.error('Name und Grundpreis sind erforderlich');
       return;
     }
     const newCat = {
       id: crypto.randomUUID(),
       name: newPriceCategory.name.trim(),
-      base_price: parseFloat(newPriceCategory.base_price) || 0,
+      base_fee: parseFloat(newPriceCategory.base_fee) || 0,
       daily_rate: parseFloat(newPriceCategory.daily_rate) || 0,
       is_active: true
     };
@@ -255,7 +255,7 @@ export const AuthorityDashboard = () => {
       ...authoritySettings,
       price_categories: [...(authoritySettings.price_categories || []), newCat]
     });
-    setNewPriceCategory({ name: '', base_price: '', daily_rate: '' });
+    setNewPriceCategory({ name: '', base_fee: '', daily_rate: '' });
   };
 
   // Remove price category
@@ -1069,7 +1069,7 @@ export const AuthorityDashboard = () => {
                               <SelectItem key={cat.id} value={cat.id}>
                                 <div className="flex items-center justify-between w-full gap-4">
                                   <span>{cat.name}</span>
-                                  <span className="text-green-600 font-medium">{cat.base_price?.toFixed(2)} €</span>
+                                  <span className="text-green-600 font-medium">{cat.base_fee?.toFixed(2)} €</span>
                                 </div>
                               </SelectItem>
                             ))}
@@ -1079,7 +1079,7 @@ export const AuthorityDashboard = () => {
                           <div className="bg-green-100 border border-green-300 rounded-lg p-3 mt-2">
                             <div className="flex justify-between text-sm">
                               <span className="text-green-700">Grundpreis (erste 24h):</span>
-                              <span className="font-bold text-green-800">{selectedPriceCategory.base_price?.toFixed(2)} €</span>
+                              <span className="font-bold text-green-800">{selectedPriceCategory.base_fee?.toFixed(2)} €</span>
                             </div>
                             <div className="flex justify-between text-sm mt-1">
                               <span className="text-green-700">Je weitere 24h:</span>
@@ -2139,7 +2139,7 @@ export const AuthorityDashboard = () => {
                             </div>
                             <div className="flex items-center gap-4">
                               <div className="text-sm">
-                                <span className="text-green-600 font-bold">{cat.base_price?.toFixed(2)} €</span>
+                                <span className="text-green-600 font-bold">{cat.base_fee?.toFixed(2)} €</span>
                                 <span className="text-slate-500 ml-2">+ {cat.daily_rate?.toFixed(2)} €/Tag</span>
                               </div>
                               <button
@@ -2168,8 +2168,8 @@ export const AuthorityDashboard = () => {
                           type="number"
                           step="0.01"
                           placeholder="Grundpreis (€)"
-                          value={newPriceCategory.base_price}
-                          onChange={(e) => setNewPriceCategory({...newPriceCategory, base_price: e.target.value})}
+                          value={newPriceCategory.base_fee}
+                          onChange={(e) => setNewPriceCategory({...newPriceCategory, base_fee: e.target.value})}
                         />
                         <Input
                           type="number"
