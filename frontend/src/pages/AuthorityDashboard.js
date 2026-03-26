@@ -637,7 +637,7 @@ export const AuthorityDashboard = () => {
         // Authority pricing (when target_yard = "authority_yard")
         authority_price_category_id: targetYard === 'authority_yard' ? selectedPriceCategoryId : null,
         authority_price_category_name: targetYard === 'authority_yard' ? selectedPriceCategory?.name : null,
-        authority_base_price: targetYard === 'authority_yard' ? selectedPriceCategory?.base_price : null,
+        authority_base_price: targetYard === 'authority_yard' ? selectedPriceCategory?.base_fee : null,
         authority_daily_rate: targetYard === 'authority_yard' ? selectedPriceCategory?.daily_rate : null,
         // Weight category from towing service (when target_yard = "service_yard")
         weight_category_id: targetYard === 'service_yard' ? selectedWeightCategoryId : null,
