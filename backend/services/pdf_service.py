@@ -124,10 +124,10 @@ async def generate_job_pdf(job: dict, db):
     # ===== FAHRZEUGDATEN =====
     story.append(Paragraph("Fahrzeugdaten", heading_style))
     vehicle_data = [
-        [Paragraph("<b>Kennzeichen</b>", cell_style), Paragraph(job.get('license_plate', '-'), cell_style)],
-        [Paragraph("<b>FIN</b>", cell_style), Paragraph(job.get('vin', '-'), cell_style)],
-        [Paragraph("<b>Marke/Modell</b>", cell_style), Paragraph(job.get('vehicle_make_model', '-'), cell_style)],
-        [Paragraph("<b>Farbe</b>", cell_style), Paragraph(job.get('vehicle_color', '-'), cell_style)],
+        [Paragraph("<b>Kennzeichen</b>", cell_style), Paragraph(job.get('license_plate') or '-', cell_style)],
+        [Paragraph("<b>FIN</b>", cell_style), Paragraph(job.get('vin') or '-', cell_style)],
+        [Paragraph("<b>Marke/Modell</b>", cell_style), Paragraph(job.get('vehicle_make_model') or '-', cell_style)],
+        [Paragraph("<b>Farbe</b>", cell_style), Paragraph(job.get('vehicle_color') or '-', cell_style)],
     ]
     vehicle_table = Table(vehicle_data, colWidths=[4.5*cm, 12.5*cm])
     vehicle_table.setStyle(TableStyle([
@@ -149,14 +149,14 @@ async def generate_job_pdf(job: dict, db):
         'abandoned': 'Verlassen',
         'accident': 'Unfall',
         'other': 'Sonstiges'
-    }.get(job.get('tow_reason'), job.get('tow_reason', '-'))
+    }.get(job.get('tow_reason'), job.get('tow_reason') or '-')
     
     order_data = [
         [Paragraph("<b>Abschleppgrund</b>", cell_style), Paragraph(tow_reason_text, cell_style)],
-        [Paragraph("<b>Standort</b>", cell_style), Paragraph(wrap_text(job.get('location_address', '-'), 55), cell_style)],
+        [Paragraph("<b>Standort</b>", cell_style), Paragraph(wrap_text(job.get('location_address') or '-', 55), cell_style)],
     ]
     if job.get('notes'):
-        order_data.append([Paragraph("<b>Bemerkungen</b>", cell_style), Paragraph(wrap_text(job.get('notes', '-'), 55), cell_style)])
+        order_data.append([Paragraph("<b>Bemerkungen</b>", cell_style), Paragraph(wrap_text(job.get('notes') or '-', 55), cell_style)])
     
     order_table = Table(order_data, colWidths=[4.5*cm, 12.5*cm])
     order_table.setStyle(TableStyle([
@@ -203,8 +203,9 @@ async def generate_job_pdf(job: dict, db):
     # ===== HALTERDATEN (if released) =====
     if job.get('owner_first_name'):
         story.append(Paragraph("Halterdaten", heading_style))
+        owner_name = f"{job.get('owner_first_name') or ''} {job.get('owner_last_name') or ''}".strip() or '-'
         owner_data = [
-            [Paragraph("<b>Name</b>", cell_style), Paragraph(f"{job.get('owner_first_name') or ''} {job.get('owner_last_name') or ''}", cell_style)],
+            [Paragraph("<b>Name</b>", cell_style), Paragraph(owner_name, cell_style)],
             [Paragraph("<b>Adresse</b>", cell_style), Paragraph(wrap_text(job.get('owner_address') or '-', 55), cell_style)],
         ]
         owner_table = Table(owner_data, colWidths=[4.5*cm, 12.5*cm])
@@ -354,7 +355,7 @@ async def generate_job_pdf(job: dict, db):
         if job.get('created_by_authority'):
             yard_data.insert(0, [
                 Paragraph("<b>Behörde</b>", cell_style), 
-                Paragraph(job.get('created_by_authority'), cell_style)
+                Paragraph(job.get('created_by_authority') or '-', cell_style)
             ])
         yard_table = Table(yard_data, colWidths=[4.5*cm, 12.5*cm])
         yard_table.setStyle(TableStyle([
@@ -376,7 +377,7 @@ async def generate_job_pdf(job: dict, db):
                 [Paragraph("<b>Hof-Adresse</b>", cell_style), Paragraph(wrap_text(service.get('yard_address') or '-', 55), cell_style)],
             ]
             if service.get('phone'):
-                service_yard_data.append([Paragraph("<b>Telefon</b>", cell_style), Paragraph(service['phone'], cell_style)])
+                service_yard_data.append([Paragraph("<b>Telefon</b>", cell_style), Paragraph(service.get('phone') or '-', cell_style)])
             
             service_yard_table = Table(service_yard_data, colWidths=[4.5*cm, 12.5*cm])
             service_yard_table.setStyle(TableStyle([
