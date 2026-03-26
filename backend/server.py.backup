@@ -4402,6 +4402,646 @@ async def generate_pdf(job_id: str, token: str):
     
     # Use PDF service to generate the PDF
     return await generate_job_pdf(job, db)
+    """Generate PDF - secured by short-lived token"""
+    try:
+        payload = jwt.decode(token, JWT_SECRET, algorithms=[JWT_ALGORITHM])
+        if payload.get("job_id") != job_id or payload.get("action") != "download_pdf":
+            raise HTTPException(status_code=403, detail="Ungültiger Token")
+    except jwt.ExpiredSignatureError:
+        raise HTTPException(status_code=403, detail="Token abgelaufen (nur 5 min gültig)")
+    except jwt.InvalidTokenError:
+        raise HTTPException(status_code=403, detail="Ungültiger Token")
+    job = await db.jobs.find_one({"id": job_id}, {"_id": 0})
+    if not job:
+        raise HTTPException(status_code=404, detail="Job not found")
+    
+    # NEW: Track PDF generation timestamp (for freeze logic)
+    # PDF is frozen after 10 days - we won't reset pdf_generated_at unless user explicitly requests it
+    pdf_generated_at = job.get("pdf_generated_at")
+    
+    # Get service info
+    service = None
+    if job.get("assigned_service_id"):
+        service = await db.users.find_one({"id": job["assigned_service_id"]}, {"_id": 0, "password": 0})
+    
+    buffer = BytesIO()
+    doc = SimpleDocTemplate(
+        buffer, 
+        pagesize=A4, 
+        rightMargin=1.5*cm, 
+        leftMargin=1.5*cm, 
+        topMargin=1.5*cm, 
+        bottomMargin=1.5*cm
+    )
+    
+    styles = getSampleStyleSheet()
+    
+    # Custom styles
+    title_style = ParagraphStyle(
+        'CustomTitle', 
+        parent=styles['Heading1'], 
+        fontSize=20, 
+        spaceAfter=5,
+        alignment=1,  # Center
+        textColor=colors.HexColor('#1e293b')
+    )
+    subtitle_style = ParagraphStyle(
+        'Subtitle', 
+        parent=styles['Normal'], 
+        fontSize=11, 
+        spaceAfter=20,
+        alignment=1,  # Center
+        textColor=colors.HexColor('#64748b')
+    )
+    heading_style = ParagraphStyle(
+        'CustomHeading', 
+        parent=styles['Heading2'], 
+        fontSize=12, 
+        spaceAfter=8, 
+        spaceBefore=15,
+        textColor=colors.HexColor('#1e293b'),
+        borderPadding=(0, 0, 5, 0)
+    )
+    cell_style = ParagraphStyle(
+        'CellStyle',
+        parent=styles['Normal'],
+        fontSize=9,
+        leading=12,
+        wordWrap='CJK'
+    )
+    
+    story = []
+    
+    # ===== HEADER =====
+    # Check if this is an empty trip
+    is_empty_trip = job.get('is_empty_trip', False)
+    
+    # Determine who issued the invoice (who released the vehicle)
+    issuer = None
+    issuer_ust_id = None
+    
+    # Get releaser info (always show, even if not released yet)
+    if job.get('target_yard') == 'authority_yard':
+        # Authority yard -> Authority's USt-ID
+        authority = await db.users.find_one(
+            {"id": job.get('authority_id')},
+            {"_id": 0, "ust_id": 1, "authority_name": 1, "department": 1}
+        )
+        if authority:
+            issuer = authority.get('authority_name', 'Behörde')
+            issuer_ust_id = authority.get('ust_id')
+    else:
+        # Service yard -> Towing service's USt-ID
+        if service:
+            issuer = service.get('company_name', 'Abschleppdienst')
+            issuer_ust_id = service.get('ust_id')
+    
+    # Generate invoice number (RE-YYYY-JobNumber)
+    from datetime import datetime
+    invoice_number = f"RE-{datetime.now().year}-{job['job_number'].split('-')[-1]}"
+    
+    if is_empty_trip:
+        story.append(Paragraph("LEERFAHRT-RECHNUNG", title_style))
+    else:
+        story.append(Paragraph("RECHNUNG", title_style))
+    
+    # Invoice number and issuer info
+    subtitle_text = f"Rechnungsnummer: {invoice_number}"
+    if issuer:
+        subtitle_text += f" | Ausgestellt von: {issuer}"
+    story.append(Paragraph(subtitle_text, subtitle_style))
+    
+    # USt-ID if available
+    if issuer_ust_id:
+        ust_style = ParagraphStyle(
+            'UstStyle',
+            parent=styles['Normal'],
+            fontSize=9,
+            spaceAfter=10,
+            alignment=1,
+            textColor=colors.HexColor('#64748b')
+        )
+        story.append(Paragraph(f"USt-IdNr.: {issuer_ust_id}", ust_style))
+    
+    # Horizontal line
+    story.append(Spacer(1, 5))
+    line_table = Table([['']], colWidths=[17*cm])
+    line_table.setStyle(TableStyle([
+        ('LINEABOVE', (0, 0), (-1, 0), 2, colors.HexColor('#f97316')),
+    ]))
+    story.append(line_table)
+    story.append(Spacer(1, 10))
+    
+    # ===== EMPTY TRIP DETAILS (if applicable) =====
+    if is_empty_trip:
+        story.append(Paragraph("Leerfahrt-Details", heading_style))
+        
+        # Parse service notes for empty trip reason
+        service_notes = job.get('service_notes', '')
+        empty_trip_reason = 'Fahrzeug war nicht mehr vor Ort'
+        if 'Fahrer vor Ort angetroffen' in service_notes:
+            empty_trip_reason = 'Fahrer vor Ort angetroffen'
+        
+        empty_data = [
+            [Paragraph("<b>Status</b>", cell_style), Paragraph("<b>LEERFAHRT</b>", cell_style)],
+            [Paragraph("<b>Grund</b>", cell_style), Paragraph(empty_trip_reason, cell_style)],
+        ]
+        
+        # Add driver info if present
+        if job.get('owner_first_name') and job.get('owner_last_name'):
+            empty_data.append([
+                Paragraph("<b>Angetroffene Person</b>", cell_style), 
+                Paragraph(f"{job['owner_first_name']} {job['owner_last_name']}", cell_style)
+            ])
+            if job.get('owner_address'):
+                empty_data.append([
+                    Paragraph("<b>Adresse</b>", cell_style), 
+                    Paragraph(job['owner_address'], cell_style)
+                ])
+        
+        # Payment info
+        if job.get('payment_amount'):
+            payment_method_labels = {'cash': 'Bar', 'card': 'Karte', 'invoice': 'Rechnung'}
+            payment_method = payment_method_labels.get(job.get('payment_method', ''), job.get('payment_method', '-'))
+            empty_data.append([
+                Paragraph("<b>Leerfahrt-Kosten</b>", cell_style), 
+                Paragraph(f"{job['payment_amount']:.2f} €", cell_style)
+            ])
+            empty_data.append([
+                Paragraph("<b>Zahlungsart</b>", cell_style), 
+                Paragraph(payment_method, cell_style)
+            ])
+        
+        empty_table = Table(empty_data, colWidths=[5*cm, 12*cm])
+        empty_table.setStyle(TableStyle([
+            ('BACKGROUND', (0, 0), (0, -1), colors.HexColor('#fff7ed')),
+            ('BACKGROUND', (1, 0), (1, 0), colors.HexColor('#fed7aa')),
+            ('GRID', (0, 0), (-1, -1), 0.5, colors.HexColor('#fdba74')),
+            ('VALIGN', (0, 0), (-1, -1), 'TOP'),
+            ('TOPPADDING', (0, 0), (-1, -1), 6),
+            ('BOTTOMPADDING', (0, 0), (-1, -1), 6),
+            ('LEFTPADDING', (0, 0), (-1, -1), 8),
+            ('RIGHTPADDING', (0, 0), (-1, -1), 8),
+        ]))
+        story.append(empty_table)
+        story.append(Spacer(1, 15))
+    
+    # ===== AUFTRAGSTYP =====
+    job_type = job.get('job_type', 'towing')
+    job_type_label = 'Sicherstellung (Polizeilich)' if job_type == 'sicherstellung' else 'Abschleppen (Falschparker)'
+    
+    story.append(Paragraph("Auftragsdetails", heading_style))
+    order_data = [
+        [Paragraph("<b>Auftragstyp</b>", cell_style), Paragraph(f"<b>{job_type_label}</b>", cell_style)],
+    ]
+    
+    # Sicherstellung-specific details
+    if job_type == 'sicherstellung':
+        # Reason mapping
+        reason_labels = {
+            'betriebsmittel': 'Auslaufende Betriebsmittel',
+            'gestohlen': 'Gestohlenes Fahrzeug / Fahndung',
+            'eigentumssicherung': 'Eigentumssicherung (wertvoll/ungesichert)',
+            'technische_maengel': 'Technische Mängel / Beweissicherung',
+            'strafrechtlich': 'Strafrechtliche Beschlagnahme'
+        }
+        sicherstellung_reason = job.get('sicherstellung_reason', '')
+        reason_text = reason_labels.get(sicherstellung_reason, sicherstellung_reason or '-')
+        order_data.append([
+            Paragraph("<b>Grund der Sicherstellung</b>", cell_style), 
+            Paragraph(reason_text, cell_style)
+        ])
+        
+        # Vehicle category
+        vehicle_cat = job.get('vehicle_category', '')
+        cat_label = 'PKW/Krad bis 3,5t' if vehicle_cat == 'under_3_5t' else 'Fahrzeuge ab 3,5t' if vehicle_cat == 'over_3_5t' else '-'
+        order_data.append([
+            Paragraph("<b>Fahrzeugkategorie</b>", cell_style), 
+            Paragraph(cat_label, cell_style)
+        ])
+        
+        # Ordering authority
+        authority_labels = {
+            'schutzpolizei': 'Schutzpolizei',
+            'kriminalpolizei': 'Kriminalpolizei',
+            'staatsanwaltschaft': 'Staatsanwaltschaft',
+            'sachverstaendiger': 'Technischer Sachverständiger'
+        }
+        ordering_auth = job.get('ordering_authority', '')
+        auth_text = authority_labels.get(ordering_auth, ordering_auth or '-')
+        order_data.append([
+            Paragraph("<b>Anordnende Stelle</b>", cell_style), 
+            Paragraph(auth_text, cell_style)
+        ])
+        
+        # Contact attempts
+        contact_attempts = job.get('contact_attempts')
+        if contact_attempts is not None:
+            contact_text = 'Ja' if contact_attempts else 'Nein'
+            if contact_attempts and job.get('contact_attempts_notes'):
+                contact_text += f" - {job['contact_attempts_notes']}"
+            order_data.append([
+                Paragraph("<b>Telefonische Kontaktversuche</b>", cell_style), 
+                Paragraph(wrap_text(contact_text, 50), cell_style)
+            ])
+        
+        # Estimated vehicle value
+        if job.get('estimated_vehicle_value'):
+            order_data.append([
+                Paragraph("<b>Geschätzter Fahrzeugwert</b>", cell_style), 
+                Paragraph(f"{job['estimated_vehicle_value']:,.2f} €", cell_style)
+            ])
+    
+    order_table = Table(order_data, colWidths=[4.5*cm, 12.5*cm])
+    order_table.setStyle(TableStyle([
+        ('BACKGROUND', (0, 0), (0, -1), colors.HexColor('#fef3c7') if job_type == 'sicherstellung' else colors.HexColor('#f8fafc')),
+        ('VALIGN', (0, 0), (-1, -1), 'TOP'),
+        ('TOPPADDING', (0, 0), (-1, -1), 6),
+        ('BOTTOMPADDING', (0, 0), (-1, -1), 6),
+        ('LEFTPADDING', (0, 0), (-1, -1), 8),
+        ('RIGHTPADDING', (0, 0), (-1, -1), 8),
+        ('GRID', (0, 0), (-1, -1), 0.5, colors.HexColor('#e2e8f0')),
+    ]))
+    story.append(order_table)
+    
+    # ===== FAHRZEUGDATEN =====
+    story.append(Paragraph("Fahrzeugdaten", heading_style))
+    vehicle_data = [
+        [Paragraph("<b>Kennzeichen</b>", cell_style), Paragraph(job.get('license_plate', '-'), cell_style)],
+        [Paragraph("<b>FIN</b>", cell_style), Paragraph(job.get('vin') or '-', cell_style)],
+        [Paragraph("<b>Abschleppgrund</b>", cell_style), Paragraph(wrap_text(job.get('tow_reason', '-'), 50), cell_style)],
+    ]
+    # Zeige nur Behörde, NICHT die Dienstnummer des Mitarbeiters
+    if job.get('created_by_authority'):
+        vehicle_data.append([
+            Paragraph("<b>Erfasst von</b>", cell_style), 
+            Paragraph(f"{job.get('created_by_authority') or '-'}", cell_style)
+        ])
+    
+    vehicle_table = Table(vehicle_data, colWidths=[4.5*cm, 12.5*cm])
+    vehicle_table.setStyle(TableStyle([
+        ('BACKGROUND', (0, 0), (0, -1), colors.HexColor('#f8fafc')),
+        ('VALIGN', (0, 0), (-1, -1), 'TOP'),
+        ('TOPPADDING', (0, 0), (-1, -1), 6),
+        ('BOTTOMPADDING', (0, 0), (-1, -1), 6),
+        ('LEFTPADDING', (0, 0), (-1, -1), 8),
+        ('RIGHTPADDING', (0, 0), (-1, -1), 8),
+        ('GRID', (0, 0), (-1, -1), 0.5, colors.HexColor('#e2e8f0')),
+    ]))
+    story.append(vehicle_table)
+    
+    # ===== FUNDORT =====
+    story.append(Paragraph("Fundort", heading_style))
+    # Clean up address if it contains raw coordinates at the beginning
+    display_address = job.get('location_address', 'Nicht angegeben')
+    if display_address and re.match(r'^\s*[-+]?\d{1,2}\.\d+,\s*[-+]?\d{1,3}\.\d+\s*[-|:]\s*', display_address):
+        # Extract everything after the coordinates
+        parts = re.split(r'^\s*[-+]?\d{1,2}\.\d+,\s*[-+]?\d{1,3}\.\d+\s*[-|:]\s*', display_address, 1)
+        if len(parts) > 1 and parts[1].strip():
+            display_address = parts[1].strip()
+            
+    # Also handle the exact case the user showed: "52.379462, 9.724245" where address is just coords
+    if display_address and re.match(r'^\s*[-+]?\d{1,2}\.\d+,\s*[-+]?\d{1,3}\.\d+\s*$', display_address):
+        display_address = "Keine genaue Adresse verfügbar (nur Koordinaten)"
+
+    location_data = [
+        [Paragraph("<b>Adresse</b>", cell_style), Paragraph(wrap_text(display_address, 55), cell_style)],
+        [Paragraph("<b>Koordinaten</b>", cell_style), Paragraph(f"{job['location_lat']:.6f}, {job['location_lng']:.6f}", cell_style)],
+    ]
+    location_table = Table(location_data, colWidths=[4.5*cm, 12.5*cm])
+    location_table.setStyle(TableStyle([
+        ('BACKGROUND', (0, 0), (0, -1), colors.HexColor('#f8fafc')),
+        ('VALIGN', (0, 0), (-1, -1), 'TOP'),
+        ('TOPPADDING', (0, 0), (-1, -1), 6),
+        ('BOTTOMPADDING', (0, 0), (-1, -1), 6),
+        ('LEFTPADDING', (0, 0), (-1, -1), 8),
+        ('RIGHTPADDING', (0, 0), (-1, -1), 8),
+        ('GRID', (0, 0), (-1, -1), 0.5, colors.HexColor('#e2e8f0')),
+    ]))
+    story.append(location_table)
+    
+    # ===== ZEITERFASSUNG =====
+    story.append(Paragraph("Zeiterfassung", heading_style))
+    timeline_data = [
+        [
+            Paragraph("<b>Schritt</b>", cell_style), 
+            Paragraph("<b>Datum & Uhrzeit</b>", cell_style),
+            Paragraph("<b>Status</b>", cell_style)
+        ],
+        [
+            Paragraph("1. Meldung erfasst", cell_style), 
+            Paragraph(format_datetime(job.get('created_at')), cell_style),
+            Paragraph("✓" if job.get('created_at') else "-", cell_style)
+        ],
+        [
+            Paragraph("2. Vor Ort angekommen", cell_style), 
+            Paragraph(format_datetime(job.get('on_site_at')), cell_style),
+            Paragraph("✓" if job.get('on_site_at') else "-", cell_style)
+        ]
+    ]
+
+    if job.get('is_empty_trip'):
+        timeline_data.append([
+            Paragraph("3. Leerfahrt verzeichnet", cell_style),
+            Paragraph(format_datetime(job.get('updated_at')), cell_style),
+            Paragraph("✓" if job.get('status') in ['empty_trip', 'released'] else "-", cell_style)
+        ])
+    else:
+        timeline_data.extend([
+            [
+                Paragraph("3. Abgeschleppt", cell_style), 
+                Paragraph(format_datetime(job.get('towed_at')), cell_style),
+                Paragraph("✓" if job.get('towed_at') else "-", cell_style)
+            ],
+            [
+                Paragraph("4. Im Hof eingetroffen", cell_style), 
+                # Use delivered_to_authority_at for authority_yard jobs, otherwise in_yard_at
+                Paragraph(format_datetime(job.get('delivered_to_authority_at') if job.get('target_yard') == 'authority_yard' else job.get('in_yard_at')), cell_style),
+                Paragraph("✓" if (job.get('delivered_to_authority_at') if job.get('target_yard') == 'authority_yard' else job.get('in_yard_at')) else "-", cell_style)
+            ],
+            [
+                Paragraph("5. Fahrzeug abgeholt", cell_style), 
+                Paragraph(format_datetime(job.get('released_at')), cell_style),
+                Paragraph("✓" if job.get('released_at') else "-", cell_style)
+            ]
+        ])
+    timeline_table = Table(timeline_data, colWidths=[6*cm, 8*cm, 3*cm])
+    timeline_table.setStyle(TableStyle([
+        ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#f97316')),  # Orange header
+        ('TEXTCOLOR', (0, 0), (-1, 0), colors.white),
+        ('BACKGROUND', (0, 1), (-1, -1), colors.white),
+        ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
+        ('ALIGN', (2, 0), (2, -1), 'CENTER'),
+        ('TOPPADDING', (0, 0), (-1, -1), 6),
+        ('BOTTOMPADDING', (0, 0), (-1, -1), 6),
+        ('LEFTPADDING', (0, 0), (-1, -1), 8),
+        ('RIGHTPADDING', (0, 0), (-1, -1), 8),
+        ('GRID', (0, 0), (-1, -1), 0.5, colors.HexColor('#e2e8f0')),
+        ('ROWBACKGROUNDS', (0, 1), (-1, -1), [colors.white, colors.HexColor('#f8fafc')]),
+    ]))
+    story.append(timeline_table)
+    
+    # ===== HALTERDATEN (if released) =====
+    if job.get('owner_first_name'):
+        story.append(Paragraph("Halterdaten", heading_style))
+        owner_data = [
+            [Paragraph("<b>Name</b>", cell_style), Paragraph(f"{job.get('owner_first_name') or ''} {job.get('owner_last_name') or ''}", cell_style)],
+            [Paragraph("<b>Adresse</b>", cell_style), Paragraph(wrap_text(job.get('owner_address') or '-', 55), cell_style)],
+        ]
+        owner_table = Table(owner_data, colWidths=[4.5*cm, 12.5*cm])
+        owner_table.setStyle(TableStyle([
+            ('BACKGROUND', (0, 0), (0, -1), colors.HexColor('#f8fafc')),
+            ('VALIGN', (0, 0), (-1, -1), 'TOP'),
+            ('TOPPADDING', (0, 0), (-1, -1), 6),
+            ('BOTTOMPADDING', (0, 0), (-1, -1), 6),
+            ('LEFTPADDING', (0, 0), (-1, -1), 8),
+            ('RIGHTPADDING', (0, 0), (-1, -1), 8),
+            ('GRID', (0, 0), (-1, -1), 0.5, colors.HexColor('#e2e8f0')),
+        ]))
+        story.append(owner_table)
+    
+    # ===== GET PRICES_INCLUDE_VAT SETTING (for both Kostenaufstellung and Zahlungsinformationen) =====
+    # This needs to be determined ONCE and used consistently
+    prices_include_vat = True  # Default
+    issuer_settings = None
+    
+    # Determine who owns the job and use their price setting
+    if job.get('target_yard') == 'authority_yard' or (job.get('authority_id') and not job.get('assigned_service_id')):
+        # Authority job
+        if job.get('authority_id'):
+            issuer_settings = await db.users.find_one(
+                {"id": job.get('authority_id')},
+                {"_id": 0, "prices_include_vat": 1}
+            )
+    elif job.get('assigned_service_id'):
+        # Service yard job
+        issuer_settings = await db.users.find_one(
+            {"id": job.get('assigned_service_id')},
+            {"_id": 0, "prices_include_vat": 1}
+        )
+    
+    # Set prices_include_vat based on issuer settings
+    if issuer_settings and 'prices_include_vat' in issuer_settings:
+        prices_include_vat = issuer_settings['prices_include_vat']
+    else:
+        prices_include_vat = True  # Default for old jobs
+    
+    # ===== VEREINFACHTE KOSTENAUFSTELLUNG =====
+    if job.get('released_at') and job.get('payment_amount') and job.get('payment_amount') > 0:
+        story.append(Paragraph("Kostenaufstellung", heading_style))
+        
+        # Get payment amount from job (this is the BASE amount, interpretation depends on prices_include_vat)
+        base_amount = job.get('payment_amount', 0)
+        
+        # Build simplified cost table
+        cost_table_data = []
+        
+        if prices_include_vat:
+            # Preise inkl. MwSt → base_amount IST bereits BRUTTO
+            # Zeige nur Gesamtbetrag
+            cost_table_data.append([
+                Paragraph("<b>Gesamtbetrag (Brutto inkl. 19% MwSt.)</b>", ParagraphStyle('Bold', parent=cell_style, fontSize=11)),
+                Paragraph(f"<b>{base_amount:.2f} €</b>", ParagraphStyle('BoldRight', parent=cell_style, fontSize=11, alignment=2))
+            ])
+        else:
+            # Preise sind NETTO → base_amount IST NETTO, MwSt DRAUFRECHNEN
+            vat_rate = 0.19
+            net_total = base_amount  # Das ist der Netto-Betrag
+            vat_amount = net_total * vat_rate  # 19% MwSt auf Netto
+            brutto_total = net_total + vat_amount  # Brutto = Netto + MwSt
+            
+            cost_table_data.append([
+                Paragraph("Netto-Summe", cell_style),
+                Paragraph(f"{net_total:.2f} €", ParagraphStyle('RightAlign', parent=cell_style, alignment=2))
+            ])
+            cost_table_data.append([
+                Paragraph(f"zzgl. {int(vat_rate * 100)}% MwSt.", cell_style),
+                Paragraph(f"{vat_amount:.2f} €", ParagraphStyle('RightAlign', parent=cell_style, alignment=2))
+            ])
+            
+            # Spacer
+            spacer_style = ParagraphStyle('Spacer', parent=cell_style, fontSize=4, leading=6)
+            cost_table_data.append([Paragraph(" ", spacer_style), Paragraph(" ", spacer_style)])
+            
+            cost_table_data.append([
+                Paragraph("<b>Gesamtbetrag (Brutto)</b>", ParagraphStyle('Bold', parent=cell_style, fontSize=11)),
+                Paragraph(f"<b>{brutto_total:.2f} €</b>", ParagraphStyle('BoldRight', parent=cell_style, fontSize=11, alignment=2))
+            ])
+        
+        cost_table = Table(cost_table_data, colWidths=[12*cm, 5*cm])
+        cost_table.setStyle(TableStyle([
+            # No backgrounds, no borders - clean look
+            ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
+            ('TOPPADDING', (0, 0), (-1, -1), 6),
+            ('BOTTOMPADDING', (0, 0), (-1, -1), 6),
+            ('LEFTPADDING', (0, 0), (-1, -1), 0),
+            ('RIGHTPADDING', (0, 0), (-1, -1), 0),
+        ]))
+        story.append(cost_table)
+        story.append(Spacer(1, 10))
+        
+        # Payment terms
+        terms_style = ParagraphStyle(
+            'Terms',
+            parent=styles['Normal'],
+            fontSize=9,
+            textColor=colors.HexColor('#64748b'),
+            spaceAfter=10
+        )
+        story.append(Paragraph("<b>Zahlungsbedingungen:</b> Zahlbar sofort ohne Abzug", terms_style))
+    
+    # ===== ZAHLUNGSINFORMATIONEN =====
+    has_payment = job.get('payment_method') and not (job.get('is_empty_trip') and job.get('payment_amount', 0) == 0)
+    if has_payment:
+        story.append(Paragraph("Zahlungsinformationen", heading_style))
+        payment_method_text = "Bar" if job['payment_method'] == 'cash' else "Kartenzahlung"
+        
+        # Calculate correct payment amount based on prices_include_vat setting
+        payment_display_amount = job.get('payment_amount', 0)
+        if not prices_include_vat and payment_display_amount > 0:
+            # If prices are NETTO, calculate BRUTTO for display
+            vat_rate = 0.19
+            payment_display_amount = payment_display_amount * (1 + vat_rate)
+        
+        payment_data = [
+            [Paragraph("<b>Zahlungsart</b>", cell_style), Paragraph(payment_method_text, cell_style)],
+            [Paragraph("<b>Betrag</b>", cell_style), Paragraph(f"{payment_display_amount:.2f} €", cell_style)],
+        ]
+        payment_table = Table(payment_data, colWidths=[4.5*cm, 12.5*cm])
+        payment_table.setStyle(TableStyle([
+            ('BACKGROUND', (0, 0), (0, -1), colors.HexColor('#f8fafc')),
+            ('BACKGROUND', (1, 1), (1, 1), colors.HexColor('#dcfce7')),  # Green background for amount
+            ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
+            ('TOPPADDING', (0, 0), (-1, -1), 6),
+            ('BOTTOMPADDING', (0, 0), (-1, -1), 6),
+            ('LEFTPADDING', (0, 0), (-1, -1), 8),
+            ('RIGHTPADDING', (0, 0), (-1, -1), 8),
+            ('GRID', (0, 0), (-1, -1), 0.5, colors.HexColor('#e2e8f0')),
+        ]))
+        story.append(payment_table)
+    
+    # ===== ABSCHLEPPHOF (depends on target_yard) =====
+    is_authority_yard = job.get("target_yard") == "authority_yard"
+    
+    if is_authority_yard:
+        # Authority yard - show authority info
+        story.append(Paragraph("Verwahrort (Behörden-Hof)", heading_style))
+        yard_data = [
+            [Paragraph("<b>Hof</b>", cell_style), Paragraph(job.get('authority_yard_name') or 'Behörden-Hof', cell_style)],
+            [Paragraph("<b>Adresse</b>", cell_style), Paragraph(wrap_text(job.get('authority_yard_address') or '-', 55), cell_style)],
+            [Paragraph("<b>Telefon</b>", cell_style), Paragraph(job.get('authority_yard_phone') or '-', cell_style)],
+        ]
+        # Add authority name
+        if job.get('created_by_authority'):
+            yard_data.insert(0, [
+                Paragraph("<b>Behörde</b>", cell_style), 
+                Paragraph(job.get('created_by_authority'), cell_style)
+            ])
+        yard_table = Table(yard_data, colWidths=[4.5*cm, 12.5*cm])
+        yard_table.setStyle(TableStyle([
+            ('BACKGROUND', (0, 0), (0, -1), colors.HexColor('#dcfce7')),  # Green tint for authority
+            ('VALIGN', (0, 0), (-1, -1), 'TOP'),
+            ('TOPPADDING', (0, 0), (-1, -1), 6),
+            ('BOTTOMPADDING', (0, 0), (-1, -1), 6),
+            ('LEFTPADDING', (0, 0), (-1, -1), 8),
+            ('RIGHTPADDING', (0, 0), (-1, -1), 8),
+            ('GRID', (0, 0), (-1, -1), 0.5, colors.HexColor('#86efac')),
+        ]))
+        story.append(yard_table)
+        
+        # Also show towing service that transported the vehicle
+        if service:
+            story.append(Paragraph("Transport durchgeführt von", heading_style))
+            transport_data = [
+                [Paragraph("<b>Abschleppdienst</b>", cell_style), Paragraph(service.get('company_name') or '-', cell_style)],
+                [Paragraph("<b>Telefon</b>", cell_style), Paragraph(service.get('phone') or '-', cell_style)],
+            ]
+            transport_table = Table(transport_data, colWidths=[4.5*cm, 12.5*cm])
+            transport_table.setStyle(TableStyle([
+                ('BACKGROUND', (0, 0), (0, -1), colors.HexColor('#f8fafc')),
+                ('VALIGN', (0, 0), (-1, -1), 'TOP'),
+                ('TOPPADDING', (0, 0), (-1, -1), 6),
+                ('BOTTOMPADDING', (0, 0), (-1, -1), 6),
+                ('LEFTPADDING', (0, 0), (-1, -1), 8),
+                ('RIGHTPADDING', (0, 0), (-1, -1), 8),
+                ('GRID', (0, 0), (-1, -1), 0.5, colors.HexColor('#e2e8f0')),
+            ]))
+            story.append(transport_table)
+    elif service:
+        # Service yard - show towing service info (original logic)
+        story.append(Paragraph("Abschleppdienst", heading_style))
+        service_data = [
+            [Paragraph("<b>Unternehmen</b>", cell_style), Paragraph(service.get('company_name') or '-', cell_style)],
+            [Paragraph("<b>Telefon</b>", cell_style), Paragraph(service.get('phone') or '-', cell_style)],
+            [Paragraph("<b>Hof-Adresse</b>", cell_style), Paragraph(wrap_text(service.get('yard_address') or '-', 55), cell_style)],
+            [Paragraph("<b>Öffnungszeiten</b>", cell_style), Paragraph(service.get('opening_hours') or '-', cell_style)],
+        ]
+        service_table = Table(service_data, colWidths=[4.5*cm, 12.5*cm])
+        service_table.setStyle(TableStyle([
+            ('BACKGROUND', (0, 0), (0, -1), colors.HexColor('#f8fafc')),
+            ('VALIGN', (0, 0), (-1, -1), 'TOP'),
+            ('TOPPADDING', (0, 0), (-1, -1), 6),
+            ('BOTTOMPADDING', (0, 0), (-1, -1), 6),
+            ('LEFTPADDING', (0, 0), (-1, -1), 8),
+            ('RIGHTPADDING', (0, 0), (-1, -1), 8),
+            ('GRID', (0, 0), (-1, -1), 0.5, colors.HexColor('#e2e8f0')),
+        ]))
+        story.append(service_table)
+    
+    # ===== BEMERKUNGEN =====
+    if job.get('notes') or job.get('service_notes'):
+        story.append(Paragraph("Bemerkungen", heading_style))
+        notes_data = []
+        if job.get('notes'):
+            notes_data.append([
+                Paragraph("<b>Behörde</b>", cell_style), 
+                Paragraph(wrap_text(job['notes'], 55), cell_style)
+            ])
+        if job.get('service_notes'):
+            notes_data.append([
+                Paragraph("<b>Abschleppdienst</b>", cell_style), 
+                Paragraph(wrap_text(job['service_notes'], 55), cell_style)
+            ])
+        notes_table = Table(notes_data, colWidths=[4.5*cm, 12.5*cm])
+        notes_table.setStyle(TableStyle([
+            ('BACKGROUND', (0, 0), (0, -1), colors.HexColor('#f8fafc')),
+            ('VALIGN', (0, 0), (-1, -1), 'TOP'),
+            ('TOPPADDING', (0, 0), (-1, -1), 6),
+            ('BOTTOMPADDING', (0, 0), (-1, -1), 6),
+            ('LEFTPADDING', (0, 0), (-1, -1), 8),
+            ('RIGHTPADDING', (0, 0), (-1, -1), 8),
+            ('GRID', (0, 0), (-1, -1), 0.5, colors.HexColor('#e2e8f0')),
+        ]))
+        story.append(notes_table)
+    
+    # ===== FOOTER =====
+    story.append(Spacer(1, 20))
+    footer_style = ParagraphStyle(
+        'Footer',
+        parent=styles['Normal'],
+        fontSize=8,
+        textColor=colors.HexColor('#94a3b8'),
+        alignment=1
+    )
+    story.append(Paragraph(f"Erstellt am: {datetime.now(timezone.utc).strftime('%d.%m.%Y %H:%M')} UTC", footer_style))
+    
+    doc.build(story)
+    buffer.seek(0)
+    
+    # NEW: Save PDF generation timestamp (for freeze logic)
+    if not pdf_generated_at:
+        # Only set timestamp on first generation
+        await db.jobs.update_one(
+            {"id": job_id},
+            {"$set": {"pdf_generated_at": datetime.now(timezone.utc).isoformat()}}
+        )
+    
+    return StreamingResponse(
+        buffer,
+        media_type="application/pdf",
+        headers={"Content-Disposition": f"attachment; filename=Abschleppprotokoll_{job['job_number']}.pdf"}
+    )
+
 # ==================== EXPORT ENDPOINTS ====================
 
 @api_router.get("/export/jobs/csv")
