@@ -231,10 +231,18 @@ export const TowingDashboard = () => {
     ordering_authority: '',
     contact_attempts: false,
     contact_attempts_notes: '',
-    estimated_vehicle_value: ''
+    estimated_vehicle_value: '',
+    // NEW: Dual-Yard selection
+    target_yard: 'service_yard', // 'service_yard' or 'authority_yard'
+    authority_yard_id: '',
+    authority_yard_name: '',
+    authority_price_category_id: ''
   });
   const [newJobPhotos, setNewJobPhotos] = useState([]);
   const newJobFileInputRef = useRef(null);
+  
+  // NEW: Selected authority settings for yard selection
+  const [selectedAuthoritySettings, setSelectedAuthoritySettings] = useState(null);
 
   // NEW: Edit Job Data Dialog state
   const [editJobDialogOpen, setEditJobDialogOpen] = useState(false);
@@ -532,6 +540,23 @@ export const TowingDashboard = () => {
     setNewJobPhotos(prev => prev.filter((_, i) => i !== index));
   };
 
+  // NEW: Fetch authority settings when authority is selected
+  const fetchAuthoritySettings = async (authorityId) => {
+    try {
+      const response = await axios.get(`${API}/authority/${authorityId}/public-settings`);
+      setSelectedAuthoritySettings(response.data);
+      // Set default target_yard based on authority's yard_model
+      if (response.data.yard_model === 'authority_yard') {
+        setNewJobData(prev => ({ ...prev, target_yard: 'authority_yard' }));
+      } else {
+        setNewJobData(prev => ({ ...prev, target_yard: 'service_yard' }));
+      }
+    } catch (error) {
+      console.error('Error fetching authority settings:', error);
+      setSelectedAuthoritySettings(null);
+    }
+  };
+
   // NEW: Create job as towing service
   const handleCreateJob = async () => {
     // Validation
@@ -550,6 +575,18 @@ export const TowingDashboard = () => {
     if (!newJobData.location_address) {
       toast.error('Bitte geben Sie eine Adresse ein');
       return;
+    }
+    
+    // Validate authority yard selection
+    if (newJobData.target_yard === 'authority_yard') {
+      if (!newJobData.authority_yard_id) {
+        toast.error('Bitte wählen Sie einen Behörden-Hof aus');
+        return;
+      }
+      if (!newJobData.authority_price_category_id) {
+        toast.error('Bitte wählen Sie eine Preiskategorie aus');
+        return;
+      }
     }
 
     setCreatingJob(true);
@@ -3164,7 +3201,10 @@ export const TowingDashboard = () => {
                   <CardContent>
                     <Select
                       value={newJobData.for_authority_id}
-                      onValueChange={(value) => setNewJobData(prev => ({ ...prev, for_authority_id: value }))}
+                      onValueChange={(value) => {
+                        setNewJobData(prev => ({ ...prev, for_authority_id: value }));
+                        fetchAuthoritySettings(value);
+                      }}
                     >
                       <SelectTrigger>
                         <SelectValue placeholder="Behörde auswählen..." />
@@ -3179,6 +3219,118 @@ export const TowingDashboard = () => {
                     </Select>
                   </CardContent>
                 </Card>
+
+                {/* Target Yard Selection - nur anzeigen wenn Behörde ausgewählt und yard_model = authority_yard */}
+                {selectedAuthoritySettings && (
+                  <Card className="border-orange-200 bg-orange-50">
+                    <CardHeader>
+                      <CardTitle className="flex items-center gap-2 text-base">
+                        <Building2 className="h-5 w-5 text-orange-600" />
+                        Zielort auswählen
+                      </CardTitle>
+                    </CardHeader>
+                    <CardContent className="space-y-4">
+                      <div className="space-y-3">
+                        <div className="flex gap-4">
+                          <label className={`flex items-center gap-2 p-3 border rounded-lg cursor-pointer transition-colors flex-1 ${newJobData.target_yard === 'service_yard' ? 'border-blue-500 bg-blue-50' : 'border-slate-200 bg-white hover:bg-slate-50'}`}>
+                            <input
+                              type="radio"
+                              name="targetYard"
+                              value="service_yard"
+                              checked={newJobData.target_yard === 'service_yard'}
+                              onChange={(e) => setNewJobData(prev => ({ 
+                                ...prev, 
+                                target_yard: e.target.value,
+                                authority_yard_id: '',
+                                authority_yard_name: '',
+                                authority_price_category_id: ''
+                              }))}
+                              className="w-4 h-4"
+                            />
+                            <div>
+                              <span className="font-medium">🚗 Eigener Hof</span>
+                              <span className="text-xs text-slate-500 block">Fahrzeug kommt auf Ihren Hof</span>
+                            </div>
+                          </label>
+                          <label className={`flex items-center gap-2 p-3 border rounded-lg cursor-pointer transition-colors flex-1 ${newJobData.target_yard === 'authority_yard' ? 'border-orange-500 bg-orange-50' : 'border-slate-200 bg-white hover:bg-slate-50'}`}>
+                            <input
+                              type="radio"
+                              name="targetYard"
+                              value="authority_yard"
+                              checked={newJobData.target_yard === 'authority_yard'}
+                              onChange={(e) => setNewJobData(prev => ({ ...prev, target_yard: e.target.value }))}
+                              className="w-4 h-4"
+                            />
+                            <div>
+                              <span className="font-medium">🏢 Behörden-Hof</span>
+                              <span className="text-xs text-slate-500 block">Fahrzeug kommt zum Hof der Behörde</span>
+                            </div>
+                          </label>
+                        </div>
+                      </div>
+
+                      {/* Yard and Price Category Selection for authority_yard */}
+                      {newJobData.target_yard === 'authority_yard' && (
+                        <div className="space-y-4 pt-2 border-t border-orange-200">
+                          {/* Yard Selection */}
+                          {selectedAuthoritySettings.yards && selectedAuthoritySettings.yards.length > 0 && (
+                            <div className="space-y-2">
+                              <Label>Behörden-Hof auswählen *</Label>
+                              <Select
+                                value={newJobData.authority_yard_id}
+                                onValueChange={(value) => {
+                                  const yard = selectedAuthoritySettings.yards.find(y => y.id === value);
+                                  setNewJobData(prev => ({
+                                    ...prev,
+                                    authority_yard_id: value,
+                                    authority_yard_name: yard?.name || '',
+                                    authority_yard_address: yard?.address || ''
+                                  }));
+                                }}
+                              >
+                                <SelectTrigger>
+                                  <SelectValue placeholder="Hof auswählen..." />
+                                </SelectTrigger>
+                                <SelectContent>
+                                  {selectedAuthoritySettings.yards.map(yard => (
+                                    <SelectItem key={yard.id} value={yard.id}>
+                                      {yard.name} - {yard.address}
+                                    </SelectItem>
+                                  ))}
+                                </SelectContent>
+                              </Select>
+                            </div>
+                          )}
+
+                          {/* Price Category Selection */}
+                          {selectedAuthoritySettings.price_categories && selectedAuthoritySettings.price_categories.length > 0 && (
+                            <div className="space-y-2">
+                              <Label>Preiskategorie auswählen *</Label>
+                              <Select
+                                value={newJobData.authority_price_category_id}
+                                onValueChange={(value) => setNewJobData(prev => ({
+                                  ...prev,
+                                  authority_price_category_id: value
+                                }))}
+                              >
+                                <SelectTrigger>
+                                  <SelectValue placeholder="Preiskategorie auswählen..." />
+                                </SelectTrigger>
+                                <SelectContent>
+                                  {selectedAuthoritySettings.price_categories.map(cat => (
+                                    <SelectItem key={cat.id} value={cat.id}>
+                                      {cat.name} - {cat.base_fee}€ + {cat.daily_rate}€/Tag
+                                    </SelectItem>
+                                  ))}
+                                </SelectContent>
+                              </Select>
+                            </div>
+                          )}
+                        </div>
+                      )}
+                    </CardContent>
+                  </Card>
+                )}
 
                 {/* Vehicle Info Card */}
                 <Card>

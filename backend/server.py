@@ -2419,6 +2419,29 @@ async def get_authority_settings(user: dict = Depends(get_current_user)):
         "yard_lng": authority.get("yard_lng")
     }
 
+@api_router.get("/authority/{authority_id}/public-settings")
+async def get_authority_public_settings(authority_id: str, user: dict = Depends(get_current_user)):
+    """Get public settings of an authority (for linked towing services)"""
+    # Only towing services can access this
+    if user["role"] != UserRole.TOWING_SERVICE:
+        raise HTTPException(status_code=403, detail="Nur Abschleppdienste haben Zugriff")
+    
+    # Check if authority is linked to this towing service
+    linked_authorities = user.get("linked_authorities", [])
+    if authority_id not in linked_authorities:
+        raise HTTPException(status_code=403, detail="Diese Behörde ist nicht mit Ihnen verknüpft")
+    
+    authority = await db.users.find_one({"id": authority_id, "role": UserRole.AUTHORITY}, {"_id": 0})
+    if not authority:
+        raise HTTPException(status_code=404, detail="Behörde nicht gefunden")
+    
+    return {
+        "yard_model": authority.get("yard_model", "service_yard"),
+        "yards": authority.get("yards", []),
+        "price_categories": authority.get("price_categories", []),
+        "authority_name": authority.get("authority_name")
+    }
+
 # ==================== AUTHORITY EMPLOYEE MANAGEMENT ====================
 
 def get_authority_id(user: dict) -> str:
