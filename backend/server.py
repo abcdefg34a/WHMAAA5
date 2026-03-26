@@ -4570,9 +4570,9 @@ async def generate_pdf(job_id: str, token: str):
     # ===== FAHRZEUGDATEN =====
     story.append(Paragraph("Fahrzeugdaten", heading_style))
     vehicle_data = [
-        [Paragraph("<b>Kennzeichen</b>", cell_style), Paragraph(job['license_plate'], cell_style)],
+        [Paragraph("<b>Kennzeichen</b>", cell_style), Paragraph(job.get('license_plate', '-'), cell_style)],
         [Paragraph("<b>FIN</b>", cell_style), Paragraph(job.get('vin') or '-', cell_style)],
-        [Paragraph("<b>Abschleppgrund</b>", cell_style), Paragraph(wrap_text(job['tow_reason'], 50), cell_style)],
+        [Paragraph("<b>Abschleppgrund</b>", cell_style), Paragraph(wrap_text(job.get('tow_reason', '-'), 50), cell_style)],
     ]
     # Zeige nur Behörde, NICHT die Dienstnummer des Mitarbeiters
     if job.get('created_by_authority'):
@@ -4596,7 +4596,7 @@ async def generate_pdf(job_id: str, token: str):
     # ===== FUNDORT =====
     story.append(Paragraph("Fundort", heading_style))
     # Clean up address if it contains raw coordinates at the beginning
-    display_address = job['location_address']
+    display_address = job.get('location_address', 'Nicht angegeben')
     if display_address and re.match(r'^\s*[-+]?\d{1,2}\.\d+,\s*[-+]?\d{1,3}\.\d+\s*[-|:]\s*', display_address):
         # Extract everything after the coordinates
         parts = re.split(r'^\s*[-+]?\d{1,2}\.\d+,\s*[-+]?\d{1,3}\.\d+\s*[-|:]\s*', display_address, 1)
