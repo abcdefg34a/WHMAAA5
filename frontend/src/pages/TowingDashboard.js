@@ -183,6 +183,15 @@ export const TowingDashboard = () => {
     is_default: false
   });
 
+  // NEW: Service Price Categories (like Authority price_categories)
+  const [servicePriceCategories, setServicePriceCategories] = useState(user?.service_price_categories || []);
+  const [newServicePriceCategory, setNewServicePriceCategory] = useState({
+    name: '',
+    description: '',
+    base_fee: '',
+    daily_rate: ''
+  });
+
   // NEW: Company Info Dialog state
   const [companyInfoDialogOpen, setCompanyInfoDialogOpen] = useState(false);
   const [companyName, setCompanyName] = useState(user?.company_name || '');
@@ -193,6 +202,7 @@ export const TowingDashboard = () => {
   const [companyYardLng, setCompanyYardLng] = useState(user?.yard_lng || null);
   const [companyOpeningHours, setCompanyOpeningHours] = useState(user?.opening_hours || '');
   const [companyUstId, setCompanyUstId] = useState(user?.ust_id || '');  // NEW: USt-ID
+  const [pricesIncludeVat, setPricesIncludeVat] = useState(user?.prices_include_vat !== undefined ? user.prices_include_vat : true);  // NEW: Price display setting
   const [savingCompanyInfo, setSavingCompanyInfo] = useState(false);
 
   // NEW: Empty Trip (Leerfahrt) Dialog state
@@ -751,7 +761,10 @@ export const TowingDashboard = () => {
         night_surcharge: parseFloat(nightSurcharge) || null,
         weekend_surcharge: parseFloat(weekendSurcharge) || null,
         heavy_vehicle_surcharge: parseFloat(heavyVehicleSurcharge) || null,
-        weight_categories: weightCategories
+        weight_categories: weightCategories,
+        service_price_categories: servicePriceCategories,  // NEW
+        ust_id: companyUstId || null,  // NEW: USt-ID
+        prices_include_vat: pricesIncludeVat  // NEW: Price display setting
       });
       updateUser(response.data);
       toast.success('Preiseinstellungen gespeichert!');
@@ -3166,6 +3179,39 @@ export const TowingDashboard = () => {
               <p className="text-xs text-slate-500">
                 Optional: Wird auf Rechnungen angezeigt, wenn Fahrzeuge auf Ihrem Hof freigegeben werden
               </p>
+            </div>
+
+            {/* NEW: Price display setting */}
+            <div className="p-4 bg-orange-50 border border-orange-200 rounded-lg space-y-3">
+              <h4 className="font-medium text-orange-800 flex items-center gap-2">
+                <Euro className="h-4 w-4" />
+                Rechnungsdarstellung
+              </h4>
+              <div className="flex items-start gap-3">
+                <input
+                  type="checkbox"
+                  id="pricesIncludeVat"
+                  checked={pricesIncludeVat}
+                  onChange={(e) => setPricesIncludeVat(e.target.checked)}
+                  className="w-4 h-4 mt-1"
+                />
+                <div className="flex-1">
+                  <Label htmlFor="pricesIncludeVat" className="cursor-pointer font-medium">
+                    Preise inkl. MwSt
+                  </Label>
+                  <p className="text-xs text-slate-600 mt-1">
+                    {pricesIncludeVat ? (
+                      <>
+                        ✓ <strong>Aktiviert:</strong> Rechnung zeigt nur Gesamtbetrag (z.B. "425€")
+                      </>
+                    ) : (
+                      <>
+                        <strong>Deaktiviert:</strong> Rechnung zeigt Netto + 19% MwSt + Brutto
+                      </>
+                    )}
+                  </p>
+                </div>
+              </div>
             </div>
 
             <div className="flex gap-3 pt-4 border-t">

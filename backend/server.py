@@ -747,6 +747,10 @@ class UserResponse(BaseModel):
     parent_service_id: Optional[str] = None
     # NEW: USt-ID (Umsatzsteuer-Identifikationsnummer) for invoicing
     ust_id: Optional[str] = None
+    # NEW: Price display setting (prices include VAT or not)
+    prices_include_vat: Optional[bool] = True  # True = Brutto-Preise, False = Netto-Preise
+    # NEW: Service price categories (for vehicle type pricing)
+    service_price_categories: Optional[List[dict]] = None
 
 class TokenResponse(BaseModel):
     access_token: str
@@ -795,6 +799,12 @@ class PricingSettingsRequest(BaseModel):
     heavy_vehicle_surcharge: Optional[float] = None  # DEPRECATED: Use weight_categories instead
     # NEW: Flexible Gewichtskategorien
     weight_categories: Optional[List[WeightCategory]] = None
+    # NEW: USt-ID for invoicing
+    ust_id: Optional[str] = None
+    # NEW: Price display setting
+    prices_include_vat: Optional[bool] = None
+    # NEW: Service price categories (like authorities - for vehicle type pricing)
+    service_price_categories: Optional[List[dict]] = None
 
 class ApproveServiceRequest(BaseModel):
     approved: bool
@@ -1884,6 +1894,23 @@ async def update_pricing_settings(data: PricingSettingsRequest, user: dict = Dep
             weight_cats.append(cat_dict)
         update_data["weight_categories"] = weight_cats
     
+    # NEW: USt-ID and price display setting
+    if data.ust_id is not None:
+        update_data["ust_id"] = data.ust_id.strip()
+    if data.prices_include_vat is not None:
+        update_data["prices_include_vat"] = data.prices_include_vat
+    
+    # NEW: Service price categories
+    if data.service_price_categories is not None:
+        # Convert to dict list and generate IDs if missing
+        price_cats = []
+        for cat in data.service_price_categories:
+            cat_dict = cat if isinstance(cat, dict) else (cat.model_dump() if hasattr(cat, 'model_dump') else cat.dict())
+            if not cat_dict.get("id"):
+                cat_dict["id"] = str(uuid.uuid4())
+            price_cats.append(cat_dict)
+        update_data["service_price_categories"] = price_cats
+    
     if update_data:
         await db.users.update_one({"id": user["id"]}, {"$set": update_data})
     
@@ -2485,6 +2512,8 @@ class AuthoritySettingsUpdate(BaseModel):
     yard_lng: Optional[float] = None
     # NEW: USt-ID for invoicing
     ust_id: Optional[str] = None
+    # NEW: Price display setting
+    prices_include_vat: Optional[bool] = None
 
 @api_router.patch("/authority/settings")
 async def update_authority_settings(data: AuthoritySettingsUpdate, user: dict = Depends(get_current_user)):
@@ -2533,6 +2562,10 @@ async def update_authority_settings(data: AuthoritySettingsUpdate, user: dict = 
     # NEW: USt-ID
     if data.ust_id is not None:
         update_data["ust_id"] = data.ust_id.strip()
+    
+    # NEW: Price display setting
+    if data.prices_include_vat is not None:
+        update_data["prices_include_vat"] = data.prices_include_vat
     
     if update_data:
         await db.users.update_one({"id": authority_id}, {"$set": update_data})
@@ -4668,127 +4701,64 @@ async def generate_pdf(job_id: str, token: str):
         ]))
         story.append(owner_table)
     
-    # ===== DETAILLIERTE KOSTENAUFSTELLUNG =====
+    # ===== VEREINFACHTE KOSTENAUFSTELLUNG =====
     if job.get('released_at') and job.get('payment_amount') and job.get('payment_amount') > 0:
         story.append(Paragraph("Kostenaufstellung", heading_style))
         
-        cost_items = []
-        
-        # Get the total payment amount (GROSS with VAT)
+        # Get total payment amount
         gross_total = job.get('payment_amount', 0)
-        vat_rate = 0.19
-        net_total = gross_total / (1 + vat_rate)
-        vat_amount = gross_total - net_total
         
-        # Determine which pricing to use based on target_yard
+        # Get issuer settings to check prices_include_vat
+        issuer_settings = None
+        prices_include_vat = True  # Default: Preise sind Brutto
+        
         if job.get('target_yard') == 'authority_yard':
-            # ===== BEHÖRDEN-HOF: Use authority's price_categories =====
-            authority = await db.users.find_one(
-                {"id": job.get('authority_id')},
-                {"_id": 0, "price_categories": 1}
-            )
-            
-            # Find the specific price category used
-            price_category = None
-            if authority and authority.get('price_categories'):
-                for cat in authority['price_categories']:
-                    if cat.get('id') == job.get('authority_price_category_id'):
-                        price_category = cat
-                        break
-            
-            if price_category:
-                base_fee = price_category.get('base_fee', 0)
-                daily_rate = price_category.get('daily_rate', 0)
-                
-                # Calculate storage days
-                days = 0
-                if job.get('delivered_to_authority_at'):
-                    delivered_date = datetime.fromisoformat(job['delivered_to_authority_at'].replace('Z', '+00:00'))
-                    released_date = datetime.fromisoformat(job['released_at'].replace('Z', '+00:00'))
-                    days = max(0, (released_date - delivered_date).days)
-                
-                # Build component total
-                component_total = 0
-                if base_fee > 0:
-                    component_total += base_fee
-                if days > 0 and daily_rate > 0:
-                    component_total += (days * daily_rate)
-                
-                # Check if we need proportional distribution
-                if component_total > 0:
-                    expected_gross = component_total * (1 + vat_rate)
-                    
-                    if abs(expected_gross - gross_total) < 1.0:
-                        # Components match - use directly
-                        if base_fee > 0:
-                            cost_items.append(['Grundgebühr (erste 24h)', f"{base_fee:.2f} €"])
-                        if days > 0 and daily_rate > 0:
-                            standzeit = days * daily_rate
-                            cost_items.append([f"Standzeit ({days} Tag{'e' if days != 1 else ''} × {daily_rate:.2f}€)", f"{standzeit:.2f} €"])
-                    else:
-                        # Distribute proportionally
-                        if base_fee > 0:
-                            base_net = (base_fee / component_total) * net_total
-                            cost_items.append(['Grundgebühr (erste 24h)', f"{base_net:.2f} €"])
-                        if days > 0 and daily_rate > 0:
-                            standzeit_net = ((days * daily_rate) / component_total) * net_total
-                            cost_items.append([f"Standzeit ({days} Tag{'e' if days != 1 else ''} × {daily_rate:.2f}€)", f"{standzeit_net:.2f} €"])
-                else:
-                    cost_items.append(['Verwahrkosten gesamt', f"{net_total:.2f} €"])
-            else:
-                cost_items.append(['Verwahrkosten gesamt', f"{net_total:.2f} €"])
-                
+            # Authority released
+            if job.get('authority_id'):
+                issuer_settings = await db.users.find_one(
+                    {"id": job.get('authority_id')},
+                    {"_id": 0, "prices_include_vat": 1}
+                )
         else:
-            # ===== ABSCHLEPPDIENST-HOF: Use calculated_costs from landing page =====
-            # This is the SAME calculation that's shown on the public vehicle search!
-            # The breakdown items are ALREADY GROSS PRICES (Brutto), no need to add VAT
-            calculated_costs = job.get('calculated_costs')
-            
-            # Calculate total from breakdown items (not from payment_amount)
-            calculated_total = 0
-            
-            if calculated_costs and calculated_costs.get('breakdown'):
-                # Use the EXACT breakdown from the landing page calculation
-                # These prices are already BRUTTO (inkl. MwSt)
-                for item in calculated_costs['breakdown']:
-                    label = item.get('label', '')
-                    amount = item.get('amount', 0)
-                    if amount > 0:
-                        cost_items.append([label, f"{amount:.2f} €"])
-                        calculated_total += amount
-            else:
-                # Fallback: If no calculated_costs, use payment_amount
-                calculated_total = gross_total
-                cost_items.append(['Abschleppkosten gesamt', f"{calculated_total:.2f} €"])
+            # Service yard
+            if service:
+                prices_include_vat = service.get('prices_include_vat', True)
         
-        # Build cost table (just the items, no Netto/MwSt/Brutto breakdown)
+        if issuer_settings:
+            prices_include_vat = issuer_settings.get('prices_include_vat', True)
+        
+        # Build simplified cost table
         cost_table_data = []
-        for item, price in cost_items:
+        
+        if prices_include_vat:
+            # Preise inkl. MwSt → Nur Gesamtbetrag anzeigen
             cost_table_data.append([
-                Paragraph(item, cell_style),
-                Paragraph(price, ParagraphStyle('RightAlign', parent=cell_style, alignment=2))
+                Paragraph("<b>Gesamtbetrag</b>", ParagraphStyle('Bold', parent=cell_style, fontSize=11)),
+                Paragraph(f"<b>{gross_total:.2f} €</b>", ParagraphStyle('BoldRight', parent=cell_style, fontSize=11, alignment=2))
             ])
-        
-        # Add spacer row before total
-        spacer_style = ParagraphStyle(
-            'Spacer',
-            parent=cell_style,
-            fontSize=4,
-            leading=6
-        )
-        cost_table_data.append([
-            Paragraph(" ", spacer_style),
-            Paragraph(" ", spacer_style)
-        ])
-        
-        # Calculate final total (sum of breakdown items OR authority calculation)
-        final_total = calculated_total if job.get('target_yard') != 'authority_yard' else gross_total
-        
-        # Only show GESAMTBETRAG (sum of all breakdown items)
-        cost_table_data.append([
-            Paragraph("<b>Gesamtbetrag</b>", ParagraphStyle('Bold', parent=cell_style, fontSize=11)),
-            Paragraph(f"<b>{final_total:.2f} €</b>", ParagraphStyle('BoldRight', parent=cell_style, fontSize=11, alignment=2))
-        ])
+        else:
+            # Preise sind Netto → Netto + MwSt + Brutto anzeigen
+            vat_rate = 0.19
+            net_total = gross_total / (1 + vat_rate)
+            vat_amount = gross_total - net_total
+            
+            cost_table_data.append([
+                Paragraph("Netto-Summe", cell_style),
+                Paragraph(f"{net_total:.2f} €", ParagraphStyle('RightAlign', parent=cell_style, alignment=2))
+            ])
+            cost_table_data.append([
+                Paragraph(f"zzgl. {int(vat_rate * 100)}% MwSt.", cell_style),
+                Paragraph(f"{vat_amount:.2f} €", ParagraphStyle('RightAlign', parent=cell_style, alignment=2))
+            ])
+            
+            # Spacer
+            spacer_style = ParagraphStyle('Spacer', parent=cell_style, fontSize=4, leading=6)
+            cost_table_data.append([Paragraph(" ", spacer_style), Paragraph(" ", spacer_style)])
+            
+            cost_table_data.append([
+                Paragraph("<b>Gesamtbetrag (Brutto)</b>", ParagraphStyle('Bold', parent=cell_style, fontSize=11)),
+                Paragraph(f"<b>{gross_total:.2f} €</b>", ParagraphStyle('BoldRight', parent=cell_style, fontSize=11, alignment=2))
+            ])
         
         cost_table = Table(cost_table_data, colWidths=[12*cm, 5*cm])
         cost_table.setStyle(TableStyle([

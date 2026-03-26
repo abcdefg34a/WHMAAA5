@@ -150,7 +150,8 @@ export const AuthorityDashboard = () => {
     yard_address: '',
     yard_lat: null,
     yard_lng: null,
-    ust_id: ''  // NEW: USt-ID for invoicing
+    ust_id: '',  // NEW: USt-ID for invoicing
+    prices_include_vat: true  // NEW: Price display setting
   });
   const [targetYard, setTargetYard] = useState('service_yard');
   const [selectedYardId, setSelectedYardId] = useState('');  // Selected yard when creating job
@@ -235,7 +236,8 @@ export const AuthorityDashboard = () => {
         yard_address: authoritySettings.yard_address,
         yard_lat: authoritySettings.yard_lat,
         yard_lng: authoritySettings.yard_lng,
-        ust_id: authoritySettings.ust_id  // NEW: USt-ID
+        ust_id: authoritySettings.ust_id,  // NEW: USt-ID
+        prices_include_vat: authoritySettings.prices_include_vat  // NEW: Price display
       });
       toast.success('Einstellungen gespeichert!');
       fetchAuthoritySettings();
@@ -2318,6 +2320,46 @@ export const AuthorityDashboard = () => {
                     <p className="text-xs text-slate-500">
                       Format: DE + 9 Ziffern (z.B. DE123456789)
                     </p>
+                  </div>
+                </CardContent>
+              </Card>
+
+              {/* NEW: Price display setting */}
+              <Card>
+                <CardHeader>
+                  <CardTitle className="text-base flex items-center gap-2">
+                    <Euro className="h-4 w-4" />
+                    Rechnungsdarstellung
+                  </CardTitle>
+                  <CardDescription>
+                    Legen Sie fest, wie Preise auf Rechnungen dargestellt werden
+                  </CardDescription>
+                </CardHeader>
+                <CardContent>
+                  <div className="flex items-start gap-3 p-3 bg-slate-50 border rounded-lg">
+                    <input
+                      type="checkbox"
+                      id="authPricesIncludeVat"
+                      checked={authoritySettings.prices_include_vat !== false}
+                      onChange={(e) => setAuthoritySettings({...authoritySettings, prices_include_vat: e.target.checked})}
+                      className="w-4 h-4 mt-1"
+                    />
+                    <div className="flex-1">
+                      <Label htmlFor="authPricesIncludeVat" className="cursor-pointer font-medium">
+                        Preise inkl. MwSt
+                      </Label>
+                      <p className="text-xs text-slate-600 mt-1">
+                        {authoritySettings.prices_include_vat !== false ? (
+                          <>
+                            ✓ <strong>Aktiviert:</strong> Rechnung zeigt nur Gesamtbetrag (z.B. "425€")
+                          </>
+                        ) : (
+                          <>
+                            <strong>Deaktiviert:</strong> Rechnung zeigt Netto + 19% MwSt + Brutto
+                          </>
+                        )}
+                      </p>
+                    </div>
                   </div>
                 </CardContent>
               </Card>
