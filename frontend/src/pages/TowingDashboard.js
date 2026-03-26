@@ -479,7 +479,19 @@ export const TowingDashboard = () => {
       ordering_authority: '',
       contact_attempts: false,
       contact_attempts_notes: '',
-      estimated_vehicle_value: ''
+      estimated_vehicle_value: '',
+      // NEW: Dual-Yard selection - always default to service_yard
+      target_yard: 'service_yard',
+      authority_yard_id: '',
+      authority_yard_name: '',
+      authority_yard_address: '',
+      authority_yard_lat: null,
+      authority_yard_lng: null,
+      authority_yard_phone: '',
+      authority_price_category_id: '',
+      authority_price_category_name: '',
+      authority_base_price: 0,
+      authority_daily_rate: 0
     });
     setNewJobPhotos([]);
     setNewJobPosition(null);
@@ -552,12 +564,8 @@ export const TowingDashboard = () => {
     try {
       const response = await axios.get(`${API}/authority/${authorityId}/public-settings`);
       setSelectedAuthoritySettings(response.data);
-      // Set default target_yard based on authority's yard_model
-      if (response.data.yard_model === 'authority_yard') {
-        setNewJobData(prev => ({ ...prev, target_yard: 'authority_yard' }));
-      } else {
-        setNewJobData(prev => ({ ...prev, target_yard: 'service_yard' }));
-      }
+      // For towing services, default should ALWAYS be 'service_yard' (Eigener Hof)
+      // User can manually select 'authority_yard' if needed
     } catch (error) {
       console.error('Error fetching authority settings:', error);
       setSelectedAuthoritySettings(null);

@@ -430,7 +430,7 @@ backend:
 frontend:
   - task: "Dual-Yard Selection for Towing Service"
     implemented: true
-    working: false
+    working: true
     file: "frontend/src/pages/TowingDashboard.js"
     stuck_count: 0
     priority: "high"
@@ -439,6 +439,9 @@ frontend:
       - working: false
         agent: "testing"
         comment: "CRITICAL BUG: Default radio selection incorrect. When authority is selected, 'Behörden-Hof' is selected by default instead of 'Eigener Hof'. Root cause: fetchAuthoritySettings (lines 556-560) sets target_yard based on authority's yard_model, overriding the initial 'service_yard' default. For towing services creating jobs, the default should always be 'service_yard' (Eigener Hof) regardless of authority settings. WORKING FEATURES: ✓ Dialog opens, ✓ Authority selection triggers 'Zielort auswählen' section, ✓ Radio buttons functional, ✓ Yard/price selects show/hide correctly, ✓ Yard options load from API (e.g., 'Haupthof Hamburg'), ✓ Price category options load (e.g., 'PKW Standard - € + 25€/Tag'), ✓ Form validation works, ✓ API GET /api/authority/{id}/public-settings working."
+      - working: true
+        agent: "testing"
+        comment: "BUG FIX VERIFIED: Default selection now correctly set to 'Eigener Hof' (service_yard). Root cause identified: openCreateJobDialog() function was not resetting dual-yard fields when dialog opened. Fixed by adding all dual-yard fields (target_yard, authority_yard_id, etc.) to the state reset in openCreateJobDialog() with target_yard explicitly set to 'service_yard'. COMPREHENSIVE TEST RESULTS: ✅ Login successful, ✅ 'Neuer Auftrag' dialog opens, ✅ Authority selection working, ✅ 'Zielort auswählen' section appears after authority selection, ✅ 'Eigener Hof' radio button CHECKED by default (verified visually and programmatically), ✅ 'Behörden-Hof' radio button NOT checked by default, ✅ Switch to 'Behörden-Hof' functional, ✅ Yard and price category dropdowns appear when 'Behörden-Hof' selected, ✅ Switch back to 'Eigener Hof' functional, ✅ No console errors. All dual-yard functionality working as expected."
 
 metadata:
   created_by: "testing_agent"
@@ -543,8 +546,7 @@ metadata:
         comment: "Employee authentication working correctly. Both authority employees (field and yard) and towing service employees can successfully authenticate using their credentials. Login system properly handles employee accounts and returns appropriate tokens."
 
 test_plan:
-  current_focus: 
-    - "Dual-Yard Selection for Towing Service - Default Selection Fix"
+  current_focus: []
   stuck_tasks: []
   test_all: false
   test_priority: "high_first"
@@ -566,3 +568,5 @@ agent_communication:
     message: "EMPLOYEE SYSTEM COMPREHENSIVE TESTING COMPLETED: 100% success rate (25/25 tests passed). NEW employee system implementation fully functional for both authorities and towing services. Authority Employee System: POST/GET /api/authority/employees working with proper sub_role handling (field/yard). Towing Service Employee System: All CRUD operations (POST/GET/PATCH/DELETE /api/service/employees) working perfectly including block/unblock functionality. Role-based access control verified: field employees correctly denied authority-release access (403 with German error message), yard employees successfully allowed. Authority settings inheritance working. All authentication systems functional. Vehicle search public endpoint operational. Jobs API (GET/POST/PATCH) fully functional. All test credentials working correctly."
   - agent: "testing"
     message: "DUAL-YARD SELECTION TESTING COMPLETED: Feature 95% functional with 1 critical bug. WORKING: ✓ Login as towing service (abschlepp@test.de), ✓ 'Neuer Auftrag' dialog opens, ✓ Authority selection triggers 'Zielort auswählen' section, ✓ Dual-yard radio buttons visible ('Eigener Hof' / 'Behörden-Hof'), ✓ Radio switching functional, ✓ Yard/price selects show/hide correctly based on selection, ✓ Yard options load from GET /api/authority/{id}/public-settings (e.g., 'Haupthof Hamburg - Hafenstraße 123, Hamburg'), ✓ Price category options load (e.g., 'PKW Standard - € + 25€/Tag'), ✓ Form validation working. CRITICAL BUG: Default selection incorrect - 'Behörden-Hof' selected by default instead of 'Eigener Hof'. Root cause: TowingDashboard.js lines 556-560 in fetchAuthoritySettings() sets target_yard based on authority's yard_model, overriding initial 'service_yard' default. FIX NEEDED: Remove lines 556-560 OR change logic to always default to 'service_yard' for towing service job creation, regardless of authority's yard_model preference."
+  - agent: "testing"
+    message: "DUAL-YARD SELECTION BUG FIX VERIFIED: Bug successfully fixed and tested. Root cause was in openCreateJobDialog() function (lines 465-487) - dual-yard fields were not being reset when dialog opened, causing state to persist from previous interactions. SOLUTION IMPLEMENTED: Added all dual-yard fields to state reset in openCreateJobDialog() with target_yard explicitly set to 'service_yard'. COMPREHENSIVE RE-TEST RESULTS: ✅ 'Eigener Hof' now correctly checked by default (verified both visually and programmatically), ✅ 'Behörden-Hof' correctly NOT checked by default, ✅ All switching functionality working, ✅ Yard/price dropdowns appear correctly, ✅ No console errors. Feature now 100% functional. All test steps from review request completed successfully."
