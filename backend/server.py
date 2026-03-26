@@ -4790,7 +4790,7 @@ async def generate_pdf(job_id: str, token: str):
         
         # Get issuer settings to check prices_include_vat
         issuer_settings = None
-        prices_include_vat = True  # Default: Preise sind Brutto
+        prices_include_vat = None  # Start with None to detect missing values
         
         # Determine who released the vehicle and use their price setting
         if job.get('target_yard') == 'authority_yard' or (job.get('authority_id') and not job.get('assigned_service_id')):
@@ -4809,12 +4809,13 @@ async def generate_pdf(job_id: str, token: str):
             if service_settings:
                 issuer_settings = service_settings
         
-        if issuer_settings:
-            # Check if prices_include_vat exists and is explicitly False
-            if 'prices_include_vat' in issuer_settings:
-                prices_include_vat = issuer_settings['prices_include_vat']
-            else:
-                prices_include_vat = True  # Default if not set
+        # Determine prices_include_vat with explicit handling
+        if issuer_settings and 'prices_include_vat' in issuer_settings:
+            # Use the explicit value from settings (can be True or False)
+            prices_include_vat = issuer_settings['prices_include_vat']
+        else:
+            # Default for old jobs without this setting: assume prices include VAT
+            prices_include_vat = True
         
         # Build simplified cost table
         cost_table_data = []
