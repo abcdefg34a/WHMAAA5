@@ -4348,22 +4348,21 @@ async def generate_pdf(job_id: str, token: str):
     issuer = None
     issuer_ust_id = None
     
-    if job.get('released_at'):
-        # Get releaser info
-        if job.get('target_yard') == 'authority_yard':
-            # Authority released -> Authority's USt-ID
-            authority = await db.users.find_one(
-                {"id": job.get('authority_id')},
-                {"_id": 0, "ust_id": 1, "authority_name": 1, "department": 1}
-            )
-            if authority:
-                issuer = authority.get('authority_name', 'Behörde')
-                issuer_ust_id = authority.get('ust_id')
-        else:
-            # Service yard -> Towing service's USt-ID
-            if service:
-                issuer = service.get('company_name', 'Abschleppdienst')
-                issuer_ust_id = service.get('ust_id')
+    # Get releaser info (always show, even if not released yet)
+    if job.get('target_yard') == 'authority_yard':
+        # Authority yard -> Authority's USt-ID
+        authority = await db.users.find_one(
+            {"id": job.get('authority_id')},
+            {"_id": 0, "ust_id": 1, "authority_name": 1, "department": 1}
+        )
+        if authority:
+            issuer = authority.get('authority_name', 'Behörde')
+            issuer_ust_id = authority.get('ust_id')
+    else:
+        # Service yard -> Towing service's USt-ID
+        if service:
+            issuer = service.get('company_name', 'Abschleppdienst')
+            issuer_ust_id = service.get('ust_id')
     
     # Generate invoice number (RE-YYYY-JobNumber)
     from datetime import datetime
@@ -4767,15 +4766,16 @@ async def generate_pdf(job_id: str, token: str):
                 Paragraph(price, ParagraphStyle('RightAlign', parent=cell_style, alignment=2))
             ])
         
-        # Add separator line (light gray, not bold)
-        separator_style = ParagraphStyle(
-            'Separator',
+        # Add spacer row (no visual separator, just spacing)
+        spacer_style = ParagraphStyle(
+            'Spacer',
             parent=cell_style,
-            textColor=colors.HexColor('#cbd5e1')  # Light gray
+            fontSize=4,
+            leading=6
         )
         cost_table_data.append([
-            Paragraph("───────────────────────────", separator_style),
-            Paragraph("──────────────", ParagraphStyle('RightAlign', parent=separator_style, alignment=2))
+            Paragraph(" ", spacer_style),
+            Paragraph(" ", spacer_style)
         ])
         
         # Netto
@@ -4790,10 +4790,10 @@ async def generate_pdf(job_id: str, token: str):
             Paragraph(f"{vat_amount:.2f} €", ParagraphStyle('RightAlign', parent=cell_style, alignment=2))
         ])
         
-        # Brutto total separator (light gray)
+        # Spacer before total (no visual separator)
         cost_table_data.append([
-            Paragraph("═══════════════════════════", separator_style),
-            Paragraph("══════════════", ParagraphStyle('RightAlign', parent=separator_style, alignment=2))
+            Paragraph(" ", spacer_style),
+            Paragraph(" ", spacer_style)
         ])
         cost_table_data.append([
             Paragraph("<b>GESAMT (Brutto)</b>", ParagraphStyle('Bold', parent=cell_style, fontSize=11)),
