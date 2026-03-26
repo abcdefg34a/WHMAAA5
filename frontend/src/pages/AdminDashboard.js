@@ -60,6 +60,20 @@ export const AdminDashboard = () => {
   // Audit logs state
   const [auditLogs, setAuditLogs] = useState([]);
   const [auditLoading, setAuditLoading] = useState(false);
+  const [expandedLogIds, setExpandedLogIds] = useState(new Set());
+
+  // Toggle function for expanded logs
+  const toggleLogExpanded = (logId) => {
+    setExpandedLogIds(prev => {
+      const newSet = new Set(prev);
+      if (newSet.has(logId)) {
+        newSet.delete(logId);
+      } else {
+        newSet.add(logId);
+      }
+      return newSet;
+    });
+  };
 
   // Backup state
   const [backups, setBackups] = useState([]);
@@ -1423,7 +1437,7 @@ export const AdminDashboard = () => {
                       </thead>
                       <tbody>
                         {auditLogs.map(log => {
-                          const [expandedLog, setExpandedLog] = React.useState(false);
+                          const isExpanded = expandedLogIds.has(log.id);
                           
                           return (
                             <React.Fragment key={log.id}>
@@ -1439,14 +1453,14 @@ export const AdminDashboard = () => {
                                 <td className="text-sm py-3 px-4">{log.user_name}</td>
                                 <td className="py-3 px-4">
                                   <button
-                                    onClick={() => setExpandedLog(!expandedLog)}
+                                    onClick={() => toggleLogExpanded(log.id)}
                                     className="text-blue-600 hover:text-blue-800 text-sm font-medium flex items-center gap-1"
                                   >
-                                    {expandedLog ? '▼ Weniger' : '▶ Details anzeigen'}
+                                    {isExpanded ? '▼ Weniger' : '▶ Details anzeigen'}
                                   </button>
                                 </td>
                               </tr>
-                              {expandedLog && (
+                              {isExpanded && (
                                 <tr className="bg-slate-50">
                                   <td colSpan="4" className="py-4 px-4">
                                     <div className="bg-white p-4 rounded border border-slate-200">
