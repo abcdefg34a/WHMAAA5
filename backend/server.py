@@ -970,6 +970,12 @@ class JobResponse(BaseModel):
     anonymized: Optional[bool] = None
     personal_data_anonymized: Optional[bool] = None
     personal_data_anonymized_at: Optional[str] = None
+    # NEW: Release tracking (who released the vehicle)
+    released_by_id: Optional[str] = None
+    released_by_name: Optional[str] = None
+    released_by_role: Optional[str] = None
+    released_by_company: Optional[str] = None  # For towing service employees
+    delivered_to_authority_at: Optional[str] = None
 
 class VehicleSearchResult(BaseModel):
     found: bool
@@ -2304,6 +2310,147 @@ async def calculate_job_costs(job_id: str, user: dict = Depends(get_current_user
     
     return {"total": round(total, 2), "breakdown": breakdown, "pricing_source": "service"}
 
+@api_router.get("/jobs/{job_id}/history")
+async def get_job_history(job_id: str, user: dict = Depends(get_current_user)):
+    """Get complete history of a job including all changes and audit logs
+    Only accessible by authorities"""
+    
+    # Only authorities can access job history
+    if user["role"] != UserRole.AUTHORITY:
+        raise HTTPException(status_code=403, detail="Nur Behörden haben Zugriff auf die Job-Historie")
+    
+    # Get the job
+    job = await db.jobs.find_one({"id": job_id}, {"_id": 0})
+    if not job:
+        raise HTTPException(status_code=404, detail="Job nicht gefunden")
+    
+    # Check if authority has access to this job
+    authority_id = get_authority_id(user)
+    if job.get("authority_id") != authority_id:
+        raise HTTPException(status_code=403, detail="Zugriff verweigert")
+    
+    # Check if photos should be deleted (5 months after released_at)
+    photos_deleted = False
+    if job.get("released_at") and (job.get("photos") or job.get("service_photos")):
+        released_date = datetime.fromisoformat(job["released_at"].replace("Z", "+00:00"))
+        now = datetime.now(timezone.utc)
+        months_diff = (now.year - released_date.year) * 12 + (now.month - released_date.month)
+        
+        if months_diff >= 5:
+            # Delete photos
+            await db.jobs.update_one(
+                {"id": job_id},
+                {"$set": {"photos": [], "service_photos": []}}
+            )
+            job["photos"] = []
+            job["service_photos"] = []
+            photos_deleted = True
+            
+            # Log photo deletion
+            await log_audit("JOB_PHOTOS_DELETED", "system", "System", {
+                "job_id": job_id,
+                "job_number": job.get("job_number"),
+                "reason": "5_month_retention_expired",
+                "released_at": job.get("released_at")
+            })
+    
+    # Get audit logs for this job
+    audit_logs = await db.audit_logs.find(
+        {"details.job_id": job_id},
+        {"_id": 0}
+    ).sort([("timestamp", 1)]).to_list(1000)
+    
+    # Build timeline of changes
+    timeline = []
+    
+    # 1. Job created
+    created_entry = {
+        "timestamp": job.get("created_at"),
+        "action": "created",
+        "user_name": job.get("created_by_name"),
+        "user_role": "authority" if job.get("created_by_authority") else "towing_service",
+        "details": {
+            "license_plate": job.get("license_plate"),
+            "location": job.get("location_address")
+        }
+    }
+    timeline.append(created_entry)
+    
+    # 2. Status changes
+    status_map = {
+        "on_site_at": {"status": "on_site", "label": "Vor Ort"},
+        "towed_at": {"status": "towed", "label": "Abgeschleppt"},
+        "in_yard_at": {"status": "in_yard", "label": "Im Hof"},
+        "delivered_to_authority_at": {"status": "delivered_to_authority", "label": "Im Behörden-Hof"},
+        "released_at": {"status": "released", "label": "Abgeholt"}
+    }
+    
+    for field, info in status_map.items():
+        if job.get(field):
+            entry = {
+                "timestamp": job[field],
+                "action": "status_change",
+                "status": info["status"],
+                "label": info["label"],
+                "details": {}
+            }
+            timeline.append(entry)
+    
+    # 3. Add audit log entries
+    for log in audit_logs:
+        action = log.get("action")
+        if action == "JOB_STATUS_UPDATED":
+            timeline.append({
+                "timestamp": log.get("timestamp"),
+                "action": "status_updated",
+                "user_name": log.get("user_name"),
+                "details": {
+                    "old_status": log.get("details", {}).get("old_status"),
+                    "new_status": log.get("details", {}).get("new_status")
+                }
+            })
+        elif action == "JOB_DATA_EDITED":
+            timeline.append({
+                "timestamp": log.get("timestamp"),
+                "action": "data_edited",
+                "user_name": log.get("user_name"),
+                "details": log.get("details", {})
+            })
+        elif action == "JOB_PHOTOS_UPLOADED":
+            timeline.append({
+                "timestamp": log.get("timestamp"),
+                "action": "photos_uploaded",
+                "user_name": log.get("user_name"),
+                "details": log.get("details", {})
+            })
+        elif action == "JOB_PHOTOS_DELETED":
+            timeline.append({
+                "timestamp": log.get("timestamp"),
+                "action": "photos_deleted",
+                "user_name": log.get("user_name"),
+                "details": log.get("details", {})
+            })
+    
+    # Sort timeline by timestamp
+    timeline.sort(key=lambda x: x.get("timestamp") or "")
+    
+    # Build response
+    response = {
+        "job": job,
+        "timeline": timeline,
+        "release_info": {
+            "released_by_id": job.get("released_by_id"),
+            "released_by_name": job.get("released_by_name"),
+            "released_by_role": job.get("released_by_role"),
+            "released_by_company": job.get("released_by_company"),
+            "released_at": job.get("released_at")
+        },
+        "photos_deleted": photos_deleted
+    }
+    
+    return response
+
+
 # ==================== AUTHORITY SETTINGS & PRICING ====================
 
 class AuthorityPriceCategory(BaseModel):
@@ -3331,6 +3478,15 @@ async def update_job(job_id: str, data: JobUpdate, user: dict = Depends(get_curr
             update_data["released_at"] = None
         elif data.status == JobStatus.RELEASED:
             update_data["released_at"] = now
+            # Track who released the vehicle
+            update_data["released_by_id"] = user["id"]
+            update_data["released_by_name"] = user.get("name", user.get("email"))
+            update_data["released_by_role"] = user["role"]
+            # For towing service employees, also track company
+            if user["role"] == UserRole.TOWING_SERVICE and user.get("parent_service_id"):
+                parent_service = await db.users.find_one({"id": user["parent_service_id"]}, {"_id": 0, "company_name": 1})
+                if parent_service:
+                    update_data["released_by_company"] = parent_service.get("company_name")
         elif data.status == JobStatus.ASSIGNED:
             # Clear all forward steps
             update_data["on_site_at"] = None

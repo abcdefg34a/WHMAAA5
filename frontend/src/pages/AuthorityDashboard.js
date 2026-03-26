@@ -197,6 +197,12 @@ export const AuthorityDashboard = () => {
   const [editJobPosition, setEditJobPosition] = useState(null);
   const [deletingJob, setDeletingJob] = useState(null);
 
+  // NEW: Job History Dialog state
+  const [historyDialogOpen, setHistoryDialogOpen] = useState(false);
+  const [selectedJobForHistory, setSelectedJobForHistory] = useState(null);
+  const [jobHistory, setJobHistory] = useState(null);
+  const [loadingHistory, setLoadingHistory] = useState(false);
+
   useEffect(() => {
     fetchJobs();
     fetchLinkedServices();
@@ -362,6 +368,28 @@ export const AuthorityDashboard = () => {
     
     return { total, breakdown, days };
   };
+
+  // NEW: Fetch job history
+  const fetchJobHistory = async (jobId) => {
+    setLoadingHistory(true);
+    try {
+      const response = await axios.get(`${API}/jobs/${jobId}/history`);
+      setJobHistory(response.data);
+      setHistoryDialogOpen(true);
+    } catch (error) {
+      console.error('Error fetching job history:', error);
+      toast.error('Fehler beim Laden der Job-Historie');
+    } finally {
+      setLoadingHistory(false);
+    }
+  };
+
+  // NEW: Open job history dialog
+  const openJobHistory = (job) => {
+    setSelectedJobForHistory(job);
+    fetchJobHistory(job.id);
+  };
+
 
   const fetchJobs = async () => {
     try {
@@ -1551,7 +1579,11 @@ export const AuthorityDashboard = () => {
                 ) : (
                   <div className="space-y-4">
                     {jobs.map(job => (
-                      <div key={job.id} className="job-card">
+                      <div 
+                        key={job.id} 
+                        className="job-card cursor-pointer hover:shadow-lg transition-shadow"
+                        onClick={() => openJobHistory(job)}
+                      >
                         <div className="job-card-header">
                           <div>
                             <p className="job-license-plate">{job.license_plate}</p>
@@ -2617,6 +2649,178 @@ export const AuthorityDashboard = () => {
               </Button>
             </div>
           )}
+        </DialogContent>
+      </Dialog>
+
+      {/* Job History Dialog */}
+      <Dialog open={historyDialogOpen} onOpenChange={setHistoryDialogOpen}>
+        <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle className="text-xl font-bold">
+              Auftrags-Historie: {selectedJobForHistory?.license_plate}
+            </DialogTitle>
+            <DialogDescription>
+              Vollständige Historie mit allen Änderungen und Details
+            </DialogDescription>
+          </DialogHeader>
+
+          {loadingHistory ? (
+            <div className="flex justify-center items-center p-8">
+              <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-500"></div>
+            </div>
+          ) : jobHistory ? (
+            <div className="space-y-6">
+              {/* Basic Job Info */}
+              <Card>
+                <CardHeader>
+                  <CardTitle className="text-base">Grundinformationen</CardTitle>
+                </CardHeader>
+                <CardContent className="grid grid-cols-2 gap-4 text-sm">
+                  <div>
+                    <span className="font-medium">Kennzeichen:</span> {jobHistory.job.license_plate}
+                  </div>
+                  <div>
+                    <span className="font-medium">Job-Nummer:</span> {jobHistory.job.job_number}
+                  </div>
+                  <div>
+                    <span className="font-medium">Status:</span> {jobHistory.job.status}
+                  </div>
+                  <div>
+                    <span className="font-medium">Erstellt am:</span> {new Date(jobHistory.job.created_at).toLocaleString('de-DE')}
+                  </div>
+                  <div>
+                    <span className="font-medium">Erfasst von:</span> {jobHistory.job.created_by_name}
+                  </div>
+                  <div>
+                    <span className="font-medium">Abschleppdienst:</span> {jobHistory.job.assigned_service_name || '-'}
+                  </div>
+                </CardContent>
+              </Card>
+
+              {/* Release Info (if released) */}
+              {jobHistory.release_info?.released_at && (
+                <Card className="border-green-200 bg-green-50">
+                  <CardHeader>
+                    <CardTitle className="text-base flex items-center gap-2">
+                      <CheckCircle className="h-5 w-5 text-green-600" />
+                      Freigabe-Information
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent className="grid grid-cols-2 gap-4 text-sm">
+                    <div>
+                      <span className="font-medium">Freigegeben von:</span> {jobHistory.release_info.released_by_name}
+                    </div>
+                    <div>
+                      <span className="font-medium">Zeitpunkt:</span> {new Date(jobHistory.release_info.released_at).toLocaleString('de-DE')}
+                    </div>
+                    <div>
+                      <span className="font-medium">Rolle:</span>{' '}
+                      {jobHistory.release_info.released_by_role === 'authority' ? 'Behörden-Mitarbeiter' : 'Abschleppdienst'}
+                    </div>
+                    {jobHistory.release_info.released_by_company && (
+                      <div>
+                        <span className="font-medium">Firma:</span> {jobHistory.release_info.released_by_company}
+                      </div>
+                    )}
+                  </CardContent>
+                </Card>
+              )}
+
+              {/* Photos */}
+              {jobHistory.photos_deleted ? (
+                <Card className="border-orange-200 bg-orange-50">
+                  <CardContent className="p-4">
+                    <p className="text-orange-700 text-sm">
+                      📸 Fotos wurden nach 5 Monaten automatisch gelöscht (Datenschutz-Retention)
+                    </p>
+                  </CardContent>
+                </Card>
+              ) : (jobHistory.job.photos?.length > 0 || jobHistory.job.service_photos?.length > 0) ? (
+                <Card>
+                  <CardHeader>
+                    <CardTitle className="text-base">Fotos</CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    <div className="grid grid-cols-3 gap-4">
+                      {jobHistory.job.photos?.map((photo, idx) => (
+                        <img
+                          key={idx}
+                          src={photo}
+                          alt={`Foto ${idx + 1}`}
+                          className="w-full h-32 object-cover rounded-lg border"
+                        />
+                      ))}
+                      {jobHistory.job.service_photos?.map((photo, idx) => (
+                        <img
+                          key={`service-${idx}`}
+                          src={photo}
+                          alt={`Abschleppdienst Foto ${idx + 1}`}
+                          className="w-full h-32 object-cover rounded-lg border"
+                        />
+                      ))}
+                    </div>
+                  </CardContent>
+                </Card>
+              ) : null}
+
+              {/* Timeline */}
+              <Card>
+                <CardHeader>
+                  <CardTitle className="text-base flex items-center gap-2">
+                    <Clock className="h-5 w-5" />
+                    Änderungsverlauf
+                  </CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <div className="space-y-3">
+                    {jobHistory.timeline.map((entry, idx) => (
+                      <div key={idx} className="flex gap-3 pb-3 border-b last:border-0">
+                        <div className="flex-shrink-0 w-32 text-xs text-slate-500">
+                          {entry.timestamp ? new Date(entry.timestamp).toLocaleString('de-DE') : '-'}
+                        </div>
+                        <div className="flex-1">
+                          <div className="font-medium text-sm">
+                            {entry.action === 'created' && '📝 Auftrag erstellt'}
+                            {entry.action === 'status_change' && `✅ Status: ${entry.label}`}
+                            {entry.action === 'status_updated' && `🔄 Status geändert`}
+                            {entry.action === 'data_edited' && '✏️ Daten geändert'}
+                            {entry.action === 'photos_uploaded' && '📸 Fotos hochgeladen'}
+                            {entry.action === 'photos_deleted' && '🗑️ Fotos gelöscht'}
+                          </div>
+                          {entry.user_name && (
+                            <div className="text-xs text-slate-500 mt-1">
+                              von {entry.user_name}
+                              {entry.user_role && ` (${entry.user_role === 'authority' ? 'Behörde' : 'Abschleppdienst'})`}
+                            </div>
+                          )}
+                          {entry.details && Object.keys(entry.details).length > 0 && (
+                            <div className="text-xs text-slate-600 mt-1">
+                              {entry.details.changes && entry.details.changes.map((change, i) => (
+                                <div key={i}>{change}</div>
+                              ))}
+                              {entry.details.old_status && entry.details.new_status && (
+                                <div>{entry.details.old_status} → {entry.details.new_status}</div>
+                              )}
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </CardContent>
+              </Card>
+            </div>
+          ) : (
+            <div className="text-center p-8 text-slate-500">
+              Keine Historie verfügbar
+            </div>
+          )}
+
+          <div className="flex justify-end gap-2 mt-4">
+            <Button variant="outline" onClick={() => setHistoryDialogOpen(false)}>
+              Schließen
+            </Button>
+          </div>
         </DialogContent>
       </Dialog>
     </div>
