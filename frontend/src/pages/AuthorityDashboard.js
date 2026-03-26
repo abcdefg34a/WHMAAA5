@@ -227,6 +227,13 @@ export const AuthorityDashboard = () => {
 
   // Save authority settings
   const handleSaveAuthoritySettings = async () => {
+    // NEW: Show confirmation dialog for old PDFs
+    const userConfirmed = window.confirm(
+      'Sollen alte Rechnungen (älter als 10 Tage) mit den neuen Einstellungen neu generiert werden?\n\n' +
+      '• JA: Alte Rechnungen werden mit den neuen Preisen/USt-ID neu berechnet\n' +
+      '• NEIN: Alte Rechnungen bleiben unverändert (empfohlen für Compliance)'
+    );
+    
     setSavingSettings(true);
     try {
       const response = await axios.patch(`${API}/authority/settings`, {
@@ -237,7 +244,8 @@ export const AuthorityDashboard = () => {
         yard_lat: authoritySettings.yard_lat,
         yard_lng: authoritySettings.yard_lng,
         ust_id: authoritySettings.ust_id,  // NEW: USt-ID
-        prices_include_vat: authoritySettings.prices_include_vat  // NEW: Price display
+        prices_include_vat: authoritySettings.prices_include_vat,  // NEW: Price display
+        update_old_pdfs: userConfirmed  // NEW: Update old PDFs flag
       });
       toast.success('Einstellungen gespeichert!');
       fetchAuthoritySettings();

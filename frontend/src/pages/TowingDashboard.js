@@ -752,6 +752,13 @@ export const TowingDashboard = () => {
   };
 
   const handleSaveCosts = async () => {
+    // NEW: Show confirmation dialog for old PDFs
+    const userConfirmed = window.confirm(
+      'Sollen alte Rechnungen (älter als 10 Tage) mit den neuen Einstellungen neu generiert werden?\n\n' +
+      '• JA: Alte Rechnungen werden mit den neuen Preisen/USt-ID neu berechnet\n' +
+      '• NEIN: Alte Rechnungen bleiben unverändert (empfohlen für Compliance)'
+    );
+    
     setSavingCosts(true);
     try {
       const response = await axios.patch(`${API}/services/pricing-settings`, {
@@ -768,7 +775,8 @@ export const TowingDashboard = () => {
         weight_categories: weightCategories,
         service_price_categories: servicePriceCategories,  // NEW
         ust_id: companyUstId || null,  // NEW: USt-ID
-        prices_include_vat: pricesIncludeVat  // NEW: Price display setting
+        prices_include_vat: pricesIncludeVat,  // NEW: Price display setting
+        update_old_pdfs: userConfirmed  // NEW: Update old PDFs flag
       });
       updateUser(response.data);
       toast.success('Preiseinstellungen gespeichert!');

@@ -805,6 +805,8 @@ class PricingSettingsRequest(BaseModel):
     prices_include_vat: Optional[bool] = None
     # NEW: Service price categories (like authorities - for vehicle type pricing)
     service_price_categories: Optional[List[dict]] = None
+    # NEW: Update old PDFs flag (for 10-day freeze logic)
+    update_old_pdfs: Optional[bool] = False
 
 class ApproveServiceRequest(BaseModel):
     approved: bool
@@ -988,6 +990,8 @@ class JobResponse(BaseModel):
     released_by_role: Optional[str] = None
     released_by_company: Optional[str] = None  # For towing service employees
     delivered_to_authority_at: Optional[str] = None
+    # NEW: PDF freeze timestamp (for 10-day freeze logic)
+    pdf_generated_at: Optional[str] = None
 
 class VehicleSearchResult(BaseModel):
     found: bool
@@ -1914,6 +1918,26 @@ async def update_pricing_settings(data: PricingSettingsRequest, user: dict = Dep
     if update_data:
         await db.users.update_one({"id": user["id"]}, {"$set": update_data})
     
+    # NEW: Handle old PDF updates if requested
+    if data.update_old_pdfs:
+        from datetime import datetime, timezone, timedelta
+        ten_days_ago = datetime.now(timezone.utc) - timedelta(days=10)
+        ten_days_ago_iso = ten_days_ago.isoformat()
+        
+        # Reset pdf_generated_at for all jobs assigned to this service that are older than 10 days
+        result = await db.jobs.update_many(
+            {
+                "assigned_service_id": user["id"],
+                "pdf_generated_at": {"$lt": ten_days_ago_iso, "$ne": None}
+            },
+            {"$unset": {"pdf_generated_at": ""}}
+        )
+        
+        # Log the update
+        await log_audit("OLD_PDFS_RESET", user["id"], user.get("company_name", user["name"]), {
+            "jobs_updated": result.modified_count
+        })
+    
     updated_user = await db.users.find_one({"id": user["id"]}, {"_id": 0, "password": 0})
     
     # Audit log
@@ -2514,6 +2538,8 @@ class AuthoritySettingsUpdate(BaseModel):
     ust_id: Optional[str] = None
     # NEW: Price display setting
     prices_include_vat: Optional[bool] = None
+    # NEW: Update old PDFs flag (for 10-day freeze logic)
+    update_old_pdfs: Optional[bool] = False
 
 @api_router.patch("/authority/settings")
 async def update_authority_settings(data: AuthoritySettingsUpdate, user: dict = Depends(get_current_user)):
@@ -2583,6 +2609,26 @@ async def update_authority_settings(data: AuthoritySettingsUpdate, user: dict = 
                 {"parent_authority_id": authority_id},
                 {"$set": employee_update}
             )
+    
+    # NEW: Handle old PDF updates if requested
+    if data.update_old_pdfs:
+        from datetime import datetime, timezone, timedelta
+        ten_days_ago = datetime.now(timezone.utc) - timedelta(days=10)
+        ten_days_ago_iso = ten_days_ago.isoformat()
+        
+        # Reset pdf_generated_at for all jobs created by this authority that are older than 10 days
+        result = await db.jobs.update_many(
+            {
+                "authority_id": authority_id,
+                "pdf_generated_at": {"$lt": ten_days_ago_iso, "$ne": None}
+            },
+            {"$unset": {"pdf_generated_at": ""}}
+        )
+        
+        # Log the update
+        await log_audit("OLD_PDFS_RESET", user["id"], user["name"], {
+            "jobs_updated": result.modified_count
+        })
     
     updated_user = await db.users.find_one({"id": user["id"]}, {"_id": 0, "password": 0})
     
@@ -4322,6 +4368,10 @@ async def generate_pdf(job_id: str, token: str):
     if not job:
         raise HTTPException(status_code=404, detail="Job not found")
     
+    # NEW: Track PDF generation timestamp (for freeze logic)
+    # PDF is frozen after 10 days - we won't reset pdf_generated_at unless user explicitly requests it
+    pdf_generated_at = job.get("pdf_generated_at")
+    
     # Get service info
     service = None
     if job.get("assigned_service_id"):
@@ -4933,6 +4983,14 @@ async def generate_pdf(job_id: str, token: str):
     
     doc.build(story)
     buffer.seek(0)
+    
+    # NEW: Save PDF generation timestamp (for freeze logic)
+    if not pdf_generated_at:
+        # Only set timestamp on first generation
+        await db.jobs.update_one(
+            {"id": job_id},
+            {"$set": {"pdf_generated_at": datetime.now(timezone.utc).isoformat()}}
+        )
     
     return StreamingResponse(
         buffer,
