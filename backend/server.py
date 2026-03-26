@@ -2309,7 +2309,7 @@ async def calculate_job_costs(job_id: str, user: dict = Depends(get_current_user
 class AuthorityPriceCategory(BaseModel):
     id: Optional[str] = None
     name: str  # z.B. "PKW bis 4t", "LKW 4-7,5t"
-    base_price: float  # Grundpreis (erste 24h)
+    base_fee: float  # Grundpreis (erste 24h)
     daily_rate: float  # Preis pro weitere 24h
     is_active: bool = True
 
