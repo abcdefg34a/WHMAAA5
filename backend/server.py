@@ -4740,131 +4740,20 @@ async def generate_pdf(job_id: str, token: str):
                 cost_items.append(['Verwahrkosten gesamt', f"{net_total:.2f} €"])
                 
         else:
-            # ===== ABSCHLEPPDIENST-HOF: Use service's weight_categories =====
-            # Get the service user (try multiple sources)
-            service_id = job.get('assigned_service_id') or job.get('created_by_id')
-            service_user = None
+            # ===== ABSCHLEPPDIENST-HOF: Use calculated_costs from landing page =====
+            # This is the SAME calculation that's shown on the public vehicle search!
+            calculated_costs = job.get('calculated_costs')
             
-            if service_id:
-                service_user = await db.users.find_one(
-                    {"id": service_id},
-                    {"_id": 0, "weight_categories": 1, "is_main_service": 1, "parent_service_id": 1}
-                )
-                
-                # If employee, get parent service's weight_categories
-                if service_user and not service_user.get('is_main_service', True):
-                    parent_id = service_user.get('parent_service_id')
-                    if parent_id:
-                        parent_service = await db.users.find_one(
-                            {"id": parent_id},
-                            {"_id": 0, "weight_categories": 1}
-                        )
-                        if parent_service:
-                            service_user = parent_service
-            
-            # Find the specific weight category used
-            weight_category = None
-            if service_user and service_user.get('weight_categories'):
-                weight_cat_id = job.get('weight_category_id')
-                if weight_cat_id:
-                    for cat in service_user['weight_categories']:
-                        if cat.get('id') == weight_cat_id:
-                            weight_category = cat
-                            break
-                
-                # Fallback: If no match but categories exist, try first one or guess from payment
-                if not weight_category and service_user['weight_categories']:
-                    # Try to find best match based on payment amount
-                    weight_category = service_user['weight_categories'][0]
-            
-            if weight_category:
-                # Extract all fee components from weight_category
-                processing_fee = weight_category.get('processing_fee', 0)
-                base_fee = weight_category.get('base_fee', 0)
-                daily_rate = weight_category.get('daily_rate', 0)
-                surcharge = weight_category.get('surcharge', 0)
-                weekend_surcharge = weight_category.get('weekend_surcharge', 0)
-                night_surcharge = weight_category.get('night_surcharge', 0)
-                
-                # Calculate storage days
-                days = 0
-                if job.get('in_yard_at'):
-                    in_yard_date = datetime.fromisoformat(job['in_yard_at'].replace('Z', '+00:00'))
-                    released_date = datetime.fromisoformat(job['released_at'].replace('Z', '+00:00'))
-                    days = max(0, (released_date - in_yard_date).days)
-                
-                # Build component total
-                component_total = 0
-                if processing_fee > 0:
-                    component_total += processing_fee
-                if base_fee > 0:
-                    component_total += base_fee
-                if days > 0 and daily_rate > 0:
-                    component_total += (days * daily_rate)
-                if surcharge > 0:
-                    component_total += surcharge
-                if weekend_surcharge > 0:
-                    component_total += weekend_surcharge
-                if night_surcharge > 0:
-                    component_total += night_surcharge
-                
-                # Check if we need proportional distribution
-                if component_total > 0:
-                    expected_gross = component_total * (1 + vat_rate)
-                    
-                    if abs(expected_gross - gross_total) < 1.0:
-                        # Components match - use directly
-                        if processing_fee > 0:
-                            cost_items.append(['Bearbeitungsgebühr', f"{processing_fee:.2f} €"])
-                        if base_fee > 0:
-                            cost_items.append(['Abschleppen (Grundgebühr)', f"{base_fee:.2f} €"])
-                        if days > 0 and daily_rate > 0:
-                            standzeit = days * daily_rate
-                            cost_items.append([f"Standzeit ({days} Tag{'e' if days != 1 else ''} × {daily_rate:.2f}€)", f"{standzeit:.2f} €"])
-                        if surcharge > 0:
-                            cost_items.append(['Lastzuschlag', f"{surcharge:.2f} €"])
-                        if weekend_surcharge > 0:
-                            cost_items.append(['Wochenend-Zuschlag', f"{weekend_surcharge:.2f} €"])
-                        if night_surcharge > 0:
-                            cost_items.append(['Nacht-Zuschlag', f"{night_surcharge:.2f} €"])
-                    else:
-                        # Distribute proportionally to net_total
-                        if processing_fee > 0:
-                            fee_net = (processing_fee / component_total) * net_total
-                            cost_items.append(['Bearbeitungsgebühr', f"{fee_net:.2f} €"])
-                        if base_fee > 0:
-                            base_net = (base_fee / component_total) * net_total
-                            cost_items.append(['Abschleppen (Grundgebühr)', f"{base_net:.2f} €"])
-                        if days > 0 and daily_rate > 0:
-                            standzeit_net = ((days * daily_rate) / component_total) * net_total
-                            cost_items.append([f"Standzeit ({days} Tag{'e' if days != 1 else ''} × {daily_rate:.2f}€)", f"{standzeit_net:.2f} €"])
-                        if surcharge > 0:
-                            surcharge_net = (surcharge / component_total) * net_total
-                            cost_items.append(['Lastzuschlag', f"{surcharge_net:.2f} €"])
-                        if weekend_surcharge > 0:
-                            weekend_net = (weekend_surcharge / component_total) * net_total
-                            cost_items.append(['Wochenend-Zuschlag', f"{weekend_net:.2f} €"])
-                        if night_surcharge > 0:
-                            night_net = (night_surcharge / component_total) * net_total
-                            cost_items.append(['Nacht-Zuschlag', f"{night_net:.2f} €"])
-                else:
-                    # No component_total but we have weight_category - distribute based on what's available
-                    # Just split net_total evenly across non-zero fees
-                    non_zero_fees = []
-                    if processing_fee > 0 or base_fee > 0:
-                        non_zero_fees.append(('Bearbeitungsgebühr', 0.3))  # 30%
-                        non_zero_fees.append(('Abschleppen (Grundgebühr)', 0.7))  # 70%
-                    
-                    if non_zero_fees:
-                        for label, ratio in non_zero_fees:
-                            cost_items.append([label, f"{(net_total * ratio):.2f} €"])
-                    else:
-                        cost_items.append(['Abschleppkosten gesamt', f"{net_total:.2f} €"])
+            if calculated_costs and calculated_costs.get('breakdown'):
+                # Use the EXACT breakdown from the landing page calculation
+                for item in calculated_costs['breakdown']:
+                    label = item.get('label', '')
+                    amount = item.get('amount', 0)
+                    if amount > 0:
+                        cost_items.append([label, f"{amount:.2f} €"])
             else:
-                # No weight_category found - fallback to simple split
-                # Try to make an intelligent guess based on net_total
+                # Fallback: If no calculated_costs, show simple split
                 if net_total > 100:
-                    # Assume: 30% processing, 70% towing
                     cost_items.append(['Bearbeitungsgebühr', f"{(net_total * 0.3):.2f} €"])
                     cost_items.append(['Abschleppen (Grundgebühr)', f"{(net_total * 0.7):.2f} €"])
                 else:
