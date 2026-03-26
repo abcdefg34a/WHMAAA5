@@ -4801,9 +4801,17 @@ async def generate_pdf(job_id: str, token: str):
     if has_payment:
         story.append(Paragraph("Zahlungsinformationen", heading_style))
         payment_method_text = "Bar" if job['payment_method'] == 'cash' else "Kartenzahlung"
+        
+        # Calculate correct payment amount based on prices_include_vat setting
+        payment_display_amount = job.get('payment_amount', 0)
+        if not prices_include_vat and payment_display_amount > 0:
+            # If prices are NETTO, calculate BRUTTO for display
+            vat_rate = 0.19
+            payment_display_amount = payment_display_amount * (1 + vat_rate)
+        
         payment_data = [
             [Paragraph("<b>Zahlungsart</b>", cell_style), Paragraph(payment_method_text, cell_style)],
-            [Paragraph("<b>Betrag</b>", cell_style), Paragraph(f"{job.get('payment_amount', 0):.2f} €", cell_style)],
+            [Paragraph("<b>Betrag</b>", cell_style), Paragraph(f"{payment_display_amount:.2f} €", cell_style)],
         ]
         payment_table = Table(payment_data, colWidths=[4.5*cm, 12.5*cm])
         payment_table.setStyle(TableStyle([
