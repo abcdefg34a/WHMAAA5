@@ -917,6 +917,14 @@ export const AdminDashboard = () => {
               <HardDrive className="h-4 w-4" />
               Backups
             </TabsTrigger>
+            <TabsTrigger
+              data-testid="tab-security"
+              value="security"
+              className="flex items-center gap-2"
+            >
+              <Lock className="h-4 w-4" />
+              Sicherheit
+            </TabsTrigger>
           </TabsList>
 
           {/* Overview Tab */}
@@ -1415,21 +1423,42 @@ export const AdminDashboard = () => {
                       </thead>
                       <tbody>
                         {auditLogs.map(log => {
+                          const [expandedLog, setExpandedLog] = React.useState(false);
+                          
                           return (
-                            <tr key={log.id}>
-                              <td className="whitespace-nowrap text-sm">
-                                {new Date(log.timestamp).toLocaleString('de-DE')}
-                              </td>
-                              <td>
-                                <span className="px-2 py-1 bg-blue-100 text-blue-800 text-xs rounded font-medium">
-                                  {log.action}
-                                </span>
-                              </td>
-                              <td className="text-sm">{log.user_name}</td>
-                              <td className="text-sm text-slate-500 max-w-xs truncate">
-                                {JSON.stringify(log.details)}
-                              </td>
-                            </tr>
+                            <React.Fragment key={log.id}>
+                              <tr className="hover:bg-slate-50">
+                                <td className="whitespace-nowrap text-sm py-3 px-4">
+                                  {new Date(log.timestamp).toLocaleString('de-DE')}
+                                </td>
+                                <td className="py-3 px-4">
+                                  <span className="px-2 py-1 bg-blue-100 text-blue-800 text-xs rounded font-medium">
+                                    {log.action}
+                                  </span>
+                                </td>
+                                <td className="text-sm py-3 px-4">{log.user_name}</td>
+                                <td className="py-3 px-4">
+                                  <button
+                                    onClick={() => setExpandedLog(!expandedLog)}
+                                    className="text-blue-600 hover:text-blue-800 text-sm font-medium flex items-center gap-1"
+                                  >
+                                    {expandedLog ? '▼ Weniger' : '▶ Details anzeigen'}
+                                  </button>
+                                </td>
+                              </tr>
+                              {expandedLog && (
+                                <tr className="bg-slate-50">
+                                  <td colSpan="4" className="py-4 px-4">
+                                    <div className="bg-white p-4 rounded border border-slate-200">
+                                      <h4 className="font-semibold text-sm mb-2 text-slate-700">Vollständige Details:</h4>
+                                      <pre className="text-xs bg-slate-100 p-3 rounded overflow-x-auto whitespace-pre-wrap break-words">
+                                        {JSON.stringify(log.details, null, 2)}
+                                      </pre>
+                                    </div>
+                                  </td>
+                                </tr>
+                              )}
+                            </React.Fragment>
                           );
                         })}
                       </tbody>
@@ -2176,9 +2205,22 @@ export const AdminDashboard = () => {
             </div>
           </TabsContent>
 
-          {/* Profile Tab */}
-          <TabsContent value="profile">
-            <TwoFactorSetup />
+          {/* Security Tab */}
+          <TabsContent value="security">
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <Lock className="h-5 w-5" />
+                  Zwei-Faktor-Authentifizierung (2FA)
+                </CardTitle>
+                <CardDescription>
+                  Schützen Sie Ihren Admin-Account mit einer zusätzlichen Sicherheitsebene
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                <TwoFactorSetup />
+              </CardContent>
+            </Card>
           </TabsContent>
         </Tabs>
       </main>
