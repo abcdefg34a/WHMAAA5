@@ -4781,57 +4781,53 @@ async def generate_pdf(job_id: str, token: str):
         ]))
         story.append(owner_table)
     
+    # ===== GET PRICES_INCLUDE_VAT SETTING (for both Kostenaufstellung and Zahlungsinformationen) =====
+    # This needs to be determined ONCE and used consistently
+    prices_include_vat = True  # Default
+    issuer_settings = None
+    
+    # Determine who owns the job and use their price setting
+    if job.get('target_yard') == 'authority_yard' or (job.get('authority_id') and not job.get('assigned_service_id')):
+        # Authority job
+        if job.get('authority_id'):
+            issuer_settings = await db.users.find_one(
+                {"id": job.get('authority_id')},
+                {"_id": 0, "prices_include_vat": 1}
+            )
+    elif job.get('assigned_service_id'):
+        # Service yard job
+        issuer_settings = await db.users.find_one(
+            {"id": job.get('assigned_service_id')},
+            {"_id": 0, "prices_include_vat": 1}
+        )
+    
+    # Set prices_include_vat based on issuer settings
+    if issuer_settings and 'prices_include_vat' in issuer_settings:
+        prices_include_vat = issuer_settings['prices_include_vat']
+    else:
+        prices_include_vat = True  # Default for old jobs
+    
     # ===== VEREINFACHTE KOSTENAUFSTELLUNG =====
     if job.get('released_at') and job.get('payment_amount') and job.get('payment_amount') > 0:
         story.append(Paragraph("Kostenaufstellung", heading_style))
         
-        # Get total payment amount
-        gross_total = job.get('payment_amount', 0)
-        
-        # Get issuer settings to check prices_include_vat
-        issuer_settings = None
-        prices_include_vat = None  # Start with None to detect missing values
-        
-        # Determine who released the vehicle and use their price setting
-        if job.get('target_yard') == 'authority_yard' or (job.get('authority_id') and not job.get('assigned_service_id')):
-            # Authority released OR authority-only job
-            if job.get('authority_id'):
-                issuer_settings = await db.users.find_one(
-                    {"id": job.get('authority_id')},
-                    {"_id": 0, "prices_include_vat": 1}
-                )
-        elif job.get('assigned_service_id'):
-            # Service yard - get service settings
-            service_settings = await db.users.find_one(
-                {"id": job.get('assigned_service_id')},
-                {"_id": 0, "prices_include_vat": 1}
-            )
-            if service_settings:
-                issuer_settings = service_settings
-        
-        # Determine prices_include_vat with explicit handling
-        if issuer_settings and 'prices_include_vat' in issuer_settings:
-            # Use the explicit value from settings (can be True or False)
-            prices_include_vat = issuer_settings['prices_include_vat']
-        else:
-            # Default for old jobs without this setting: assume prices include VAT
-            prices_include_vat = True
+        # Get payment amount from job (this is the BASE amount, interpretation depends on prices_include_vat)
+        base_amount = job.get('payment_amount', 0)
         
         # Build simplified cost table
         cost_table_data = []
         
         if prices_include_vat:
-            # Preise inkl. MwSt → Nur Gesamtbetrag anzeigen mit klarer Beschriftung
-            # payment_amount ist bereits BRUTTO
+            # Preise inkl. MwSt → base_amount IST bereits BRUTTO
+            # Zeige nur Gesamtbetrag
             cost_table_data.append([
                 Paragraph("<b>Gesamtbetrag (Brutto inkl. 19% MwSt.)</b>", ParagraphStyle('Bold', parent=cell_style, fontSize=11)),
-                Paragraph(f"<b>{gross_total:.2f} €</b>", ParagraphStyle('BoldRight', parent=cell_style, fontSize=11, alignment=2))
+                Paragraph(f"<b>{base_amount:.2f} €</b>", ParagraphStyle('BoldRight', parent=cell_style, fontSize=11, alignment=2))
             ])
         else:
-            # Preise sind NETTO → MwSt draufrechnen
-            # payment_amount ist NETTO, wir müssen MwSt draufrechnen
+            # Preise sind NETTO → base_amount IST NETTO, MwSt DRAUFRECHNEN
             vat_rate = 0.19
-            net_total = gross_total  # payment_amount ist bereits Netto
+            net_total = base_amount  # Das ist der Netto-Betrag
             vat_amount = net_total * vat_rate  # 19% MwSt auf Netto
             brutto_total = net_total + vat_amount  # Brutto = Netto + MwSt
             
