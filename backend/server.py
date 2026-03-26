@@ -79,7 +79,12 @@ BACKUP_DIR = ROOT_DIR / "backups"
 BACKUP_DIR.mkdir(exist_ok=True)
 
 # JWT Configuration
-JWT_SECRET = os.environ.get('JWT_SECRET', 'your-super-secret-key-change-in-production')
+JWT_SECRET = os.environ.get('JWT_SECRET')
+if not JWT_SECRET or JWT_SECRET == 'your-super-secret-key-change-in-production':
+    raise RuntimeError(
+        "JWT_SECRET must be set to a secure value in .env file.\n"
+        "Generate with: python -c 'import secrets; print(secrets.token_urlsafe(64))'"
+    )
 JWT_ALGORITHM = "HS256"
 JWT_EXPIRATION_HOURS = 24
 
