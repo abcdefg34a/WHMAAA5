@@ -937,7 +937,7 @@ class JobResponse(BaseModel):
     payment_method: Optional[str] = None
     payment_amount: Optional[float] = None
     created_at: str
-    updated_at: str
+    updated_at: Optional[str] = None  # Optional for old jobs
     on_site_at: Optional[str] = None
     towed_at: Optional[str] = None
     in_yard_at: Optional[str] = None
