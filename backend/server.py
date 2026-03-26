@@ -4714,20 +4714,29 @@ async def generate_pdf(job_id: str, token: str):
         issuer_settings = None
         prices_include_vat = True  # Default: Preise sind Brutto
         
-        if job.get('target_yard') == 'authority_yard':
-            # Authority released
+        # Determine who released the vehicle and use their price setting
+        if job.get('target_yard') == 'authority_yard' or (job.get('authority_id') and not job.get('assigned_service_id')):
+            # Authority released OR authority-only job
             if job.get('authority_id'):
                 issuer_settings = await db.users.find_one(
                     {"id": job.get('authority_id')},
                     {"_id": 0, "prices_include_vat": 1}
                 )
-        else:
-            # Service yard
-            if service:
-                prices_include_vat = service.get('prices_include_vat', True)
+        elif job.get('assigned_service_id'):
+            # Service yard - get service settings
+            service_settings = await db.users.find_one(
+                {"id": job.get('assigned_service_id')},
+                {"_id": 0, "prices_include_vat": 1}
+            )
+            if service_settings:
+                issuer_settings = service_settings
         
         if issuer_settings:
-            prices_include_vat = issuer_settings.get('prices_include_vat', True)
+            # Check if prices_include_vat exists and is explicitly False
+            if 'prices_include_vat' in issuer_settings:
+                prices_include_vat = issuer_settings['prices_include_vat']
+            else:
+                prices_include_vat = True  # Default if not set
         
         # Build simplified cost table
         cost_table_data = []
