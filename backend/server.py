@@ -4674,64 +4674,82 @@ async def generate_pdf(job_id: str, token: str):
         story.append(Paragraph("Kostenaufstellung", heading_style))
         
         cost_items = []
-        subtotal = 0.0
         
-        # Determine which pricing to use
+        # Get the total payment amount (this is already the GROSS amount with VAT)
+        gross_total = job.get('payment_amount', 0)
+        
+        # Calculate net and VAT from gross
+        vat_rate = 0.19
+        net_total = gross_total / (1 + vat_rate)
+        vat_amount = gross_total - net_total
+        
+        # Determine which pricing to use and break down costs
         if job.get('target_yard') == 'authority_yard':
             # Authority yard pricing
             base_price = job.get('authority_base_price', 0)
             daily_rate = job.get('authority_daily_rate', 0)
-            category_name = job.get('authority_price_category_name', 'Standgebühr')
             
             # Base fee
             if base_price > 0:
-                cost_items.append(['Bearbeitungsgebühr', f"{base_price:.2f} €"])
-                subtotal += base_price
+                cost_items.append(['Grundgebühr (erste 24h)', f"{base_price:.2f} €"])
             
-            # Calculate days
+            # Calculate storage days
             if job.get('delivered_to_authority_at'):
                 delivered_date = datetime.fromisoformat(job['delivered_to_authority_at'].replace('Z', '+00:00'))
                 released_date = datetime.fromisoformat(job['released_at'].replace('Z', '+00:00'))
-                days = max(1, (released_date - delivered_date).days)
+                days = max(0, (released_date - delivered_date).days)
                 
-                if days > 1 and daily_rate > 0:
-                    additional_days = days - 1
-                    standzeit_cost = additional_days * daily_rate
-                    cost_items.append([f"Standzeit ({additional_days} Tage × {daily_rate:.2f}€)", f"{standzeit_cost:.2f} €"])
-                    subtotal += standzeit_cost
+                if days > 0 and daily_rate > 0:
+                    standzeit_cost = days * daily_rate
+                    cost_items.append([f"Standzeit ({days} Tag{'e' if days != 1 else ''} × {daily_rate:.2f}€)", f"{standzeit_cost:.2f} €"])
         else:
-            # Service yard pricing
-            tow_cost = job.get('tow_cost', 0)
-            processing_fee = job.get('processing_fee', 0)
-            daily_cost = job.get('daily_cost', 0)
+            # Service yard pricing - calculate from cost calculation endpoint
+            # Try to get calculated costs first
+            calculated_costs = job.get('calculated_costs')
             
-            # Processing fee
-            if processing_fee > 0:
-                cost_items.append(['Bearbeitungsgebühr', f"{processing_fee:.2f} €"])
-                subtotal += processing_fee
-            
-            # Towing cost (includes Anfahrt + Abschleppen)
-            if tow_cost > 0:
-                cost_items.append(['Abschleppen (inkl. Anfahrt)', f"{tow_cost:.2f} €"])
-                subtotal += tow_cost
-            
-            # Calculate storage days
-            if job.get('in_yard_at'):
-                in_yard_date = datetime.fromisoformat(job['in_yard_at'].replace('Z', '+00:00'))
-                released_date = datetime.fromisoformat(job['released_at'].replace('Z', '+00:00'))
-                days = max(1, (released_date - in_yard_date).days)
+            if calculated_costs and calculated_costs.get('breakdown'):
+                # Use breakdown from calculated costs
+                for item in calculated_costs['breakdown']:
+                    label = item.get('label', '')
+                    amount = item.get('amount', 0)
+                    if amount > 0:
+                        cost_items.append([label, f"{amount:.2f} €"])
+            else:
+                # Fallback: try to reconstruct from job fields
+                # This happens when payment was made but costs weren't calculated
                 
-                if days >= 1 and daily_cost > 0:
-                    standzeit_cost = days * daily_cost
-                    cost_items.append([f"Standzeit ({days} Tage × {daily_cost:.2f}€)", f"{standzeit_cost:.2f} €"])
-                    subtotal += standzeit_cost
-            
-            # Weight category surcharge
-            weight_surcharge = job.get('weight_category_surcharge', 0)
-            if weight_surcharge > 0:
-                weight_name = job.get('weight_category_name', 'Zusatzlast')
-                cost_items.append([f"Zusatzgebühr ({weight_name})", f"{weight_surcharge:.2f} €"])
-                subtotal += weight_surcharge
+                # Try to get base cost from weight category
+                weight_cat = None
+                if service and service.get('weight_categories'):
+                    for cat in service['weight_categories']:
+                        if cat.get('id') == job.get('weight_category_id'):
+                            weight_cat = cat
+                            break
+                
+                if weight_cat:
+                    base_cost = weight_cat.get('base_fee', 0)
+                    daily_cost = weight_cat.get('daily_rate', 0)
+                    surcharge = weight_cat.get('surcharge', 0)
+                    
+                    if base_cost > 0:
+                        cost_items.append(['Abschleppen (Grundgebühr)', f"{base_cost:.2f} €"])
+                    
+                    # Calculate storage days
+                    if job.get('in_yard_at') and daily_cost > 0:
+                        in_yard_date = datetime.fromisoformat(job['in_yard_at'].replace('Z', '+00:00'))
+                        released_date = datetime.fromisoformat(job['released_at'].replace('Z', '+00:00'))
+                        days = max(0, (released_date - in_yard_date).days)
+                        
+                        if days > 0:
+                            standzeit_cost = days * daily_cost
+                            cost_items.append([f"Standzeit ({days} Tag{'e' if days != 1 else ''} × {daily_cost:.2f}€)", f"{standzeit_cost:.2f} €"])
+                    
+                    if surcharge > 0:
+                        cat_name = weight_cat.get('name', 'Zusatzgebühr')
+                        cost_items.append([f"Zuschlag ({cat_name})", f"{surcharge:.2f} €"])
+                else:
+                    # Last resort: just show the net total as one line item
+                    cost_items.append(['Abschleppkosten gesamt', f"{net_total:.2f} €"])
         
         # Build cost table
         cost_table_data = []
@@ -4750,26 +4768,23 @@ async def generate_pdf(job_id: str, token: str):
         # Netto
         cost_table_data.append([
             Paragraph("<b>Netto-Summe</b>", cell_style),
-            Paragraph(f"<b>{subtotal:.2f} €</b>", ParagraphStyle('RightAlign', parent=cell_style, alignment=2))
+            Paragraph(f"<b>{net_total:.2f} €</b>", ParagraphStyle('RightAlign', parent=cell_style, alignment=2))
         ])
         
         # MwSt 19%
-        vat_rate = 0.19
-        vat_amount = subtotal * vat_rate
         cost_table_data.append([
             Paragraph(f"zzgl. {int(vat_rate * 100)}% MwSt.", cell_style),
             Paragraph(f"{vat_amount:.2f} €", ParagraphStyle('RightAlign', parent=cell_style, alignment=2))
         ])
         
         # Brutto total
-        total = subtotal + vat_amount
         cost_table_data.append([
             Paragraph("<b>═══════════════════════════</b>", cell_style),
             Paragraph("<b>══════════════</b>", ParagraphStyle('RightAlign', parent=cell_style, alignment=2))
         ])
         cost_table_data.append([
             Paragraph("<b>GESAMT (Brutto)</b>", ParagraphStyle('Bold', parent=cell_style, fontSize=11)),
-            Paragraph(f"<b>{total:.2f} €</b>", ParagraphStyle('BoldRight', parent=cell_style, fontSize=11, alignment=2))
+            Paragraph(f"<b>{gross_total:.2f} €</b>", ParagraphStyle('BoldRight', parent=cell_style, fontSize=11, alignment=2))
         ])
         
         cost_table = Table(cost_table_data, colWidths=[12*cm, 5*cm])
