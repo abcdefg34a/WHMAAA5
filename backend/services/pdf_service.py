@@ -126,8 +126,6 @@ async def generate_job_pdf(job: dict, db):
     vehicle_data = [
         [Paragraph("<b>Kennzeichen</b>", cell_style), Paragraph(job.get('license_plate') or '-', cell_style)],
         [Paragraph("<b>FIN</b>", cell_style), Paragraph(job.get('vin') or '-', cell_style)],
-        [Paragraph("<b>Marke/Modell</b>", cell_style), Paragraph(job.get('vehicle_make_model') or '-', cell_style)],
-        [Paragraph("<b>Farbe</b>", cell_style), Paragraph(job.get('vehicle_color') or '-', cell_style)],
     ]
     vehicle_table = Table(vehicle_data, colWidths=[4.5*cm, 12.5*cm])
     vehicle_table.setStyle(TableStyle([
