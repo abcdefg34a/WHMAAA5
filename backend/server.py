@@ -1263,6 +1263,33 @@ async def require_role(roles: List[str], user: dict = Depends(get_current_user))
         raise HTTPException(status_code=403, detail="Insufficient permissions")
     return user
 
+# ==================== HEALTH CHECK ====================
+
+@api_router.get("/health")
+async def health_check():
+    """Health check endpoint for monitoring and load balancers"""
+    try:
+        # Check MongoDB connection
+        await db.command("ping")
+        
+        return {
+            "status": "healthy",
+            "service": "Abschlepp-Management API",
+            "database": "connected",
+            "timestamp": datetime.now(timezone.utc).isoformat()
+        }
+    except Exception as e:
+        logger.error(f"Health check failed: {str(e)}")
+        raise HTTPException(
+            status_code=503,
+            detail={
+                "status": "unhealthy",
+                "service": "Abschlepp-Management API",
+                "database": "disconnected",
+                "error": str(e)
+            }
+        )
+
 # ==================== AUTH ROUTES ====================
 
 class PasswordResetRequest(BaseModel):
