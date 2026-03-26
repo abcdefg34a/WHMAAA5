@@ -4820,10 +4820,10 @@ async def generate_pdf(job_id: str, token: str):
         cost_table_data = []
         
         if prices_include_vat:
-            # Preise inkl. MwSt → Nur Gesamtbetrag anzeigen
+            # Preise inkl. MwSt → Nur Gesamtbetrag anzeigen mit klarer Beschriftung
             # payment_amount ist bereits BRUTTO
             cost_table_data.append([
-                Paragraph("<b>Gesamtbetrag</b>", ParagraphStyle('Bold', parent=cell_style, fontSize=11)),
+                Paragraph("<b>Gesamtbetrag (Brutto inkl. 19% MwSt.)</b>", ParagraphStyle('Bold', parent=cell_style, fontSize=11)),
                 Paragraph(f"<b>{gross_total:.2f} €</b>", ParagraphStyle('BoldRight', parent=cell_style, fontSize=11, alignment=2))
             ])
         else:
