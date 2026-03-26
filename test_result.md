@@ -428,17 +428,17 @@ backend:
         comment: "POST /api/admin/backups with JSON body not implemented (405 Method Not Allowed). Alternative endpoints available: POST /api/admin/backup with query params or specific endpoints like /api/admin/backups/run-database-backup"
 
 frontend:
-  - task: "Frontend Testing"
+  - task: "Dual-Yard Selection for Towing Service"
     implemented: true
-    working: "NA"
-    file: "N/A"
+    working: false
+    file: "frontend/src/pages/TowingDashboard.js"
     stuck_count: 0
-    priority: "medium"
+    priority: "high"
     needs_retesting: false
     status_history:
-      - working: "NA"
+      - working: false
         agent: "testing"
-        comment: "Frontend testing not performed as per system limitations"
+        comment: "CRITICAL BUG: Default radio selection incorrect. When authority is selected, 'Behörden-Hof' is selected by default instead of 'Eigener Hof'. Root cause: fetchAuthoritySettings (lines 556-560) sets target_yard based on authority's yard_model, overriding the initial 'service_yard' default. For towing services creating jobs, the default should always be 'service_yard' (Eigener Hof) regardless of authority settings. WORKING FEATURES: ✓ Dialog opens, ✓ Authority selection triggers 'Zielort auswählen' section, ✓ Radio buttons functional, ✓ Yard/price selects show/hide correctly, ✓ Yard options load from API (e.g., 'Haupthof Hamburg'), ✓ Price category options load (e.g., 'PKW Standard - € + 25€/Tag'), ✓ Form validation works, ✓ API GET /api/authority/{id}/public-settings working."
 
 metadata:
   created_by: "testing_agent"
@@ -544,8 +544,7 @@ metadata:
 
 test_plan:
   current_focus: 
-    - "Employee System Implementation Testing"
-    - "Role-based Access Control Verification"
+    - "Dual-Yard Selection for Towing Service - Default Selection Fix"
   stuck_tasks: []
   test_all: false
   test_priority: "high_first"
@@ -565,3 +564,5 @@ agent_communication:
     message: "BACKUP SYSTEM COMPREHENSIVE TESTING COMPLETED: 87.5% success rate (14/16 tests passed). All critical backup endpoints working correctly: system-status, health, cloud backups, verify-all, delete-corrupted, schedule, storage-stats, list-backups, cleanup, and backup creation via multiple endpoints. Backup system health is excellent with 13 total backups, 9 verified valid, 0 invalid, no corrupted backups found. Database and storage backups successfully created and uploaded to Supabase cloud storage with encryption. Only minor issue: POST /api/admin/backups with JSON body not implemented (405 Method Not Allowed) - alternative endpoints available and working."
   - agent: "testing"
     message: "EMPLOYEE SYSTEM COMPREHENSIVE TESTING COMPLETED: 100% success rate (25/25 tests passed). NEW employee system implementation fully functional for both authorities and towing services. Authority Employee System: POST/GET /api/authority/employees working with proper sub_role handling (field/yard). Towing Service Employee System: All CRUD operations (POST/GET/PATCH/DELETE /api/service/employees) working perfectly including block/unblock functionality. Role-based access control verified: field employees correctly denied authority-release access (403 with German error message), yard employees successfully allowed. Authority settings inheritance working. All authentication systems functional. Vehicle search public endpoint operational. Jobs API (GET/POST/PATCH) fully functional. All test credentials working correctly."
+  - agent: "testing"
+    message: "DUAL-YARD SELECTION TESTING COMPLETED: Feature 95% functional with 1 critical bug. WORKING: ✓ Login as towing service (abschlepp@test.de), ✓ 'Neuer Auftrag' dialog opens, ✓ Authority selection triggers 'Zielort auswählen' section, ✓ Dual-yard radio buttons visible ('Eigener Hof' / 'Behörden-Hof'), ✓ Radio switching functional, ✓ Yard/price selects show/hide correctly based on selection, ✓ Yard options load from GET /api/authority/{id}/public-settings (e.g., 'Haupthof Hamburg - Hafenstraße 123, Hamburg'), ✓ Price category options load (e.g., 'PKW Standard - € + 25€/Tag'), ✓ Form validation working. CRITICAL BUG: Default selection incorrect - 'Behörden-Hof' selected by default instead of 'Eigener Hof'. Root cause: TowingDashboard.js lines 556-560 in fetchAuthoritySettings() sets target_yard based on authority's yard_model, overriding initial 'service_yard' default. FIX NEEDED: Remove lines 556-560 OR change logic to always default to 'service_yard' for towing service job creation, regardless of authority's yard_model preference."

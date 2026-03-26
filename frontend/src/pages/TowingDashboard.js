@@ -236,7 +236,14 @@ export const TowingDashboard = () => {
     target_yard: 'service_yard', // 'service_yard' or 'authority_yard'
     authority_yard_id: '',
     authority_yard_name: '',
-    authority_price_category_id: ''
+    authority_yard_address: '',
+    authority_yard_lat: null,
+    authority_yard_lng: null,
+    authority_yard_phone: '',
+    authority_price_category_id: '',
+    authority_price_category_name: '',
+    authority_base_price: 0,
+    authority_daily_rate: 0
   });
   const [newJobPhotos, setNewJobPhotos] = useState([]);
   const newJobFileInputRef = useRef(null);
@@ -3243,7 +3250,14 @@ export const TowingDashboard = () => {
                                 target_yard: e.target.value,
                                 authority_yard_id: '',
                                 authority_yard_name: '',
-                                authority_price_category_id: ''
+                                authority_yard_address: '',
+                                authority_yard_lat: null,
+                                authority_yard_lng: null,
+                                authority_yard_phone: '',
+                                authority_price_category_id: '',
+                                authority_price_category_name: '',
+                                authority_base_price: 0,
+                                authority_daily_rate: 0
                               }))}
                               className="w-4 h-4"
                             />
@@ -3284,7 +3298,10 @@ export const TowingDashboard = () => {
                                     ...prev,
                                     authority_yard_id: value,
                                     authority_yard_name: yard?.name || '',
-                                    authority_yard_address: yard?.address || ''
+                                    authority_yard_address: yard?.address || '',
+                                    authority_yard_lat: yard?.lat || null,
+                                    authority_yard_lng: yard?.lng || null,
+                                    authority_yard_phone: yard?.phone || ''
                                   }));
                                 }}
                               >
@@ -3308,10 +3325,16 @@ export const TowingDashboard = () => {
                               <Label>Preiskategorie auswählen *</Label>
                               <Select
                                 value={newJobData.authority_price_category_id}
-                                onValueChange={(value) => setNewJobData(prev => ({
-                                  ...prev,
-                                  authority_price_category_id: value
-                                }))}
+                                onValueChange={(value) => {
+                                  const category = selectedAuthoritySettings.price_categories.find(c => c.id === value);
+                                  setNewJobData(prev => ({
+                                    ...prev,
+                                    authority_price_category_id: value,
+                                    authority_price_category_name: category?.name || '',
+                                    authority_base_price: category?.base_fee || 0,
+                                    authority_daily_rate: category?.daily_rate || 0
+                                  }));
+                                }}
                               >
                                 <SelectTrigger>
                                   <SelectValue placeholder="Preiskategorie auswählen..." />
