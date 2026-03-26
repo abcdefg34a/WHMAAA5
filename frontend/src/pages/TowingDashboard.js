@@ -254,7 +254,11 @@ export const TowingDashboard = () => {
     authority_price_category_id: '',
     authority_price_category_name: '',
     authority_base_price: 0,
-    authority_daily_rate: 0
+    authority_daily_rate: 0,
+    // NEW: Weight category (for service_yard)
+    weight_category_id: '',
+    weight_category_name: '',
+    weight_surcharge: 0
   });
   const [newJobPhotos, setNewJobPhotos] = useState([]);
   const newJobFileInputRef = useRef(null);
@@ -3553,6 +3557,36 @@ export const TowingDashboard = () => {
                             />
                           )}
                         </div>
+                      </div>
+                    )}
+
+                    {/* NEW: Weight Category Selection (when target_yard = service_yard) */}
+                    {newJobData.target_yard === 'service_yard' && user?.weight_categories && user.weight_categories.length > 0 && (
+                      <div className="space-y-2 p-4 bg-blue-50 border border-blue-200 rounded-lg">
+                        <Label className="text-blue-800 font-medium">Fahrzeuggewicht (Zuschlag vom Abschleppdienst)</Label>
+                        <Select 
+                          value={newJobData.weight_category_id || ''} 
+                          onValueChange={(val) => {
+                            const category = user.weight_categories.find(c => c.id === val);
+                            setNewJobData(prev => ({ 
+                              ...prev, 
+                              weight_category_id: val,
+                              weight_category_name: category?.name || '',
+                              weight_surcharge: category?.surcharge || 0
+                            }));
+                          }}
+                        >
+                          <SelectTrigger>
+                            <SelectValue placeholder="Gewichtskategorie wählen..." />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {user.weight_categories.map(cat => (
+                              <SelectItem key={cat.id} value={cat.id}>
+                                {cat.name} {cat.surcharge > 0 ? `+${cat.surcharge.toFixed(2)} €` : '- Kein Zuschlag'}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
                       </div>
                     )}
 
