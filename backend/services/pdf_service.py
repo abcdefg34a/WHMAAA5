@@ -101,7 +101,7 @@ async def generate_job_pdf(job: dict, db):
         return '<br/>'.join(lines)
     
     # Header Section - Compact
-    story.append(Paragraph("Abschleppprotokoll", title_style))
+    story.append(Paragraph("Rechnung", title_style))
     story.append(Spacer(1, 8))
     
     # Job Number and Date - Compact
@@ -445,5 +445,5 @@ async def generate_job_pdf(job: dict, db):
     return StreamingResponse(
         buffer,
         media_type="application/pdf",
-        headers={"Content-Disposition": f"attachment; filename=Abschleppprotokoll_{job['job_number']}.pdf"}
+        headers={"Content-Disposition": f"attachment; filename=Rechnung_{job['job_number']}.pdf"}
     )
