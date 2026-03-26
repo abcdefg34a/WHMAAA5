@@ -2607,7 +2607,9 @@ async def get_authority_settings(user: dict = Depends(get_current_user)):
         "yards": authority.get("yards", []),  # Multiple yards
         "yard_address": authority.get("yard_address"),
         "yard_lat": authority.get("yard_lat"),
-        "yard_lng": authority.get("yard_lng")
+        "yard_lng": authority.get("yard_lng"),
+        "ust_id": authority.get("ust_id", ""),  # NEW: USt-ID
+        "prices_include_vat": authority.get("prices_include_vat", True)  # NEW: Price display setting
     }
 
 @api_router.get("/authority/{authority_id}/public-settings")
@@ -4732,15 +4734,18 @@ async def generate_pdf(job_id: str, token: str):
         
         if prices_include_vat:
             # Preise inkl. MwSt → Nur Gesamtbetrag anzeigen
+            # payment_amount ist bereits BRUTTO
             cost_table_data.append([
                 Paragraph("<b>Gesamtbetrag</b>", ParagraphStyle('Bold', parent=cell_style, fontSize=11)),
                 Paragraph(f"<b>{gross_total:.2f} €</b>", ParagraphStyle('BoldRight', parent=cell_style, fontSize=11, alignment=2))
             ])
         else:
-            # Preise sind Netto → Netto + MwSt + Brutto anzeigen
+            # Preise sind NETTO → MwSt draufrechnen
+            # payment_amount ist NETTO, wir müssen MwSt draufrechnen
             vat_rate = 0.19
-            net_total = gross_total / (1 + vat_rate)
-            vat_amount = gross_total - net_total
+            net_total = gross_total  # payment_amount ist bereits Netto
+            vat_amount = net_total * vat_rate  # 19% MwSt auf Netto
+            brutto_total = net_total + vat_amount  # Brutto = Netto + MwSt
             
             cost_table_data.append([
                 Paragraph("Netto-Summe", cell_style),
@@ -4757,7 +4762,7 @@ async def generate_pdf(job_id: str, token: str):
             
             cost_table_data.append([
                 Paragraph("<b>Gesamtbetrag (Brutto)</b>", ParagraphStyle('Bold', parent=cell_style, fontSize=11)),
-                Paragraph(f"<b>{gross_total:.2f} €</b>", ParagraphStyle('BoldRight', parent=cell_style, fontSize=11, alignment=2))
+                Paragraph(f"<b>{brutto_total:.2f} €</b>", ParagraphStyle('BoldRight', parent=cell_style, fontSize=11, alignment=2))
             ])
         
         cost_table = Table(cost_table_data, colWidths=[12*cm, 5*cm])
