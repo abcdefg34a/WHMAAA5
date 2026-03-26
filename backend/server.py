@@ -4344,11 +4344,53 @@ async def generate_pdf(job_id: str, token: str):
     # Check if this is an empty trip
     is_empty_trip = job.get('is_empty_trip', False)
     
+    # Determine who issued the invoice (who released the vehicle)
+    issuer = None
+    issuer_ust_id = None
+    
+    if job.get('released_at'):
+        # Get releaser info
+        if job.get('target_yard') == 'authority_yard':
+            # Authority released -> Authority's USt-ID
+            authority = await db.users.find_one(
+                {"id": job.get('authority_id')},
+                {"_id": 0, "ust_id": 1, "authority_name": 1, "department": 1}
+            )
+            if authority:
+                issuer = authority.get('authority_name', 'Behörde')
+                issuer_ust_id = authority.get('ust_id')
+        else:
+            # Service yard -> Towing service's USt-ID
+            if service:
+                issuer = service.get('company_name', 'Abschleppdienst')
+                issuer_ust_id = service.get('ust_id')
+    
+    # Generate invoice number (RE-YYYY-JobNumber)
+    from datetime import datetime
+    invoice_number = f"RE-{datetime.now().year}-{job['job_number'].split('-')[-1]}"
+    
     if is_empty_trip:
-        story.append(Paragraph("LEERFAHRT-PROTOKOLL", title_style))
+        story.append(Paragraph("LEERFAHRT-RECHNUNG", title_style))
     else:
-        story.append(Paragraph("ABSCHLEPPPROTOKOLL", title_style))
-    story.append(Paragraph(f"Auftragsnummer: {job['job_number']}", subtitle_style))
+        story.append(Paragraph("RECHNUNG", title_style))
+    
+    # Invoice number and issuer info
+    subtitle_text = f"Rechnungsnummer: {invoice_number}"
+    if issuer:
+        subtitle_text += f" | Ausgestellt von: {issuer}"
+    story.append(Paragraph(subtitle_text, subtitle_style))
+    
+    # USt-ID if available
+    if issuer_ust_id:
+        ust_style = ParagraphStyle(
+            'UstStyle',
+            parent=styles['Normal'],
+            fontSize=9,
+            spaceAfter=10,
+            alignment=1,
+            textColor=colors.HexColor('#64748b')
+        )
+        story.append(Paragraph(f"USt-IdNr.: {issuer_ust_id}", ust_style))
     
     # Horizontal line
     story.append(Spacer(1, 5))
@@ -4626,6 +4668,136 @@ async def generate_pdf(job_id: str, token: str):
             ('GRID', (0, 0), (-1, -1), 0.5, colors.HexColor('#e2e8f0')),
         ]))
         story.append(owner_table)
+    
+    # ===== DETAILLIERTE KOSTENAUFSTELLUNG =====
+    if job.get('released_at') and job.get('payment_amount') and job.get('payment_amount') > 0:
+        story.append(Paragraph("Kostenaufstellung", heading_style))
+        
+        cost_items = []
+        subtotal = 0.0
+        
+        # Determine which pricing to use
+        if job.get('target_yard') == 'authority_yard':
+            # Authority yard pricing
+            base_price = job.get('authority_base_price', 0)
+            daily_rate = job.get('authority_daily_rate', 0)
+            category_name = job.get('authority_price_category_name', 'Standgebühr')
+            
+            # Base fee
+            if base_price > 0:
+                cost_items.append(['Bearbeitungsgebühr', f"{base_price:.2f} €"])
+                subtotal += base_price
+            
+            # Calculate days
+            if job.get('delivered_to_authority_at'):
+                delivered_date = datetime.fromisoformat(job['delivered_to_authority_at'].replace('Z', '+00:00'))
+                released_date = datetime.fromisoformat(job['released_at'].replace('Z', '+00:00'))
+                days = max(1, (released_date - delivered_date).days)
+                
+                if days > 1 and daily_rate > 0:
+                    additional_days = days - 1
+                    standzeit_cost = additional_days * daily_rate
+                    cost_items.append([f"Standzeit ({additional_days} Tage × {daily_rate:.2f}€)", f"{standzeit_cost:.2f} €"])
+                    subtotal += standzeit_cost
+        else:
+            # Service yard pricing
+            tow_cost = job.get('tow_cost', 0)
+            processing_fee = job.get('processing_fee', 0)
+            daily_cost = job.get('daily_cost', 0)
+            
+            # Processing fee
+            if processing_fee > 0:
+                cost_items.append(['Bearbeitungsgebühr', f"{processing_fee:.2f} €"])
+                subtotal += processing_fee
+            
+            # Towing cost (includes Anfahrt + Abschleppen)
+            if tow_cost > 0:
+                cost_items.append(['Abschleppen (inkl. Anfahrt)', f"{tow_cost:.2f} €"])
+                subtotal += tow_cost
+            
+            # Calculate storage days
+            if job.get('in_yard_at'):
+                in_yard_date = datetime.fromisoformat(job['in_yard_at'].replace('Z', '+00:00'))
+                released_date = datetime.fromisoformat(job['released_at'].replace('Z', '+00:00'))
+                days = max(1, (released_date - in_yard_date).days)
+                
+                if days >= 1 and daily_cost > 0:
+                    standzeit_cost = days * daily_cost
+                    cost_items.append([f"Standzeit ({days} Tage × {daily_cost:.2f}€)", f"{standzeit_cost:.2f} €"])
+                    subtotal += standzeit_cost
+            
+            # Weight category surcharge
+            weight_surcharge = job.get('weight_category_surcharge', 0)
+            if weight_surcharge > 0:
+                weight_name = job.get('weight_category_name', 'Zusatzlast')
+                cost_items.append([f"Zusatzgebühr ({weight_name})", f"{weight_surcharge:.2f} €"])
+                subtotal += weight_surcharge
+        
+        # Build cost table
+        cost_table_data = []
+        for item, price in cost_items:
+            cost_table_data.append([
+                Paragraph(item, cell_style),
+                Paragraph(price, ParagraphStyle('RightAlign', parent=cell_style, alignment=2))
+            ])
+        
+        # Add separator line
+        cost_table_data.append([
+            Paragraph("<b>───────────────────────────</b>", cell_style),
+            Paragraph("<b>──────────────</b>", ParagraphStyle('RightAlign', parent=cell_style, alignment=2))
+        ])
+        
+        # Netto
+        cost_table_data.append([
+            Paragraph("<b>Netto-Summe</b>", cell_style),
+            Paragraph(f"<b>{subtotal:.2f} €</b>", ParagraphStyle('RightAlign', parent=cell_style, alignment=2))
+        ])
+        
+        # MwSt 19%
+        vat_rate = 0.19
+        vat_amount = subtotal * vat_rate
+        cost_table_data.append([
+            Paragraph(f"zzgl. {int(vat_rate * 100)}% MwSt.", cell_style),
+            Paragraph(f"{vat_amount:.2f} €", ParagraphStyle('RightAlign', parent=cell_style, alignment=2))
+        ])
+        
+        # Brutto total
+        total = subtotal + vat_amount
+        cost_table_data.append([
+            Paragraph("<b>═══════════════════════════</b>", cell_style),
+            Paragraph("<b>══════════════</b>", ParagraphStyle('RightAlign', parent=cell_style, alignment=2))
+        ])
+        cost_table_data.append([
+            Paragraph("<b>GESAMT (Brutto)</b>", ParagraphStyle('Bold', parent=cell_style, fontSize=11)),
+            Paragraph(f"<b>{total:.2f} €</b>", ParagraphStyle('BoldRight', parent=cell_style, fontSize=11, alignment=2))
+        ])
+        
+        cost_table = Table(cost_table_data, colWidths=[12*cm, 5*cm])
+        cost_table.setStyle(TableStyle([
+            ('BACKGROUND', (0, 0), (-1, -4), colors.HexColor('#f8fafc')),
+            ('BACKGROUND', (0, -3), (-1, -3), colors.HexColor('#e2e8f0')),  # Netto row
+            ('BACKGROUND', (0, -1), (-1, -1), colors.HexColor('#dcfce7')),  # Total row (green)
+            ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
+            ('TOPPADDING', (0, 0), (-1, -1), 6),
+            ('BOTTOMPADDING', (0, 0), (-1, -1), 6),
+            ('LEFTPADDING', (0, 0), (-1, -1), 8),
+            ('RIGHTPADDING', (0, 0), (-1, -1), 8),
+            ('GRID', (0, 0), (-1, -4), 0.5, colors.HexColor('#e2e8f0')),
+            ('LINEABOVE', (0, -3), (-1, -3), 1, colors.HexColor('#94a3b8')),
+            ('LINEABOVE', (0, -1), (-1, -1), 2, colors.HexColor('#16a34a')),
+        ]))
+        story.append(cost_table)
+        story.append(Spacer(1, 10))
+        
+        # Payment terms
+        terms_style = ParagraphStyle(
+            'Terms',
+            parent=styles['Normal'],
+            fontSize=9,
+            textColor=colors.HexColor('#64748b'),
+            spaceAfter=10
+        )
+        story.append(Paragraph("<b>Zahlungsbedingungen:</b> Zahlbar sofort ohne Abzug", terms_style))
     
     # ===== ZAHLUNGSINFORMATIONEN =====
     has_payment = job.get('payment_method') and not (job.get('is_empty_trip') and job.get('payment_amount', 0) == 0)
