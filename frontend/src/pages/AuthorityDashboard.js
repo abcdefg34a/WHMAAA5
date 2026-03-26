@@ -1657,7 +1657,12 @@ export const AuthorityDashboard = () => {
                                 </div>
                                 <div className={`p-2 rounded ${(job.target_yard === 'authority_yard' ? job.delivered_to_authority_at : job.in_yard_at) ? 'bg-green-50 border border-green-200' : 'bg-slate-50'}`}>
                                   <p className="font-medium text-slate-700">{job.target_yard === 'authority_yard' ? 'Im Behörden-Hof' : 'Im Hof'}</p>
-                                  <p className="text-slate-500">{(job.target_yard === 'authority_yard' ? job.delivered_to_authority_at : job.in_yard_at) ? new Date(job.target_yard === 'authority_yard' ? job.delivered_to_authority_at : job.in_yard_at).toLocaleString('de-DE') : '-'}</p>
+                                  <p className="text-slate-500">
+                                    {(job.target_yard === 'authority_yard' ? job.delivered_to_authority_at : job.in_yard_at) 
+                                      ? new Date(job.target_yard === 'authority_yard' ? job.delivered_to_authority_at : job.in_yard_at).toLocaleString('de-DE') 
+                                      : <span className="text-slate-400 italic">(noch nicht abgeliefert)</span>
+                                    }
+                                  </p>
                                 </div>
                                 <div className={`p-2 rounded ${job.released_at ? 'bg-green-50 border border-green-200' : 'bg-slate-50'}`}>
                                   <p className="font-medium text-slate-700">Abgeholt</p>

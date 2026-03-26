@@ -3190,7 +3190,8 @@ async def create_job(
     # ========== DUPLICATE LICENSE PLATE CHECK ==========
     # Check if there's an active job with the same license plate
     # A job is considered "active" if it's not in 'released' status
-    normalized_plate = data.license_plate.upper().replace(" ", "").replace("-", "")
+    # P2: Strip leading/trailing whitespace to prevent dirty data
+    normalized_plate = data.license_plate.strip().upper().replace(" ", "").replace("-", "")
     
     # Find any job with this license plate that is NOT released
     active_job = await db.jobs.find_one({
@@ -3279,8 +3280,8 @@ async def create_job(
     job_doc = {
         "id": job_id,
         "job_number": generate_job_number(),
-        "license_plate": data.license_plate.upper(),
-        "vin": data.vin.upper() if data.vin else None,
+        "license_plate": data.license_plate.strip().upper(),  # P2: Strip whitespace
+        "vin": data.vin.strip().upper() if data.vin else None,  # P2: Strip whitespace
         "tow_reason": data.tow_reason,
         "location_address": data.location_address,
         "location_lat": data.location_lat,
@@ -3719,8 +3720,8 @@ async def edit_job_data(job_id: str, data: JobEditData, user: dict = Depends(get
     changes = []
     
     # Update license plate if provided and different
-    if data.license_plate and data.license_plate.upper() != job.get("license_plate"):
-        new_plate = data.license_plate.upper()
+    if data.license_plate and data.license_plate.strip().upper() != job.get("license_plate"):
+        new_plate = data.license_plate.strip().upper()  # P2: Strip whitespace
         
         # Check if new license plate already exists in another active job
         normalized_new_plate = new_plate.replace(" ", "").replace("-", "")
@@ -3744,7 +3745,7 @@ async def edit_job_data(job_id: str, data: JobEditData, user: dict = Depends(get
     
     # Update VIN if provided
     if data.vin is not None:
-        new_vin = data.vin.upper() if data.vin else None
+        new_vin = data.vin.strip().upper() if data.vin else None  # P2: Strip whitespace
         if new_vin != job.get("vin"):
             changes.append(f"FIN: {job.get('vin') or '(leer)'} → {new_vin or '(leer)'}")
             update_data["vin"] = new_vin
