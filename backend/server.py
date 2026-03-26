@@ -745,6 +745,8 @@ class UserResponse(BaseModel):
     # NEW: Towing service employee fields
     is_main_service: Optional[bool] = None
     parent_service_id: Optional[str] = None
+    # NEW: USt-ID (Umsatzsteuer-Identifikationsnummer) for invoicing
+    ust_id: Optional[str] = None
 
 class TokenResponse(BaseModel):
     access_token: str
@@ -1903,6 +1905,7 @@ class CompanyInfoUpdate(BaseModel):
     yard_lat: Optional[float] = None
     yard_lng: Optional[float] = None
     opening_hours: Optional[str] = None
+    ust_id: Optional[str] = None  # NEW: USt-ID for invoicing
 
 @api_router.patch("/towing/company-info")
 async def update_company_info(data: CompanyInfoUpdate, user: dict = Depends(get_current_user)):
@@ -1929,6 +1932,8 @@ async def update_company_info(data: CompanyInfoUpdate, user: dict = Depends(get_
         update_data["yard_lng"] = data.yard_lng
     if data.opening_hours is not None:
         update_data["opening_hours"] = data.opening_hours
+    if data.ust_id is not None:
+        update_data["ust_id"] = data.ust_id.strip()
     
     if update_data:
         await db.users.update_one({"id": user["id"]}, {"$set": update_data})
@@ -2478,6 +2483,8 @@ class AuthoritySettingsUpdate(BaseModel):
     yard_address: Optional[str] = None
     yard_lat: Optional[float] = None
     yard_lng: Optional[float] = None
+    # NEW: USt-ID for invoicing
+    ust_id: Optional[str] = None
 
 @api_router.patch("/authority/settings")
 async def update_authority_settings(data: AuthoritySettingsUpdate, user: dict = Depends(get_current_user)):
@@ -2522,6 +2529,10 @@ async def update_authority_settings(data: AuthoritySettingsUpdate, user: dict = 
         update_data["yard_lat"] = data.yard_lat
     if data.yard_lng is not None:
         update_data["yard_lng"] = data.yard_lng
+    
+    # NEW: USt-ID
+    if data.ust_id is not None:
+        update_data["ust_id"] = data.ust_id.strip()
     
     if update_data:
         await db.users.update_one({"id": authority_id}, {"$set": update_data})
