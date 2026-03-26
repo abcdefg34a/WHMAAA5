@@ -4685,30 +4685,52 @@ async def generate_pdf(job_id: str, token: str):
         
         # Determine which pricing to use and break down costs
         if job.get('target_yard') == 'authority_yard':
-            # Authority yard pricing
+            # Authority yard pricing - break down into components
             base_price = job.get('authority_base_price', 0)
             daily_rate = job.get('authority_daily_rate', 0)
             
-            # Base fee
-            if base_price > 0:
-                cost_items.append(['Grundgebühr (erste 24h)', f"{base_price:.2f} €"])
-            
             # Calculate storage days
+            days = 0
             if job.get('delivered_to_authority_at'):
                 delivered_date = datetime.fromisoformat(job['delivered_to_authority_at'].replace('Z', '+00:00'))
                 released_date = datetime.fromisoformat(job['released_at'].replace('Z', '+00:00'))
                 days = max(0, (released_date - delivered_date).days)
+            
+            # Calculate expected gross total from components
+            component_total = base_price
+            if days > 0 and daily_rate > 0:
+                component_total += (days * daily_rate)
+            
+            # If components match the payment (within small margin), use them
+            # Otherwise, distribute the payment proportionally
+            if abs(component_total * 1.19 - gross_total) < 1.0:
+                # Components match, use them directly (convert to net)
+                if base_price > 0:
+                    cost_items.append(['Grundgebühr (erste 24h)', f"{base_price:.2f} €"])
                 
                 if days > 0 and daily_rate > 0:
                     standzeit_cost = days * daily_rate
                     cost_items.append([f"Standzeit ({days} Tag{'e' if days != 1 else ''} × {daily_rate:.2f}€)", f"{standzeit_cost:.2f} €"])
+            else:
+                # Payment doesn't match components - work backwards from payment
+                # Distribute net_total proportionally
+                if component_total > 0:
+                    base_net = (base_price / component_total) * net_total
+                    cost_items.append(['Grundgebühr (erste 24h)', f"{base_net:.2f} €"])
+                    
+                    if days > 0 and daily_rate > 0:
+                        standzeit_net = ((days * daily_rate) / component_total) * net_total
+                        cost_items.append([f"Standzeit ({days} Tag{'e' if days != 1 else ''} × {daily_rate:.2f}€)", f"{standzeit_net:.2f} €"])
+                else:
+                    # No components available, just show total
+                    cost_items.append(['Verwahrkosten gesamt', f"{net_total:.2f} €"])
+                    
         else:
-            # Service yard pricing - calculate from cost calculation endpoint
-            # Try to get calculated costs first
+            # Service yard pricing - use calculated costs breakdown
             calculated_costs = job.get('calculated_costs')
             
             if calculated_costs and calculated_costs.get('breakdown'):
-                # Use breakdown from calculated costs
+                # Use breakdown from calculated costs - these are already net values
                 for item in calculated_costs['breakdown']:
                     label = item.get('label', '')
                     amount = item.get('amount', 0)
@@ -4716,9 +4738,6 @@ async def generate_pdf(job_id: str, token: str):
                         cost_items.append([label, f"{amount:.2f} €"])
             else:
                 # Fallback: try to reconstruct from job fields
-                # This happens when payment was made but costs weren't calculated
-                
-                # Try to get base cost from weight category
                 weight_cat = None
                 if service and service.get('weight_categories'):
                     for cat in service['weight_categories']:
@@ -4731,22 +4750,48 @@ async def generate_pdf(job_id: str, token: str):
                     daily_cost = weight_cat.get('daily_rate', 0)
                     surcharge = weight_cat.get('surcharge', 0)
                     
-                    if base_cost > 0:
-                        cost_items.append(['Abschleppen (Grundgebühr)', f"{base_cost:.2f} €"])
-                    
                     # Calculate storage days
-                    if job.get('in_yard_at') and daily_cost > 0:
+                    days = 0
+                    if job.get('in_yard_at'):
                         in_yard_date = datetime.fromisoformat(job['in_yard_at'].replace('Z', '+00:00'))
                         released_date = datetime.fromisoformat(job['released_at'].replace('Z', '+00:00'))
                         days = max(0, (released_date - in_yard_date).days)
+                    
+                    # Calculate expected total
+                    component_total = base_cost + surcharge
+                    if days > 0:
+                        component_total += (days * daily_cost)
+                    
+                    # Distribute net_total proportionally if needed
+                    if component_total > 0 and abs(component_total * 1.19 - gross_total) < 1.0:
+                        # Components match
+                        if base_cost > 0:
+                            cost_items.append(['Abschleppen (Grundgebühr)', f"{base_cost:.2f} €"])
                         
-                        if days > 0:
+                        if days > 0 and daily_cost > 0:
                             standzeit_cost = days * daily_cost
                             cost_items.append([f"Standzeit ({days} Tag{'e' if days != 1 else ''} × {daily_cost:.2f}€)", f"{standzeit_cost:.2f} €"])
-                    
-                    if surcharge > 0:
-                        cat_name = weight_cat.get('name', 'Zusatzgebühr')
-                        cost_items.append([f"Zuschlag ({cat_name})", f"{surcharge:.2f} €"])
+                        
+                        if surcharge > 0:
+                            cat_name = weight_cat.get('name', 'Zusatzgebühr')
+                            cost_items.append([f"Zuschlag ({cat_name})", f"{surcharge:.2f} €"])
+                    else:
+                        # Distribute proportionally
+                        if component_total > 0:
+                            if base_cost > 0:
+                                base_net = (base_cost / component_total) * net_total
+                                cost_items.append(['Abschleppen (Grundgebühr)', f"{base_net:.2f} €"])
+                            
+                            if days > 0 and daily_cost > 0:
+                                standzeit_net = ((days * daily_cost) / component_total) * net_total
+                                cost_items.append([f"Standzeit ({days} Tag{'e' if days != 1 else ''} × {daily_cost:.2f}€)", f"{standzeit_net:.2f} €"])
+                            
+                            if surcharge > 0:
+                                cat_name = weight_cat.get('name', 'Zusatzgebühr')
+                                surcharge_net = (surcharge / component_total) * net_total
+                                cost_items.append([f"Zuschlag ({cat_name})", f"{surcharge_net:.2f} €"])
+                        else:
+                            cost_items.append(['Abschleppkosten gesamt', f"{net_total:.2f} €"])
                 else:
                     # Last resort: just show the net total as one line item
                     cost_items.append(['Abschleppkosten gesamt', f"{net_total:.2f} €"])
