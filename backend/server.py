@@ -4744,6 +4744,9 @@ async def generate_pdf(job_id: str, token: str):
             # The breakdown items are ALREADY GROSS PRICES (Brutto), no need to add VAT
             calculated_costs = job.get('calculated_costs')
             
+            # Calculate total from breakdown items (not from payment_amount)
+            calculated_total = 0
+            
             if calculated_costs and calculated_costs.get('breakdown'):
                 # Use the EXACT breakdown from the landing page calculation
                 # These prices are already BRUTTO (inkl. MwSt)
@@ -4752,9 +4755,11 @@ async def generate_pdf(job_id: str, token: str):
                     amount = item.get('amount', 0)
                     if amount > 0:
                         cost_items.append([label, f"{amount:.2f} €"])
+                        calculated_total += amount
             else:
-                # Fallback: If no calculated_costs, use gross_total directly
-                cost_items.append(['Abschleppkosten gesamt', f"{gross_total:.2f} €"])
+                # Fallback: If no calculated_costs, use payment_amount
+                calculated_total = gross_total
+                cost_items.append(['Abschleppkosten gesamt', f"{calculated_total:.2f} €"])
         
         # Build cost table (just the items, no Netto/MwSt/Brutto breakdown)
         cost_table_data = []
@@ -4776,10 +4781,13 @@ async def generate_pdf(job_id: str, token: str):
             Paragraph(" ", spacer_style)
         ])
         
-        # Only show GESAMTBETRAG (no Netto/MwSt split - prices are already Brutto)
+        # Calculate final total (sum of breakdown items OR authority calculation)
+        final_total = calculated_total if job.get('target_yard') != 'authority_yard' else gross_total
+        
+        # Only show GESAMTBETRAG (sum of all breakdown items)
         cost_table_data.append([
             Paragraph("<b>Gesamtbetrag</b>", ParagraphStyle('Bold', parent=cell_style, fontSize=11)),
-            Paragraph(f"<b>{gross_total:.2f} €</b>", ParagraphStyle('BoldRight', parent=cell_style, fontSize=11, alignment=2))
+            Paragraph(f"<b>{final_total:.2f} €</b>", ParagraphStyle('BoldRight', parent=cell_style, fontSize=11, alignment=2))
         ])
         
         cost_table = Table(cost_table_data, colWidths=[12*cm, 5*cm])
