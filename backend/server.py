@@ -4741,24 +4741,22 @@ async def generate_pdf(job_id: str, token: str):
         else:
             # ===== ABSCHLEPPDIENST-HOF: Use calculated_costs from landing page =====
             # This is the SAME calculation that's shown on the public vehicle search!
+            # The breakdown items are ALREADY GROSS PRICES (Brutto), no need to add VAT
             calculated_costs = job.get('calculated_costs')
             
             if calculated_costs and calculated_costs.get('breakdown'):
                 # Use the EXACT breakdown from the landing page calculation
+                # These prices are already BRUTTO (inkl. MwSt)
                 for item in calculated_costs['breakdown']:
                     label = item.get('label', '')
                     amount = item.get('amount', 0)
                     if amount > 0:
                         cost_items.append([label, f"{amount:.2f} €"])
             else:
-                # Fallback: If no calculated_costs, show simple split
-                if net_total > 100:
-                    cost_items.append(['Bearbeitungsgebühr', f"{(net_total * 0.3):.2f} €"])
-                    cost_items.append(['Abschleppen (Grundgebühr)', f"{(net_total * 0.7):.2f} €"])
-                else:
-                    cost_items.append(['Abschleppkosten gesamt', f"{net_total:.2f} €"])
+                # Fallback: If no calculated_costs, use gross_total directly
+                cost_items.append(['Abschleppkosten gesamt', f"{gross_total:.2f} €"])
         
-        # Build cost table
+        # Build cost table (just the items, no Netto/MwSt/Brutto breakdown)
         cost_table_data = []
         for item, price in cost_items:
             cost_table_data.append([
@@ -4766,7 +4764,7 @@ async def generate_pdf(job_id: str, token: str):
                 Paragraph(price, ParagraphStyle('RightAlign', parent=cell_style, alignment=2))
             ])
         
-        # Add spacer row (no visual separator, just spacing)
+        # Add spacer row before total
         spacer_style = ParagraphStyle(
             'Spacer',
             parent=cell_style,
@@ -4778,25 +4776,9 @@ async def generate_pdf(job_id: str, token: str):
             Paragraph(" ", spacer_style)
         ])
         
-        # Netto
+        # Only show GESAMTBETRAG (no Netto/MwSt split - prices are already Brutto)
         cost_table_data.append([
-            Paragraph("<b>Netto-Summe</b>", cell_style),
-            Paragraph(f"<b>{net_total:.2f} €</b>", ParagraphStyle('RightAlign', parent=cell_style, alignment=2))
-        ])
-        
-        # MwSt
-        cost_table_data.append([
-            Paragraph(f"zzgl. {int(vat_rate * 100)}% MwSt.", cell_style),
-            Paragraph(f"{vat_amount:.2f} €", ParagraphStyle('RightAlign', parent=cell_style, alignment=2))
-        ])
-        
-        # Spacer before total (no visual separator)
-        cost_table_data.append([
-            Paragraph(" ", spacer_style),
-            Paragraph(" ", spacer_style)
-        ])
-        cost_table_data.append([
-            Paragraph("<b>GESAMT (Brutto)</b>", ParagraphStyle('Bold', parent=cell_style, fontSize=11)),
+            Paragraph("<b>Gesamtbetrag</b>", ParagraphStyle('Bold', parent=cell_style, fontSize=11)),
             Paragraph(f"<b>{gross_total:.2f} €</b>", ParagraphStyle('BoldRight', parent=cell_style, fontSize=11, alignment=2))
         ])
         
