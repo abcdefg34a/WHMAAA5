@@ -4844,10 +4844,15 @@ async def generate_pdf(job_id: str, token: str):
                 Paragraph(price, ParagraphStyle('RightAlign', parent=cell_style, alignment=2))
             ])
         
-        # Add separator line
+        # Add separator line (light gray, not bold)
+        separator_style = ParagraphStyle(
+            'Separator',
+            parent=cell_style,
+            textColor=colors.HexColor('#cbd5e1')  # Light gray
+        )
         cost_table_data.append([
-            Paragraph("<b>───────────────────────────</b>", cell_style),
-            Paragraph("<b>──────────────</b>", ParagraphStyle('RightAlign', parent=cell_style, alignment=2))
+            Paragraph("───────────────────────────", separator_style),
+            Paragraph("──────────────", ParagraphStyle('RightAlign', parent=separator_style, alignment=2))
         ])
         
         # Netto
@@ -4862,10 +4867,10 @@ async def generate_pdf(job_id: str, token: str):
             Paragraph(f"{vat_amount:.2f} €", ParagraphStyle('RightAlign', parent=cell_style, alignment=2))
         ])
         
-        # Brutto total
+        # Brutto total separator (light gray)
         cost_table_data.append([
-            Paragraph("<b>═══════════════════════════</b>", cell_style),
-            Paragraph("<b>══════════════</b>", ParagraphStyle('RightAlign', parent=cell_style, alignment=2))
+            Paragraph("═══════════════════════════", separator_style),
+            Paragraph("══════════════", ParagraphStyle('RightAlign', parent=separator_style, alignment=2))
         ])
         cost_table_data.append([
             Paragraph("<b>GESAMT (Brutto)</b>", ParagraphStyle('Bold', parent=cell_style, fontSize=11)),
