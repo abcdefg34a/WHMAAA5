@@ -3084,7 +3084,7 @@ export const TowingDashboard = () => {
 
       {/* NEW: Company Info Dialog */}
       <Dialog open={companyInfoDialogOpen} onOpenChange={setCompanyInfoDialogOpen}>
-        <DialogContent className="max-w-lg">
+        <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
               <Building2 className="h-5 w-5 text-blue-600" />
@@ -3095,7 +3095,7 @@ export const TowingDashboard = () => {
             </DialogDescription>
           </DialogHeader>
 
-          <div className="space-y-4 py-4">
+          <div className="space-y-4 py-4 overflow-y-auto max-h-[60vh]">
             <div className="space-y-2">
               <Label htmlFor="companyName">Firmenname</Label>
               <Input
