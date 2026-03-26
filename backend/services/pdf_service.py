@@ -222,14 +222,27 @@ async def generate_job_pdf(job: dict, db):
     
     # ===== GET PRICES_INCLUDE_VAT SETTING (for both Kostenaufstellung and Zahlungsinformationen) =====
     # This needs to be determined ONCE and used consistently
-    # WICHTIG: Wir verwenden die Einstellung von demjenigen, der die Rechnung bekommt (authority_id)
+    # WICHTIG: Wir verwenden die Einstellung von demjenigen, der released hat (wer die Rechnung ausstellt)
     prices_include_vat = True  # Default
     issuer_settings = None
     
-    # IMMER die Behörden-Einstellung verwenden, da die Behörde zahlt
-    if job.get('authority_id'):
+    # Verwende die Einstellung von demjenigen, der das Fahrzeug freigegeben hat (released)
+    if job.get('released_by_id'):
+        # Derjenige, der released hat, stellt die Rechnung aus
+        issuer_settings = await db.users.find_one(
+            {"id": job.get('released_by_id')},
+            {"_id": 0, "prices_include_vat": 1}
+        )
+    elif job.get('target_yard') == 'authority_yard' and job.get('authority_id'):
+        # Fallback: Authority yard → Authority stellt Rechnung aus
         issuer_settings = await db.users.find_one(
             {"id": job.get('authority_id')},
+            {"_id": 0, "prices_include_vat": 1}
+        )
+    elif job.get('assigned_service_id'):
+        # Fallback: Service yard → Service stellt Rechnung aus
+        issuer_settings = await db.users.find_one(
+            {"id": job.get('assigned_service_id')},
             {"_id": 0, "prices_include_vat": 1}
         )
     
