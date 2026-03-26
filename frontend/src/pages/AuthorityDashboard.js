@@ -149,7 +149,8 @@ export const AuthorityDashboard = () => {
     yards: [],  // Multiple yards
     yard_address: '',
     yard_lat: null,
-    yard_lng: null
+    yard_lng: null,
+    ust_id: ''  // NEW: USt-ID for invoicing
   });
   const [targetYard, setTargetYard] = useState('service_yard');
   const [selectedYardId, setSelectedYardId] = useState('');  // Selected yard when creating job
@@ -233,7 +234,8 @@ export const AuthorityDashboard = () => {
         yards: authoritySettings.yards,
         yard_address: authoritySettings.yard_address,
         yard_lat: authoritySettings.yard_lat,
-        yard_lng: authoritySettings.yard_lng
+        yard_lng: authoritySettings.yard_lng,
+        ust_id: authoritySettings.ust_id  // NEW: USt-ID
       });
       toast.success('Einstellungen gespeichert!');
       fetchAuthoritySettings();
@@ -2295,6 +2297,30 @@ export const AuthorityDashboard = () => {
                   </CardContent>
                 </Card>
               )}
+
+              {/* USt-ID für Rechnungen */}
+              <Card>
+                <CardHeader>
+                  <CardTitle className="text-base">Umsatzsteuer-ID (für Rechnungen)</CardTitle>
+                  <CardDescription>
+                    Wird auf Rechnungen angezeigt, wenn Fahrzeuge auf Ihrem Behörden-Hof freigegeben werden
+                  </CardDescription>
+                </CardHeader>
+                <CardContent>
+                  <div className="space-y-2">
+                    <Label>USt-IdNr. (optional)</Label>
+                    <Input
+                      placeholder="z.B. DE123456789"
+                      value={authoritySettings.ust_id || ''}
+                      onChange={(e) => setAuthoritySettings({...authoritySettings, ust_id: e.target.value})}
+                      maxLength={20}
+                    />
+                    <p className="text-xs text-slate-500">
+                      Format: DE + 9 Ziffern (z.B. DE123456789)
+                    </p>
+                  </div>
+                </CardContent>
+              </Card>
 
               {/* Speichern-Button */}
               <Button

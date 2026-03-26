@@ -192,6 +192,7 @@ export const TowingDashboard = () => {
   const [companyYardLat, setCompanyYardLat] = useState(user?.yard_lat || null);
   const [companyYardLng, setCompanyYardLng] = useState(user?.yard_lng || null);
   const [companyOpeningHours, setCompanyOpeningHours] = useState(user?.opening_hours || '');
+  const [companyUstId, setCompanyUstId] = useState(user?.ust_id || '');  // NEW: USt-ID
   const [savingCompanyInfo, setSavingCompanyInfo] = useState(false);
 
   // NEW: Empty Trip (Leerfahrt) Dialog state
@@ -846,7 +847,8 @@ export const TowingDashboard = () => {
         yard_address: companyYardAddress || null,
         yard_lat: companyYardLat || null,
         yard_lng: companyYardLng || null,
-        opening_hours: companyOpeningHours || null
+        opening_hours: companyOpeningHours || null,
+        ust_id: companyUstId || null  // NEW: USt-ID
       });
       updateUser(response.data);
       toast.success('Firmendaten gespeichert!');
@@ -3150,6 +3152,20 @@ export const TowingDashboard = () => {
                   ✓ Koordinaten: {companyYardLat.toFixed(6)}, {companyYardLng.toFixed(6)}
                 </div>
               )}
+            </div>
+
+            {/* USt-ID */}
+            <div className="space-y-2">
+              <Label>Umsatzsteuer-ID (für Rechnungen)</Label>
+              <Input
+                placeholder="z.B. DE123456789"
+                value={companyUstId}
+                onChange={(e) => setCompanyUstId(e.target.value)}
+                maxLength={20}
+              />
+              <p className="text-xs text-slate-500">
+                Optional: Wird auf Rechnungen angezeigt, wenn Fahrzeuge auf Ihrem Hof freigegeben werden
+              </p>
             </div>
 
             <div className="flex gap-3 pt-4 border-t">
